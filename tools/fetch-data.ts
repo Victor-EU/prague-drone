@@ -136,6 +136,8 @@ const LAYERS: { name: string; body: string; split?: number }[] = [
   { name: 'trees', body: `node["natural"="tree"];` },
   // Garden walls and retaining walls (design.md §8.4).
   { name: 'gardenwalls', body: `way["barrier"~"^(wall|retaining_wall)$"];` },
+  // Where the trams stop (design.md §8.8).
+  { name: 'tramstops', body: `node["railway"="tram_stop"]; node["public_transport"="stop_position"]["tram"="yes"];` },
 ];
 
 function cells(n: number): [number, number, number, number][] {
@@ -229,6 +231,7 @@ const FILTERS: Record<string, { way?: (t: Tags) => boolean; relation?: (t: Tags)
   walls: { way: (t) => t.barrier === 'city_wall' || t.historic === 'citywalls' },
   trees: { node: (t) => t.natural === 'tree' },
   gardenwalls: { way: (t) => t.barrier === 'wall' || t.barrier === 'retaining_wall' },
+  tramstops: { node: (t) => t.railway === 'tram_stop' || (t.public_transport === 'stop_position' && t.tram === 'yes') },
 };
 
 async function downloadExtract() {

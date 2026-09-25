@@ -8,7 +8,8 @@
 //   surface.bin   10 m grid of the highest thing at each place (ground, water, roofs, decks)
 //   landuse.bin   2.5 m ground classes (src/core/landuse.ts)
 //   water.bin     the water surface as a triangle mesh, with the flow direction and the weirs' foam
-//   streets.bin   tram rails and lamp posts
+//   streets.bin   tram rails, lamp posts and the overhead wire's poles
+//   life.bin      where the city's life moves: tram routes, the river, walks, roads (tools/lib/life.ts)
 //   landmarks.bin the hand-built landmarks (tools/landmarks/) as finished meshes
 //   tiles/*.bin   per 1 km tile: buildings, bridge decks and landmark boxes as footprints
 //                 with base and top heights
@@ -41,6 +42,7 @@ import { Kit } from './landmarks/kit.ts';
 import { Flow, flowLines, weirs, inWeirBand, weirStrip, embankments } from './lib/river.ts';
 import { loadCanopy, findTrees, tally, hash as treeHash } from './lib/trees.ts';
 import { gardenWalls } from './lib/walls.ts';
+import { buildLife } from './lib/life.ts';
 import { Kind as TreeKind, TREE_XZ, TREE_H, TREE_R } from '../src/core/trees.ts';
 
 const OUT = join('public', 'world');
@@ -48,6 +50,8 @@ const OUT = join('public', 'world');
 const PARTIAL = process.argv.includes('--partial');
 /** --landmarks: rebuild landmarks.bin and water.bin only (the rest of public/world/ stays as it is), for modelling. */
 const ONLY_LANDMARKS = process.argv.includes('--landmarks');
+/** --life: rebuild life.bin and streets.bin only, skipping the roofs, for working on city life. */
+const ONLY_LIFE = process.argv.includes('--life');
 function layer(name: string) {
   if (PARTIAL && !layerExists(name)) {
     console.warn(`  (partial build: no ${name} yet)`);
@@ -707,7 +711,7 @@ async function planAll(inputs: PlanInput[]): Promise<PlanOutput[]> {
       gmin: g.min, gref: g.ref, district: districtAt(districts, b.cx, b.cz), edges: b.edges,
     };
   });
-  const outputs = await planAll(inputs);
+  const outputs = ONLY_LIFE ? inputs.map(() => ({ base: 0, top: 0, eave: 0, gnd: 0, style: 0, flags: 0, wall: '', roofC: '', roof: null, props: [], failed: false }) as unknown as PlanOutput) : await planAll(inputs);
   let failed = 0, pitched = 0, dormers = 0, chimneys = 0, roofBoxes = 0;
   kept.forEach((b, k) => {
     const o = outputs[k];
@@ -839,12 +843,10 @@ const surface = new Grid(WORLD.xMin, WORLD.zMin, SC, SNX, SNZ, new Float32Array(
 
 // ---- Streets: tram rails and lamp posts (design.md §8.3) -------------------------------------
 
-let streetsPack: Uint8Array;
+// The road decks of the bridges: the level faces of the modelled bridges, or the top of an OSM deck.
+const DC = 2, deckTop = new Map<number, number>();
+const dkey = (x: number, z: number) => Math.round(x / DC) * 100000 + Math.round(z / DC);
 {
-  // Tram tracks: each OSM way is one track; points every 3 m on the ground, and on a bridge on its
-  // road deck: the level faces of the modelled bridges, or the top of an OSM deck.
-  const DC = 2, deckTop = new Map<number, number>();
-  const dkey = (x: number, z: number) => Math.round(x / DC) * 100000 + Math.round(z / DC);
   for (const b of landmarkMeshes) {
     const p = b.main.position, idx = b.main.index;
     for (let t = 0; t < idx.length; t += 3) {
@@ -860,19 +862,72 @@ let streetsPack: Uint8Array;
         }
     }
   }
-  const deckAt = (x: number, z: number) => {
-    const y = deckTop.get(dkey(x, z));
-    if (y !== undefined) return y;
-    for (const d of decks) if (pointInPolygon(x, z, d.poly)) return d.top;
-    return NaN;
-  };
+}
+function deckAt(x: number, z: number): number {
+  const y = deckTop.get(dkey(x, z));
+  if (y !== undefined) return y;
+  for (const d of decks) if (pointInPolygon(x, z, d.poly)) return d.top;
+  return NaN;
+}
+const inWorld = (x: number, z: number) => x > WORLD.xMin && x < WORLD.xMax && z > WORLD.zMin && z < WORLD.zMax;
+/** Where a track or a road runs: on a bridge's deck, or on the ground. NaN outside the world, or over water with no deck. */
+function trackY(x: number, z: number, onBridge: boolean): number {
+  if (!inWorld(x, z)) return NaN;
+  const wet = water[Math.round((z - ground.z0) / CELL) * NX + Math.round((x - ground.x0) / CELL)];
+  return onBridge || wet ? deckAt(x, z) : ground.sample(x, z);
+}
+
+let streetsPack: Uint8Array;
+let railPos: Float32Array;
+{
+  // Tram tracks: each OSM way is one track; points every 3 m on the ground, and on a bridge on its
+  // road deck.
   const rs: number[] = [0], rp: number[] = [];
   let km = 0;
+  // The poles that carry the overhead wire (design.md §8.8): every 30 m on the right of each track,
+  // which is the outside of a street's pair, 3.4 m out; not on bridges (their lamps carry it), not
+  // in the river, and not where a house stands (the wire hangs from its wall there). Buildings are
+  // looked up on a 2 m raster of the middle of the world.
+  const BM = { x0: -3000, z0: -3000, cell: 2, n: 3000 };
+  const built = new Uint8Array(BM.n * BM.n);
+  for (const b of buildings) scanPolygon(polygonRings(b.poly), BM.x0 + 1, BM.z0 + 1, BM.cell, BM.n, BM.n, (i, j) => { built[j * BM.n + i] = 1; });
+  const housed = (x: number, z: number) => {
+    const i = Math.floor((x - BM.x0) / BM.cell), j = Math.floor((z - BM.z0) / BM.cell);
+    if (i < 1 || j < 1 || i >= BM.n - 1 || j >= BM.n - 1) return false;
+    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) if (built[(j + dj) * BM.n + i + di]) return true;
+    return false;
+  };
+  const poles: number[] = [];
+  const poleCells = new Map<number, number[]>();
+  const poleNear = (x: number, z: number, r: number) => {
+    const gx = Math.floor(x / 20), gz = Math.floor(z / 20);
+    for (let i = gx - 1; i <= gx + 1; i++) for (let j = gz - 1; j <= gz + 1; j++)
+      for (const k of poleCells.get(i * 100000 + j) ?? []) if (Math.hypot(poles[k] - x, poles[k + 2] - z) < r) return true;
+    return false;
+  };
   for (const el of layer('railways')) {
     const t = el.tags ?? {};
     if (el.type !== 'way' || t.railway !== 'tram' || underground(t)) continue;
     const onBridge = !!t.bridge && t.bridge !== 'no';
     const line = lineOf(el);
+    const back = t.oneway === '-1';
+    if (!onBridge)
+      for (let k = 0, acc = 15; k + 2 < line.length; k += 2) {
+        const ax = line[k], az = line[k + 1], bx = line[k + 2], bz = line[k + 3];
+        const len = Math.hypot(bx - ax, bz - az);
+        for (; acc < len; acc += 30) {
+          const x = ax + ((bx - ax) * acc) / len, z = az + ((bz - az) * acc) / len;
+          // Right of the way the trams run: x east, z south, so the right of (dx, dz) is (-dz, dx).
+          const s = back ? -1 : 1, rx = (-(bz - az) / len) * s, rz = ((bx - ax) / len) * s;
+          const px = x + rx * 3.4, pz = z + rz * 3.4;
+          if (!inWorld(px, pz) || water[Math.round((pz - ground.z0) / CELL) * NX + Math.round((px - ground.x0) / CELL)]) continue;
+          if (housed(px, pz) || poleNear(px, pz, 12)) continue;
+          const key = Math.floor(px / 20) * 100000 + Math.floor(pz / 20);
+          (poleCells.get(key) ?? poleCells.set(key, []).get(key)!).push(poles.length);
+          poles.push(px, ground.sample(px, pz), pz, Math.atan2(-rz, -rx));
+        }
+        acc -= len;
+      }
     const pts: number[] = [];
     for (let k = 0; k + 2 < line.length; k += 2) {
       const ax = line[k], az = line[k + 1], bx = line[k + 2], bz = line[k + 3];
@@ -881,12 +936,10 @@ let streetsPack: Uint8Array;
       km += len / 1000;
     }
     pts.push(line[line.length - 2], line[line.length - 1]);
-    const inside = (x: number, z: number) => x > WORLD.xMin && x < WORLD.xMax && z > WORLD.zMin && z < WORLD.zMax;
     let open = false;
     for (let k = 0; k < pts.length; k += 2) {
       const x = pts[k], z = pts[k + 1];
-      const wet = inside(x, z) && water[Math.round((z - ground.z0) / CELL) * NX + Math.round((x - ground.x0) / CELL)];
-      const y = !inside(x, z) ? NaN : onBridge || wet ? deckAt(x, z) : ground.sample(x, z);
+      const y = trackY(x, z, onBridge);
       if (Number.isNaN(y)) {
         if (open) { rs.push(rp.length / 3); open = false; }
         continue;
@@ -915,8 +968,26 @@ let streetsPack: Uint8Array;
     if (Number.isNaN(y)) continue;
     lp.push(x, y, z);
   }
-  streetsPack = encodePack({}, { railStart: new Uint32Array(starts), rail: new Float32Array(pos), lamp: new Float32Array(lp) });
-  log(`streets: ${km.toFixed(0)} km of tram track in ${starts.length - 1} runs, ${lp.length / 3} lamps`);
+  railPos = new Float32Array(pos);
+  streetsPack = encodePack({}, { railStart: new Uint32Array(starts), rail: railPos, lamp: new Float32Array(lp), pole: new Float32Array(poles) });
+  log(`streets: ${km.toFixed(0)} km of tram track in ${starts.length - 1} runs, ${lp.length / 3} lamps, ${poles.length / 4} wire poles`);
+}
+
+// ---- City life (design.md §8.8, tools/lib/life.ts) ---------------------------------------------
+
+const lifePack = buildLife({
+  railways: layer('railways'), stops: layer('tramstops'), highways: layer('highways'), landuse: layer('landuse'), water: waterEls,
+  grid: { x0: ground.x0, z0: ground.z0, cell: CELL, nx: NX, nz: NZ }, wet: water, level, weirs: weirList,
+  ground: (x, z) => ground.sample(x, z), track: trackY, deck: deckAt, log,
+}, railPos);
+if (ONLY_LIFE) {
+  writeFileSync(join(OUT, 'life.bin'), gzipSync(lifePack, { level: 9 }));
+  writeFileSync(join(OUT, 'streets.bin'), gzipSync(streetsPack, { level: 9 }));
+  const manifest = JSON.parse(readFileSync(join(OUT, 'manifest.json'), 'utf8'));
+  manifest.life = { file: 'life.bin' };
+  writeFileSync(join(OUT, 'manifest.json'), JSON.stringify(manifest, null, 1));
+  log(`wrote life.bin and streets.bin (life only)`);
+  process.exit(0);
 }
 
 // ---- Trees -------------------------------------------------------------------------------------
@@ -1102,6 +1173,11 @@ writeFileSync(join(OUT, 'water.bin'), gzipSync(waterPack, { level: 9 }));
   writeFileSync(join(OUT, 'streets.bin'), bytes);
   sizes.streets = bytes.length;
 }
+{
+  const bytes = gzipSync(lifePack, { level: 9 });
+  writeFileSync(join(OUT, 'life.bin'), bytes);
+  sizes.life = bytes.length;
+}
 if (treesPack) {
   const bytes = gzipSync(treesPack, { level: 9 });
   writeFileSync(join(OUT, 'trees.bin'), bytes);
@@ -1225,6 +1301,7 @@ const manifest = {
   streets: { file: 'streets.bin' },
   landmarks: { file: 'landmarks.bin' },
   trees: treesPack ? { file: 'trees.bin' } : null,
+  life: { file: 'life.bin' },
   tiles,
   kinds: KIND,
   attribution: 'Map data © OpenStreetMap contributors (ODbL). Terrain and trees © ČÚZK, DMR 5G and DMP OK (CC BY 4.0).',

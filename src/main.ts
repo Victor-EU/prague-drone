@@ -26,6 +26,8 @@ const BASE = `${import.meta.env.BASE_URL}world`;
 interface Viewpoint {
   id: string; x: number; north: number; agl: number; y?: number; heading: number; tilt: number; focal35: number; aspect: number; clock: string;
   weather: { seed: number; coverage: number; overcast: boolean; cirrus: number; cloudAt?: [number, number] };
+  /** Seconds of city life to show (trams, boats, people), so a frame always shows the same scene. */
+  life?: number;
 }
 // `?view=look` is a free camera for inspecting the world (set it with the nudges below).
 const LOOK: Viewpoint = { id: 'look', x: 0, north: 0, agl: 60, heading: 0, tilt: -10, focal35: 24, aspect: 1.5, clock: '17:30', weather: { seed: 1, coverage: 0.15, overcast: false, cirrus: 0 } };
@@ -130,6 +132,8 @@ hud.stats.style.display = statsOn ? 'block' : 'none';
 world.buildings.load(world.manifest.tiles, drone.position);
 const worldLoadedAt = performance.now();
 if (view?.weather.cloudAt) atmosphere.clouds.moveDensestOver(view.weather.cloudAt[0], -view.weather.cloudAt[1]);
+// A viewpoint shows its moment of city life, still; `?life=seconds` sets it for any view.
+if (world.life && (view || params.has('life'))) world.life.setTime(params.has('life') ? Number(params.get('life')) : (view?.life ?? 60));
 
 // Handles for poking at the running app from the console, in development only.
 if (import.meta.env.DEV) {
@@ -173,6 +177,10 @@ function renderFrame(dt: number) {
   world.landmarks.update(camera.position);
   world.trees?.update(camera.position);
   world.lights.update();
+  if (world.life) {
+    const agl = drone.position.y - world.ground(drone.position.x, drone.position.z);
+    world.life.update(view ? 0 : dt, clock, camera.position, drone.position, agl);
+  }
   U.uTime.value += dt;
   world.water.renderMirror(renderer, scene, camera);
   pipeline.render(scene, camera, {

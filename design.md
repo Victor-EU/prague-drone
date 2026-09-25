@@ -291,7 +291,7 @@ From map reading, then verified against OpenStreetMap on 2026-09-25: rows more t
 | Water | OSM `natural=water`, `waterway=river`, weirs (`waterway=weir`), islands | River mesh and weirs |
 | Land use | OSM `leisure=park`, `landuse=forest`, `natural=wood`, `landuse=orchard`, `leisure=garden`, `landuse=grass` | Ground colours, and the kind of tree that grows where |
 | Trees | ČÚZK DMP OK, the surface model from image correlation of the aerial survey (same service, same licence, 0.5 m), minus DMR 5G: a canopy height model at 1 m over the world, from which every tree crown is found (M5, see §8.4); OSM `natural=tree` for the leaf type where mapped | Tree positions, heights, crown sizes |
-| Tram network | OSM `railway=tram`, tram routes 9, 12, 17, 20, 22, 23 | Tram paths and overhead wire poles |
+| Tram network | OSM `railway=tram`; the tram route relations of the day lines 1 to 26 (M6: all of them, §8.8); the stop positions (`public_transport=stop_position` with `tram=yes`, `railway=tram_stop`) | Tram paths, stops and overhead wire poles |
 | Streets | OSM highways with `surface=cobblestone` where tagged | Road textures, tram streets |
 | Bridges | OSM with `bridge=yes`, `man_made=bridge` | Span geometry and piers |
 | Districts | OSM cadastral areas (`boundary=cadastral`: Malá Strana, Staré Město, Josefov, Hradčany, Nové Město, Vyšehrad, Smíchov, and the 19th-century districts) | District rules of §7.2 and §8.1 |
@@ -446,7 +446,7 @@ As built in M4 (`src/world/water.ts`, `src/render/reflection.ts`, `tools/lib/riv
 - **Reflection**: planar, as §11 has it. The city is rendered once more from the camera mirrored in the water, at 40% resolution, every other frame, and only within 2.2 km. Everything below the plane is clipped by a world clipping plane: three's oblique-projection trick assumes an ordinary depth range, and this renderer's is reversed. The sky and its cumulus are not in the mirror; the water shader computes them along the reflected ray, over a band of heights above it, as the ripples too small to see tilt the facets. The mirror is sampled where a facet tilted by δ sends the ray, 2δ up or down the screen, and smeared into columns. Its lookup leans toward the sky, since at a grazing angle the facets facing the eye show most. About a third of every reflection is sky whatever lies across the river, and the whole is scaled to three quarters, as rippled water seen edge on reflects less than a flat surface.
 - **Weirs**: from OSM's weir lines (Staroměstský, Šítkovský, Helmovský and the small ones). The level each side is made even up to the crest, the pieces of one weir sharing their levels, so the step of 1 to 1.3 m falls exactly there. The water grid leaves a band round each crest to a finer strip: level water above, glassy over the crest, the glacis, the white roller at its foot and streaks trailing downstream, moving at the water's speed.
 - **Embankments**: stone walls wherever the bank stands a metre or more above the water, between Vyšehrad and Letná and on the islands, 21 km of them. Each has a face 2 m out from OSM's edge (the 5 m terrain grid's slope stays behind it), a parapet, and a paved walk 3.5 m deep that covers the slope. The stone's grime band sits at the waterline. There is no beach.
-- The islands' trees came with M5 (§8.4). Not yet: the pontoon and the boats (M6).
+- The islands' trees came with M5 (§8.4); the pedal boat pontoon on Střelecký island and the boats with M6 (§8.8).
 
 ### 8.6 Sky, sun, clouds
 
@@ -485,6 +485,18 @@ As built in M4 (`src/world/lights.ts` and the building material):
 | Cranes | None. | |
 
 Life is silent; the app has no audio (§10.3).
+
+As built in M6 (`tools/lib/life.ts` lays it out into `life.bin`; `src/life/` moves it):
+
+- **One clock.** Everything moves on the seconds since the city loaded, at the same pace whatever the flight's speed; the flight's hour sets how many people are out, whether the rowers are on the water and whether the lamps are lit. Trams, tour boats, rowers, people and cars are placed by that clock alone; the pedal boats and swans steer themselves and are stepped forward. A viewpoint (§12.1) shows a fixed moment, its `life` in seconds.
+- **Trams** run on every day line's route through the world, both directions, from OSM's route relations (variants dropped), not only the lines the table names: a manual flight can go anywhere, and those lines alone would leave most of the network's streets empty. Every 3 m of a run carries the time a tram takes to reach it: 30 km/h, slower in curves (0.9 m/s² sideways), braking and pulling away at 1 m/s², 10 s at each of OSM's 1,160 stop positions on the runs. **Deviation:** a tram of each line leaves every 180 s, not 90 s: with all 25 lines running, most streets of the centre carry two to five of them, and 90 s a line put a tram every 20 s on Národní and Karmelitská, a queue; 180 s gives one every 36 to 90 s each way on the photographed streets and on Legion Bridge. Each run's phase is chosen, longest first, in the widest gap the runs already placed leave on the track they share, so trams of different lines keep at least 11 s apart. A third are 15T (three sections, red below, white above a black window band), the rest Tatra T3, most as coupled pairs (red and cream, cream roof), each car following the curve between its bogies; their windows glow after dusk and their headlights show.
+- **The overhead wire**: a contact wire 5.6 m over every track, drawn as a line within 450 m, and 5,300 poles with brackets, every 30 m on the outside of each track, left out on bridges (their lamps carry it), in the river and where a house stands (the wire hangs from its wall).
+- **Tour boats** (four) on circuits in the pools between the weirs: from the railway bridge past Palacký Bridge up to the Šítkov weir, round Legion Bridge, and two from Charles Bridge down past Čechův Bridge; they turn short of the weirs instead of passing the locks. Sixteen more are moored at Náplavka, the Smíchov quay opposite, and the cruise quays below Čechův Bridge, in three kinds: white with a sun deck, an old steamer with a dark hull and a funnel, a long glass restaurant boat. **Pedal boats** (twelve) meander between Legion Bridge and the Old Town weir, the stretch above Charles Bridge the photographs show them on; they wander, rest, keep off each other and steer by the distance to the bank laid over the river at 5 m, where the weirs count as bank. The rest are tied up at the pontoon on Střelecký island, and all of them after 21:30. **Rowing eights** (two) run lengths **above** the Šítkov weir, between it and Vyšehrad, from 05:30 to 10:30: **deviation**, the table's "below" meant south on the map, which is upstream, where stop 2 sees them and the rowing clubs are. Moving boats draw a wake, the arms of a V at 19.5° and the wash behind the stern. Everything afloat sits on the level the water is drawn at, which the build ships with the bank distances.
+- **Swans**: groups of 5, 7 and 4 off Kampa, below Charles Bridge on the Malá Strana side and at Náplavka, drifting within 22 m of their spot, now and then raising their wings.
+- **Pigeons**: seven flocks of 16 to 34 on Old Town Square, Náplavka, the Kampa riverside and the Old Town quay. When the drone comes down below 25 m within 35 m of a flock, it lifts: each bird climbs to its own circle 5 to 15 m up, wheels round for 14 to 23 s and lands.
+- **People**: up to 1,900 figures (legs, a torso in one of fifteen muted summer colours, a head) walking to and fro on 276 paths: Charles Bridge on its deck, straight walks across Old Town Square, the paths of Kampa and of Petřín's gardens, the quays, and **added**, the Royal Route's lanes between the bridge and the square (Karlova, Celetná, Mostecká), which the photographs show as full as the square; about one in six stands. The share out follows the hour: 6% at night, 40% at nine, all from noon to six, two thirds at nine in the evening; the quays stay busy into the evening, Petřín empties.
+- **Cars**: one every 17 s or so on each lane of the embankment roads, 40 km/h, in ten muted paints, pushed to the sides of the road where trams run in its middle; headlights and tail lights once the city's lights are on.
+- **Night**: the windows of trams, boats and cars glow with the city's lights, and their lamps are points like the street lamps', streaked in the river's mirror. Trams, boats and cars are drawn into the mirror; trams, boats, cars and poles cast shadows.
 
 ### 8.9 Palette
 
@@ -620,13 +632,13 @@ Photos/              the reference set (422) and _excluded/
 mockup/              index.html (3D sketch), plan.html (set + route), set/ thumbnails
 data/                hero.json (starred frames), viewpoints.json, route.json, palette.json, landmarks.json
 tools/               fetch-data.ts, build-world.ts, check-route.ts, find-landmarks.ts, make-lut.ts, lut-fit.ts, compare.ts;
-                     lib/ roofs.ts, skeleton.ts, props.ts, plan.ts (+ plan-worker.ts), districts.ts, river.ts, trees.ts, walls.ts;
+                     lib/ roofs.ts, skeleton.ts, props.ts, plan.ts (+ plan-worker.ts), districts.ts, river.ts, trees.ts, walls.ts, life.ts;
                      landmarks/ kit.ts, index.ts, parts.ts, bridges.ts, and one module per landmark or group (§7.1)
 cache/               raw downloads from fetch-data.ts (generated, git-ignored)
 assets/              lut/classic-neg.cube
-src/                 app: core/ (incl. buildings.ts and trees.ts, shared with the build), world/ (terrain, tiles, buildings
+src/                 app: core/ (incl. buildings.ts, trees.ts and life.ts, shared with the build), world/ (terrain, tiles, buildings
                      and their material, landmarks, streets, water, lights, trees, blooms), sky/ (atmosphere, families, clouds, shadows),
-                     render/ (post, the river's mirror), drone/, ui/,
+                     render/ (post, the river's mirror), life/ (trams, the river's boats and swans, people, pigeons, cars), drone/, ui/,
                      dev/ (side-by-side, development only)
 public/world/        built tiles (generated, git-ignored)
 compare/             side-by-side sheets from tools/compare.ts (generated, git-ignored)
@@ -651,6 +663,8 @@ Added in M2, for lining up and tuning: a viewpoint can be nudged from the URL (`
 Added in M3: `/?view=look&x=…&north=…&agl=…&heading=…&tilt=…&focal35=…` is a free camera for inspecting the world, and `npm run compare -- look@x=…,north=…` writes the render alone; the weather can be nudged like the camera (`&coverage=0.9&overcast=0`); portrait frames take the 24 mm side of the frame as their width. The viewpoints of 8704, 8607, 8942 and 8753 were solved from the photographs: the bearings (and, for 8607, the heights) of spires and towers whose positions OSM gives. 8704 turned out to be taken from Mánes Bridge, 8607 from below the astronomical clock, 8942 from the mouth of Mostecká on the lower square, 8753 from the gardens below Strahov.
 
 Added in M4: a viewpoint may give the eye's height `y` instead of `agl`, for views from bridges and over the water. The new viewpoints were solved the same way: 9486 from the piers of Charles Bridge (to 0.03°), on the Letná slope above the Edvard Beneš embankment; 8490 and 9542, like 9547, from Legion Bridge; 8809 from the north parapet of Charles Bridge near the Old Town end (the four spires of St Vitus fix only the bearing; the height of the far bank's waterline fixed the rest); 8158 on Jiráskovo náměstí, placed so Ginger and Fred stand at their sizes in the frame. Overcast views are exposed with the deck as the sky, nearly white as in the photographs; M3's 8942 is brighter for it.
+
+Added in M6: a viewpoint may give `life`, the seconds of city life it shows (60 unless given), and `&life=` sets it for any view; the frame is still while it is judged. Tram times are found from the timetable, which the clock alone sets: 8158 at 74 s has a 15T in front of the Dancing House (every 180 s, the headway, the same), 8942 at 32 s a T3 pair crossing Malostranské náměstí, 9486 at 60 s a tour boat below Mánes Bridge.
 
 Added in M5: 8725 was taken in the Seminary garden, looking up at the gloriette of the Schönborn garden (the US Embassy's flag on it gives it away); its size in the frame puts the camera 147 m from it, and the street lamp at the right edge, 10 m away and 35° from it, with OSM's paths fixes the rest. 8722 is a close-up of single roses at 64 mm, which the world cannot give: its viewpoint is a rose bed near the Petřín tower, low and 5 m from the bushes, with the sky behind and the sun behind the camera, and it is judged on its colours and light. 9369's camera moved 200 m across the Letná lawn: at its M1 place it now stands in a grove.
 
@@ -780,6 +794,25 @@ Known gaps after M5:
 - **7924's forest**: the canopy model puts the treetops below the tower 2 to 5° under the bottom of the frame; in the photograph they fill it. **8753**: the slope below Strahov is lawn with scattered trees where the photograph has dense bushes, and a tree beside the camera frames the view.
 - **Trees at night** stand as dark silhouettes; the lamps' pools do not light them.
 - **The cumulus** are still the smooth blobs of M1.
+
+**M6, built 2026-09-26.** City life (§8.8), laid out by the build (`tools/lib/life.ts`, `npm run build-world -- --life` rebuilds it alone in 8 s) and moved by `src/life/`:
+
+- **Trams** on all 25 day lines through the world, both directions, 561 km of runs with their 1,160 stops, T3 pairs and 15T. From Legion Bridge's approach (stop 4) a 15T crosses the bridge under its wire while a T3 pair crosses the Malá Strana arm; 8158 has its 15T in front of the Dancing House, 8942 a T3 pair on Malostranské náměstí.
+- **The overhead wire** over every track and its 5,300 poles.
+- **The river**: four tour boats on circuits and sixteen moored at the quays, twelve pedal boats out between Legion Bridge and the Old Town weir with the rest at the Střelecký pontoon, two rowing eights above the Šítkov weir in the morning, the wakes, and three groups of swans. 9486 has its tour boat below Mánes Bridge; 8490's pedal boats are out on the water, farther off than the photograph's.
+- **People**: up to 1,900 on Charles Bridge, Old Town Square, the Royal Route, Kampa, the quays and Petřín, by the hour. **Pigeons** in seven flocks that lift when the drone comes down near them. **Cars** on the embankment roads.
+- **Night**: lit windows and headlights on trams, boats and cars, streaked in the river.
+- **Is anything moving** (§12.4): the auto route sampled every 5 s, counting what is in the frame and at least 2 pixels across: trams on every leg, boats on every leg along the river, crowds from the Malá Strana roofs to Josefov (stops 8 to 14), cars along the embankments (stops 1 to 4 and 16 to 18). The one moment with none of them is the long lens tilted up at the Týn towers (stop 11), where the cloud shadows still move.
+
+`life.bin` is 0.63 MB: the runs are packed as 16-bit steps from each run's first point (3.2 MB as floats). Measured on the Apple M2 at 2048 × 1536 with the synced benchmark, with and without city life in alternating runs: 21.2 and 22.7 ms on average with it, 21.6 and 21.1 without, so it costs well under a millisecond; the wires and poles about half a millisecond. The machine was busy during this session (Spotlight indexing, a Chrome GPU process at a third of a core), and the whole route measured about 21 ms with life hidden against M5's 13.4, on code that is M5's but for the wires: the absolute numbers are this machine's load, and the next clean measurement is M7's.
+
+Known gaps after M6:
+
+- **Trams** are placed by timetable, not driven: trams of different lines sharing a track keep at least 11 s apart but are not made to queue, and they appear and vanish at the world's edge and where a run breaks. The pantograph is fixed at the wire's height. 8158's tram passes closer to the camera than the photograph's.
+- **Boats** pass under the bridges wherever their circuit takes them, not through the navigation arches, and can cut through a pier. The wakes are geometric V's.
+- **People** walk to and fro along fixed paths, on Old Town Square along straight lines across it; nobody sits, and nobody walks the streets outside the zones.
+- **Cars** vanish at the ends of the embankment lanes.
+- **No historic trams.** 8942's photograph has line 42's 1900s car; the render has a T3 pair.
 
 ---
 

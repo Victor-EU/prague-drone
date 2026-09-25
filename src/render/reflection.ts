@@ -70,7 +70,8 @@ export class PlanarReflection {
     const eyeM = cam.position;
     scene.traverseVisible((o) => {
       const m = o as THREE.Mesh;
-      if (!m.isMesh || !m.layers.isEnabled(REFLECT) || !m.geometry.boundingSphere) return;
+      // Instanced meshes (the city's life) are filled near the eye already; their geometry's sphere is one instance's.
+      if (!m.isMesh || (m as THREE.InstancedMesh).isInstancedMesh || !m.layers.isEnabled(REFLECT) || !m.geometry.boundingSphere) return;
       const sph = m.geometry.boundingSphere, c = new THREE.Vector3().copy(sph.center).applyMatrix4(m.matrixWorld);
       if (Math.hypot(c.x - eyeM.x, c.z - eyeM.z) - sph.radius > this.range) { m.visible = false; hidden.push(m); }
     });
