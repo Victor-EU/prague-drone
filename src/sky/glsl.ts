@@ -12,13 +12,17 @@ uniform float aMieExt;
 uniform vec3 aOzone;
 uniform float aMieG;
 
-void aMedium(float h, out vec3 scatR, out float scatM, out vec3 ext) {
+// Aerosol scatters short wavelengths more (Ångström exponent 1.3, relative to 550 nm): a grey
+// aerosol takes the low sun's yellow and, over the blue of the air, reads green at the horizon.
+const vec3 A_MIE_SPECTRUM = vec3(0.76, 1.0, 1.34);
+
+void aMedium(float h, out vec3 scatR, out vec3 scatM, out vec3 ext) {
   float dR = exp(-h / 8.0);
   float dM = exp(-h / 1.2);
   float dO = max(0.0, 1.0 - abs(h - 25.0) / 15.0);
   scatR = aRayleigh * dR;
-  scatM = aMieScat * dM;
-  ext = aRayleigh * dR + vec3(aMieExt * dM) + aOzone * dO;
+  scatM = aMieScat * A_MIE_SPECTRUM * dM;
+  ext = aRayleigh * dR + aMieExt * A_MIE_SPECTRUM * dM + aOzone * dO;
 }
 
 // Nearest non-negative hit of a ray from inside or outside a sphere at the planet centre, or -1.
@@ -75,6 +79,7 @@ uniform float aCamR;
 uniform float aSunE;
 uniform float aSkySat;
 uniform float aSkyFlat;
+uniform float aSkyHorizon;
 uniform vec3 uSunDir;
 vec2 aSkyUv(vec3 dir) {
   float r = aCamR;
@@ -102,6 +107,18 @@ vec3 aSky(vec3 dir) {
     s *= k;
     l *= k;
   }
+  // Three wavelengths make the low band away from a low sun greenish (the yellowed sunlight over
+  // the air's blue); the photographs show it pale blue. Away from the sun, the band takes a pale
+  // version of the hue the sky has 15 degrees up, keeping its own brightness (aSkyHorizon).
+  if (aSkyHorizon > 0.0 && dir.y < 0.26) {
+    vec3 up = texture2D(aSkyLut, aSkyUv(normalize(vec3(dir.x, 0.26, dir.z)))).rgb;
+    float lu = dot(up, vec3(0.2126, 0.7152, 0.0722));
+    vec3 hue = mix(vec3(1.0), up / max(lu, 1e-9), 0.45);
+    vec2 dh = normalize(dir.xz + vec2(1e-6, 0.0)), sh = normalize(uSunDir.xz + vec2(1e-6, 0.0));
+    float away = smoothstep(0.3, -0.4, dot(dh, sh));
+    float w = aSkyHorizon * away * (1.0 - smoothstep(0.0, 0.26, max(dir.y, 0.0)));
+    s = mix(s, l * hue / max(dot(hue, vec3(0.2126, 0.7152, 0.0722)), 1e-6), w);
+  }
   return max(mix(vec3(l), s, aSkySat), 0.0);
 }
 `;
@@ -118,6 +135,19 @@ uniform vec4 uCloud;
 uniform vec2 uWind;
 uniform float uOvercast;
 uniform vec3 uOvercastSky;
+uniform sampler2D tAO;
+uniform mat4 uAOViewProj;
+uniform float uAOOn;
+
+// How much of the sky this point sees: the screen-space occlusion of the previous frame, found
+// again by reprojecting the point into it.
+float praAO(vec3 wp) {
+  if (uAOOn < 0.5) return 1.0;
+  vec4 c = uAOViewProj * vec4(wp, 1.0);
+  vec2 uv = c.xy / c.w * 0.5 + 0.5;
+  if (c.w <= 0.0 || uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return 1.0;
+  return texture2D(tAO, uv).r;
+}
 
 float praSunVisibility(vec3 wp) {
   float vis = 1.0;

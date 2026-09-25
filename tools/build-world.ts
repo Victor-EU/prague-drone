@@ -26,6 +26,13 @@ import { Grid, scanPolygon, scanLine, polygonRings } from './lib/raster.ts';
 import { encodePng } from './lib/png.ts';
 import { Route } from '../src/drone/route.ts';
 import { Vector3 } from 'three';
+import { Worker } from 'node:worker_threads';
+import { availableParallelism } from 'node:os';
+import type { Roof } from './lib/roofs.ts';
+import type { PropRec } from './lib/props.ts';
+import type { PlanInput, PlanOutput } from './lib/plan.ts';
+import { District, districtMaps, districtAt, LANDMARK_COLOURS, BRIDGE, hexRgb, type DistrictId } from './lib/districts.ts';
+import { Style, BFlag, EFlag } from '../src/core/buildings.ts';
 
 const OUT = join('public', 'world');
 /** --partial: build with whatever layers are cached, for testing while a fetch is still running. */
@@ -334,6 +341,15 @@ interface Building {
   cx: number; cz: number;
   landmark: number;
   base: number; top: number;
+  /** Eave and ground reference (absolute), facade style, flags, colours (sRGB hex). */
+  eave: number; gnd: number;
+  style: number; flags: number;
+  wall: string; roofC: string;
+  /** Per footprint vertex (outer ring, then holes): EFlag bits for the edge that starts there. */
+  edges: Uint8Array;
+  roof: Roof | null;
+  props: PropRec[];
+  district: DistrictId;
 }
 
 function centroid(r: Ring): [number, number] {
@@ -347,9 +363,30 @@ function centroid(r: Ring): [number, number] {
   return [cx / (3 * a), cz / (3 * a)];
 }
 
-/** Drops near-duplicate and nearly collinear vertices (0.25 m tolerance). */
+/**
+ * Collapses edges shorter than half a metre to their midpoints, then drops nearly collinear
+ * vertices (0.25 m tolerance). The small steps OSM outlines carry are invisible from the air and
+ * make the roofs' straight skeletons degenerate.
+ */
 function simplify(r: Ring): Ring {
   let pts = r;
+  for (let guard = 0; guard < 64 && pts.length > 6; guard++) {
+    const n = pts.length / 2;
+    let shortest = -1, len = 0.5;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n, l = Math.hypot(pts[j * 2] - pts[i * 2], pts[j * 2 + 1] - pts[i * 2 + 1]);
+      if (l < len) { len = l; shortest = i; }
+    }
+    if (shortest < 0) break;
+    const i = shortest, j = (i + 1) % n;
+    const mx = (pts[i * 2] + pts[j * 2]) / 2, mz = (pts[i * 2 + 1] + pts[j * 2 + 1]) / 2;
+    const out: number[] = [];
+    for (let k = 0; k < n; k++) {
+      if (k === j) continue;
+      if (k === i) out.push(mx, mz); else out.push(pts[k * 2], pts[k * 2 + 1]);
+    }
+    pts = out;
+  }
   for (let pass = 0; pass < 2; pass++) {
     const n = pts.length / 2;
     if (n <= 3) return pts;
@@ -367,34 +404,16 @@ function simplify(r: Ring): Ring {
   return pts;
 }
 
-const SMALL = new Set(['garage', 'garages', 'shed', 'carport', 'hut', 'kiosk', 'cabin', 'toilets', 'service', 'transformer_tower', 'container', 'shelter']);
-const HOUSE = new Set(['house', 'detached', 'semidetached_house', 'bungalow', 'terrace', 'villa']);
-
-function heights(t: Tags, area: number): { h: number; minH: number } {
-  let h = parseLength(t.height);
-  const levels = parseNumber(t['building:levels']);
-  if (h === undefined && levels !== undefined) {
-    const roofH = parseLength(t['roof:height']);
-    const roofLevels = parseNumber(t['roof:levels']) ?? 0;
-    const pitched = t['roof:shape'] && t['roof:shape'] !== 'flat';
-    h = levels * 3.3 + (roofH ?? (roofLevels ? roofLevels * 2.6 : pitched ? 3 : 1));
+/** Snaps a ring to the decimetre grid the tiles store, so roofs meet their walls exactly. */
+function quantize(r: Ring): Ring {
+  const out: number[] = [];
+  for (let i = 0; i < r.length; i += 2) {
+    const x = Math.round(r[i] * 10) / 10, z = Math.round(r[i + 1] * 10) / 10;
+    if (out.length && out[out.length - 2] === x && out[out.length - 1] === z) continue;
+    out.push(x, z);
   }
-  if (h === undefined) {
-    const type = t.building ?? t['building:part'] ?? 'yes';
-    if (SMALL.has(type)) h = 3.5;
-    else if (HOUSE.has(type)) h = 9;
-    else if (type === 'church' || type === 'cathedral' || type === 'chapel') h = 20;
-    else if (area < 40) h = 4;
-    else if (area < 120) h = 9;
-    else h = 16;
-  }
-  let minH = parseLength(t.min_height);
-  if (minH === undefined) {
-    const ml = parseNumber(t['building:min_level']);
-    if (ml) minH = ml * 3.3;
-  }
-  h = Math.max(2, Math.min(250, h));
-  return { h, minH: Math.max(0, Math.min(h - 0.5, minH ?? 0)) };
+  if (out.length >= 4 && out[0] === out[out.length - 2] && out[1] === out[out.length - 1]) out.length -= 2;
+  return out;
 }
 
 const SKIP_BUILDING = new Set(['no', 'roof', 'construction', 'proposed', 'demolished', 'ruins', 'abandoned', 'razed', 'destroyed', 'collapsed']);
@@ -409,13 +428,16 @@ const buildings: Building[] = [];
   })) {
     const part = !!f.tags['building:part'] && f.tags['building:part'] !== 'no' && !f.tags.building;
     for (const p of f.polygons) {
-      const poly = { outer: simplify(p.outer), holes: p.holes.map(simplify).filter((h) => h.length >= 6) };
+      const poly = { outer: quantize(simplify(p.outer)), holes: p.holes.map((h) => quantize(simplify(h))).filter((h) => h.length >= 6) };
       if (poly.outer.length < 6) continue;
       const area = polygonArea(poly);
       if (area < 6) continue;
       const [cx, cz] = centroid(poly.outer);
       if (cx < WORLD.xMin || cx >= WORLD.xMax || cz < WORLD.zMin || cz >= WORLD.zMax) continue;
-      buildings.push({ poly, key: f.key, part, tags: f.tags, area, cx, cz, landmark: landmarkOf.get(f.key) ?? -1, base: 0, top: 0 });
+      buildings.push({
+        poly, key: f.key, part, tags: f.tags, area, cx, cz, landmark: landmarkOf.get(f.key) ?? -1, base: 0, top: 0,
+        eave: 0, gnd: 0, style: 0, flags: 0, wall: '#d9c9a8', roofC: '#6d6a62', edges: new Uint8Array(0), roof: null, props: [], district: District.Outer,
+      });
     }
   }
   log(`buildings: ${buildings.filter((b) => !b.part).length} outlines, ${buildings.filter((b) => b.part).length} parts`);
@@ -467,14 +489,117 @@ function groundRef(p: Polygon): { min: number; ref: number } {
   return { min, ref: (min + med) / 2 };
 }
 
-for (const b of buildings) {
-  if ((b as any).drop) continue;
-  const g: { min: number; ref: number } = (b as any).ground ?? groundRef(b.poly);
-  const { h, minH } = heights(b.tags, b.area);
-  b.top = g.ref + h;
-  b.base = minH > 0 ? g.ref + minH : g.min - 1;
-}
 const kept = buildings.filter((b) => !(b as any).drop);
+
+// ---- Districts, party walls, roofs (design.md §7.2, §8.1, §8.2) -------------------------------
+
+const districts = districtMaps(features(layer('districts'), (t) => t.boundary === 'cadastral'));
+log(`districts: ${districts.length} cadastral areas`);
+
+function ringsOf(p: Polygon): Ring[] { return [p.outer, ...p.holes]; }
+
+// Party walls: an edge that runs along a neighbour's edge (within 0.7 m, parallel, overlapping for
+// more than half its length) is shared.
+{
+  const G = 25;
+  const cells = new Map<number, number[]>();
+  const E: { b: number; v: number; ax: number; az: number; bx: number; bz: number; len: number }[] = [];
+  kept.forEach((b, bi) => {
+    const rings = ringsOf(b.poly);
+    const nv = rings.reduce((a, r) => a + r.length / 2, 0);
+    b.edges = new Uint8Array(nv);
+    let v = 0;
+    for (const r of rings) {
+      const n = r.length / 2;
+      for (let i = 0; i < n; i++, v++) {
+        const j = (i + 1) % n;
+        const e = { b: bi, v, ax: r[i * 2], az: r[i * 2 + 1], bx: r[j * 2], bz: r[j * 2 + 1], len: 0 };
+        e.len = Math.hypot(e.bx - e.ax, e.bz - e.az);
+        if (e.len < 0.5) continue;
+        const id = E.push(e) - 1;
+        for (let gx = Math.floor((Math.min(e.ax, e.bx) - 1) / G); gx <= Math.floor((Math.max(e.ax, e.bx) + 1) / G); gx++)
+          for (let gz = Math.floor((Math.min(e.az, e.bz) - 1) / G); gz <= Math.floor((Math.max(e.az, e.bz) + 1) / G); gz++) {
+            const k = (gx + 2000) * 4096 + (gz + 2000);
+            (cells.get(k) ?? cells.set(k, []).get(k)!).push(id);
+          }
+      }
+    }
+  });
+  let shared = 0;
+  for (const e of E) {
+    const ux = (e.bx - e.ax) / e.len, uz = (e.bz - e.az) / e.len;
+    const seen = new Set<number>();
+    const spans: [number, number][] = [];
+    for (let gx = Math.floor((Math.min(e.ax, e.bx) - 1) / G); gx <= Math.floor((Math.max(e.ax, e.bx) + 1) / G); gx++)
+      for (let gz = Math.floor((Math.min(e.az, e.bz) - 1) / G); gz <= Math.floor((Math.max(e.az, e.bz) + 1) / G); gz++)
+        for (const id of cells.get((gx + 2000) * 4096 + (gz + 2000)) ?? []) {
+          if (seen.has(id)) continue;
+          seen.add(id);
+          const f = E[id];
+          if (f.b === e.b) continue;
+          const fx = (f.bx - f.ax) / f.len, fz = (f.bz - f.az) / f.len;
+          if (Math.abs(ux * fx + uz * fz) < 0.985) continue;
+          const d0 = Math.abs((f.ax - e.ax) * -uz + (f.az - e.az) * ux), d1 = Math.abs((f.bx - e.ax) * -uz + (f.bz - e.az) * ux);
+          if (d0 > 0.7 || d1 > 0.7) continue;
+          const s0 = (f.ax - e.ax) * ux + (f.az - e.az) * uz, s1 = (f.bx - e.ax) * ux + (f.bz - e.az) * uz;
+          const lo = Math.max(0, Math.min(s0, s1)), hi = Math.min(e.len, Math.max(s0, s1));
+          if (hi > lo) spans.push([lo, hi]);
+        }
+    spans.sort((a, b) => a[0] - b[0]);
+    let covered = 0, end = 0;
+    for (const [lo, hi] of spans) { if (hi > end) { covered += hi - Math.max(lo, end); end = hi; } }
+    if (covered > e.len * 0.5) { kept[e.b].edges[e.v] |= EFlag.Party; shared++; }
+  }
+  log(`party walls: ${shared} of ${E.length} edges`);
+}
+
+/** Plans every building on a pool of worker threads (the roofs' straight skeletons dominate). */
+async function planAll(inputs: PlanInput[]): Promise<PlanOutput[]> {
+  const out: PlanOutput[] = new Array(inputs.length);
+  const BATCH = 400;
+  let next = 0;
+  const n = Math.max(1, Math.min(8, availableParallelism() - 1));
+  await Promise.all(Array.from({ length: n }, () => new Promise<void>((done, fail) => {
+    const w = new Worker(new URL('./lib/plan-worker.ts', import.meta.url));
+    let from = 0;
+    const send = () => {
+      if (next >= inputs.length) { w.terminate(); done(); return; }
+      from = next;
+      next = Math.min(inputs.length, next + BATCH);
+      w.postMessage(inputs.slice(from, next));
+    };
+    w.on('message', (m: PlanOutput[] | 'ready') => {
+      if (m !== 'ready') m.forEach((o, k) => { out[from + k] = o; });
+      send();
+    });
+    w.on('error', fail);
+  })));
+  return out;
+}
+
+{
+  const t1 = Date.now();
+  const inputs: PlanInput[] = kept.map((b) => {
+    const g: { min: number; ref: number } = (b as any).ground ?? groundRef(b.poly);
+    return {
+      key: b.key, part: b.part, tags: b.tags, area: b.area, cx: b.cx, poly: b.poly,
+      landmark: b.landmark >= 0 ? landmarks[b.landmark].id : undefined,
+      gmin: g.min, gref: g.ref, district: districtAt(districts, b.cx, b.cz), edges: b.edges,
+    };
+  });
+  const outputs = await planAll(inputs);
+  let failed = 0, pitched = 0, dormers = 0, chimneys = 0, roofBoxes = 0;
+  kept.forEach((b, k) => {
+    const o = outputs[k];
+    b.base = o.base; b.top = o.top; b.eave = o.eave; b.gnd = o.gnd;
+    b.style = o.style; b.flags = o.flags; b.wall = o.wall; b.roofC = o.roofC;
+    b.roof = o.roof; b.props = o.props;
+    if (o.failed) failed++;
+    if (o.roof) pitched++;
+    for (const pr of o.props) pr.type === 0 ? chimneys++ : pr.type === 3 ? roofBoxes++ : dormers++;
+  });
+  log(`roofs: ${pitched} pitched, ${failed} fell back to flat; ${dormers} dormers, ${chimneys} chimneys, ${roofBoxes} roof boxes (${((Date.now() - t1) / 1000).toFixed(1)} s)`);
+}
 
 // ---- Bridges ----------------------------------------------------------------------------------
 
@@ -577,6 +702,61 @@ const surface = new Grid(WORLD.xMin, WORLD.zMin, SC, SNX, SNZ, new Float32Array(
   log('surface grid');
 }
 
+// ---- Streets: tram rails and lamp posts (design.md §8.3) -------------------------------------
+
+let streetsPack: Uint8Array;
+{
+  // Tram tracks: each OSM way is one track; points every 3 m on the ground. Tracks on bridges
+  // and in tunnels wait for the bridges (M4).
+  const rs: number[] = [0], rp: number[] = [];
+  let km = 0;
+  for (const el of layer('railways')) {
+    const t = el.tags ?? {};
+    if (el.type !== 'way' || t.railway !== 'tram' || underground(t) || (t.bridge && t.bridge !== 'no')) continue;
+    const line = lineOf(el);
+    const pts: number[] = [];
+    for (let k = 0; k + 2 < line.length; k += 2) {
+      const ax = line[k], az = line[k + 1], bx = line[k + 2], bz = line[k + 3];
+      const len = Math.hypot(bx - ax, bz - az), steps = Math.max(1, Math.ceil(len / 3));
+      for (let q = 0; q < steps; q++) pts.push(ax + ((bx - ax) * q) / steps, az + ((bz - az) * q) / steps);
+      km += len / 1000;
+    }
+    pts.push(line[line.length - 2], line[line.length - 1]);
+    const inside = (x: number, z: number) => x > WORLD.xMin && x < WORLD.xMax && z > WORLD.zMin && z < WORLD.zMax;
+    let open = false;
+    for (let k = 0; k < pts.length; k += 2) {
+      const x = pts[k], z = pts[k + 1];
+      if (!inside(x, z) || water[Math.round((z - ground.z0) / CELL) * NX + Math.round((x - ground.x0) / CELL)]) {
+        if (open) { rs.push(rp.length / 3); open = false; }
+        continue;
+      }
+      rp.push(x, ground.sample(x, z), z);
+      open = true;
+    }
+    if (open) rs.push(rp.length / 3);
+  }
+  // Drop runs of a single point.
+  const starts: number[] = [0], pos: number[] = [];
+  for (let k = 0; k + 1 < rs.length; k++) {
+    if (rs[k + 1] - rs[k] < 2) continue;
+    pos.push(...rp.slice(rs[k] * 3, rs[k + 1] * 3));
+    starts.push(pos.length / 3);
+  }
+  // Lamps: on the ground, or on a bridge deck.
+  const lp: number[] = [];
+  for (const el of layer('lamps')) {
+    if (el.type !== 'node' || el.lat === undefined || el.lon === undefined) continue;
+    const x = lonToX(el.lon), z = latToZ(el.lat);
+    if (x <= WORLD.xMin || x >= WORLD.xMax || z <= WORLD.zMin || z >= WORLD.zMax) continue;
+    let y = ground.sample(x, z);
+    for (const d of decks) if (pointInPolygon(x, z, d.poly)) { y = d.top; break; }
+    if (Number.isNaN(y)) continue;
+    lp.push(x, y, z);
+  }
+  streetsPack = encodePack({}, { railStart: new Uint32Array(starts), rail: new Float32Array(pos), lamp: new Float32Array(lp) });
+  log(`streets: ${km.toFixed(0)} km of tram track in ${starts.length - 1} runs, ${lp.length / 3} lamps`);
+}
+
 // ---- Horizon ----------------------------------------------------------------------------------
 
 const HC = 100;
@@ -622,24 +802,72 @@ sizes.horizon = write('horizon.bin', grid(horizon), { height: encodeHeights(hori
 sizes.surface = write('surface.bin', grid(surface), { height: encodeHeights(surface.data, SNX) });
 sizes.landuse = write('landuse.bin', grid(landuse), { ground: landuse.data });
 writeFileSync(join(OUT, 'water.bin'), gzipSync(waterPack, { level: 9 }));
+{
+  const bytes = gzipSync(streetsPack, { level: 9 });
+  writeFileSync(join(OUT, 'streets.bin'), bytes);
+  sizes.streets = bytes.length;
+}
 
-/** Footprints relative to an origin in decimetres, with base and top heights in decimetres. */
-function packFootprints(items: { poly: Polygon; base: number; top: number; landmark: number; kind: number }[], ox: number, oz: number) {
-  const bRing: number[] = [0], rVert: number[] = [0], xy: number[] = [], base: number[] = [], top: number[] = [], lm: number[] = [], kind: number[] = [];
-  for (const it of items) {
+interface Item {
+  poly: Polygon; base: number; top: number; eave: number; gnd: number; landmark: number; kind: number;
+  style: number; flags: number; wall: string; roofC: string; edges?: Uint8Array; roof?: Roof | null; props?: PropRec[];
+  cx: number; cz: number;
+}
+
+/**
+ * One tile's buildings, relative to the tile origin, lengths in decimetres:
+ *   per building   ring, base, top, eave, gnd, landmark, kind, style, flags, wall and roof colour
+ *                  (sRGB), roofV and roofF (first extra roof vertex and first roof face)
+ *   per ring       vert (first vertex); per vertex xy and edge (EFlag bits of the edge it starts)
+ *   roof           rv (x, z, y of the extra vertices), per face fk (kind), fe (edge, building-local
+ *                  vertex, or −1), fn (triangles); ti (triangle corners, building-local: footprint
+ *                  vertices first, then the building's extra vertices)
+ *   props          pt (type), pa (facing, 256 steps), pb (building), pp (x, z, y0, y1 in dm; w, d in cm)
+ */
+function packTile(items: Item[], ox: number, oz: number) {
+  const bRing: number[] = [0], rVert: number[] = [0], xy: number[] = [], edge: number[] = [];
+  const base: number[] = [], top: number[] = [], eave: number[] = [], gnd: number[] = [];
+  const lm: number[] = [], kind: number[] = [], style: number[] = [], flags: number[] = [], wall: number[] = [], roofC: number[] = [];
+  const roofV: number[] = [0], roofF: number[] = [0], rv: number[] = [], fk: number[] = [], fe: number[] = [], fn: number[] = [], ti: number[] = [];
+  const pt: number[] = [], pa: number[] = [], pb: number[] = [], pp: number[] = [];
+  const dm = (v: number) => Math.round(v * 10);
+  items.forEach((it, bi) => {
+    let nv = 0;
     for (const r of [it.poly.outer, ...it.poly.holes]) {
-      for (let k = 0; k < r.length; k += 2) xy.push(Math.round((r[k] - ox) * 10), Math.round((r[k + 1] - oz) * 10));
+      for (let k = 0; k < r.length; k += 2) xy.push(dm(r[k] - ox), dm(r[k + 1] - oz));
+      nv += r.length / 2;
       rVert.push(xy.length / 2);
     }
+    for (let v = 0; v < nv; v++) edge.push(it.edges?.[v] ?? 0);
     bRing.push(rVert.length - 1);
-    base.push(Math.round(it.base * 10));
-    top.push(Math.round(it.top * 10));
-    lm.push(it.landmark);
-    kind.push(it.kind);
-  }
+    base.push(dm(it.base)); top.push(dm(it.top)); eave.push(dm(it.eave)); gnd.push(dm(it.gnd));
+    lm.push(it.landmark); kind.push(it.kind); style.push(it.style); flags.push(it.flags);
+    wall.push(...hexRgb(it.wall)); roofC.push(...hexRgb(it.roofC));
+    if (it.roof) {
+      const r = it.roof;
+      for (let k = 0; k < r.x.length; k++) rv.push(dm(r.x[k] - ox), dm(r.z[k] - oz), dm(it.eave + r.h[k]));
+      for (const f of r.faces) {
+        fk.push(f.kind); fe.push(f.edge); fn.push(f.tris.length / 3);
+        ti.push(...f.tris);
+      }
+    }
+    roofV.push(rv.length / 3);
+    roofF.push(fk.length);
+    for (const p of it.props ?? []) {
+      pt.push(p.type);
+      pa.push(Math.round(((p.angle / (2 * Math.PI)) % 1 + 1) % 1 * 256) & 255);
+      pb.push(bi);
+      pp.push(dm(p.x - ox), dm(p.z - oz), dm(p.y0), dm(p.y1), Math.round(p.w * 100), Math.round(p.d * 100));
+    }
+  });
   return {
-    ring: new Uint32Array(bRing), vert: new Uint32Array(rVert), xy: new Int16Array(xy),
-    base: new Int16Array(base), top: new Int16Array(top), landmark: new Int8Array(lm), kind: new Uint8Array(kind),
+    ring: new Uint32Array(bRing), vert: new Uint32Array(rVert), xy: new Int16Array(xy), edge: new Uint8Array(edge),
+    base: new Int16Array(base), top: new Int16Array(top), eave: new Int16Array(eave), gnd: new Int16Array(gnd),
+    landmark: new Int8Array(lm), kind: new Uint8Array(kind), style: new Uint8Array(style), flags: new Uint8Array(flags),
+    wall: new Uint8Array(wall), roof: new Uint8Array(roofC),
+    roofV: new Uint32Array(roofV), roofF: new Uint32Array(roofF), rv: new Int16Array(rv),
+    fk: new Uint8Array(fk), fe: new Int16Array(fe), fn: new Uint16Array(fn), ti: new Uint16Array(ti),
+    pt: new Uint8Array(pt), pa: new Uint8Array(pa), pb: new Uint16Array(pb), pp: new Int16Array(pp),
   };
 }
 
@@ -647,11 +875,18 @@ const KIND = { building: 0, part: 1, bridge: 2, box: 3 };
 const tiles: { i: number; j: number; file: string; count: number; bytes: number }[] = [];
 {
   // Buildings, bridge decks and landmark boxes all go into the tile that holds their centroid.
-  type Item = { poly: Polygon; base: number; top: number; landmark: number; kind: number; cx: number; cz: number };
   const items: Item[] = [
-    ...kept.map((b) => ({ poly: b.poly, base: b.base, top: b.top, landmark: b.landmark, kind: b.part ? KIND.part : KIND.building, cx: b.cx, cz: b.cz })),
-    ...decks.map((d) => { const [cx, cz] = centroid(d.poly.outer); return { ...d, kind: KIND.bridge, cx, cz }; }),
-    ...boxes.map((b) => { const [cx, cz] = centroid(b.poly.outer); return { ...b, kind: KIND.box, cx, cz }; }),
+    ...kept.map((b) => ({ ...b, roofC: b.roofC, kind: b.part ? KIND.part : KIND.building })),
+    ...decks.map((d) => {
+      const [cx, cz] = centroid(d.poly.outer);
+      const c = d.landmark >= 0 ? LANDMARK_COLOURS[landmarks[d.landmark].id] ?? [BRIDGE, BRIDGE] : [BRIDGE, BRIDGE];
+      return { ...d, eave: d.top, gnd: d.base, style: Style.Blank, flags: d.landmark >= 0 ? BFlag.Landmark : 0, wall: c[0], roofC: c[1], kind: KIND.bridge, cx, cz };
+    }),
+    ...boxes.map((b) => {
+      const [cx, cz] = centroid(b.poly.outer);
+      const c = LANDMARK_COLOURS[landmarks[b.landmark].id] ?? ['#d9c9a8', '#6d6a62'];
+      return { ...b, eave: b.top, gnd: b.base, style: Style.Blank, flags: BFlag.Landmark, wall: c[0], roofC: c[1], kind: KIND.box, cx, cz };
+    }),
   ];
   const byTile = new Map<string, Item[]>();
   for (const it of items) {
@@ -664,14 +899,14 @@ const tiles: { i: number; j: number; file: string; count: number; bytes: number 
     const [i, j] = k.split('_').map(Number);
     const ox = WORLD.xMin + (i + 0.5) * TILE, oz = WORLD.zMin + (j + 0.5) * TILE;
     const file = `tiles/${k}.bin`;
-    const bytes = write(file, { i, j, ox, oz, count: list.length }, packFootprints(list, ox, oz));
+    const bytes = write(file, { i, j, ox, oz, count: list.length }, packTile(list, ox, oz));
     tiles.push({ i, j, file, count: list.length, bytes });
   }
 }
 sizes.tiles = tiles.reduce((a, t) => a + t.bytes, 0);
 
 const manifest = {
-  version: 1,
+  version: 2,
   built: new Date().toISOString(),
   datum: DATUM,
   world: WORLD,
@@ -682,6 +917,7 @@ const manifest = {
   surface: { file: 'surface.bin', ...grid(surface) },
   landuse: { file: 'landuse.bin', ...grid(landuse) },
   water: { file: 'water.bin' },
+  streets: { file: 'streets.bin' },
   tiles,
   kinds: KIND,
   attribution: 'Map data © OpenStreetMap contributors (ODbL). Terrain © ČÚZK, DMR 5G (CC BY 4.0).',

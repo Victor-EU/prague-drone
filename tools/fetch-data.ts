@@ -126,6 +126,8 @@ const LAYERS: { name: string; body: string; split?: number }[] = [
     name: 'bridges',
     body: `way["man_made"="bridge"]; relation["man_made"="bridge"];`,
   },
+  { name: 'districts', body: `relation["boundary"="cadastral"];` },
+  { name: 'lamps', body: `node["highway"="street_lamp"];` },
 ];
 
 function cells(n: number): [number, number, number, number][] {
@@ -212,6 +214,9 @@ const FILTERS: Record<string, { way?: (t: Tags) => boolean; relation?: (t: Tags)
     relation: (t) => t.route === 'tram',
   },
   bridges: { way: (t) => t.man_made === 'bridge', relation: (t) => t.man_made === 'bridge' },
+  // Cadastral areas (Malá Strana, Staré Město, …) for the district rules of design.md §7.2, §8.1.
+  districts: { relation: (t) => t.boundary === 'cadastral' },
+  lamps: { node: (t) => t.highway === 'street_lamp' },
 };
 
 async function downloadExtract() {

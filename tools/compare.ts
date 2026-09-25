@@ -5,6 +5,7 @@
 //
 //   node tools/compare.ts            all viewpoints
 //   node tools/compare.ts 8372 9369  some
+//   node tools/compare.ts 8385@heading=40,tilt=-9   a viewpoint nudged, written to compare/8385-heading_40-tilt_-9.png
 //
 // The photographs are read by the page from Photos/ (or mockup/set/) through the dev server; this
 // is build-side only and nothing of it ships (design.md §1).
@@ -20,7 +21,7 @@ const sleep = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
 
 const all = (JSON.parse(readFileSync('data/viewpoints.json', 'utf8')).frames as { id: string }[]).map((f) => f.id);
 const ids = process.argv.slice(2).length ? process.argv.slice(2) : all;
-for (const id of ids) if (!all.includes(id)) throw new Error(`no viewpoint ${id} in data/viewpoints.json`);
+for (const arg of ids) if (!all.includes(arg.split('@')[0])) throw new Error(`no viewpoint ${arg} in data/viewpoints.json`);
 
 // The dev server: reuse a running one, else start one for the duration.
 let close = async () => {};
@@ -75,8 +76,11 @@ const evaluate = async (expression: string) => {
 };
 
 try {
-  for (const id of ids) {
-    await send('Page.navigate', { url: `${ORIGIN}/?view=${id}` }, sessionId);
+  for (const arg of ids) {
+    const [id, nudge = ''] = arg.split('@');
+    const query = nudge ? '&' + nudge.split(',').join('&') : '';
+    const suffix = nudge ? '-' + nudge.replace(/=/g, '_').replace(/,/g, '-').replace(/[^\w.-]/g, '') : '';
+    await send('Page.navigate', { url: `${ORIGIN}/?view=${id}${query}` }, sessionId);
     const t0 = Date.now();
     // Wait for the world and every tile, then for the exposure and history to settle.
     while (!(await evaluate('!!(window.praha && praha.world.buildings.loaded === praha.world.buildings.total)').catch(() => false))) {
@@ -85,11 +89,13 @@ try {
     }
     await sleep(4000);
     const gpu = await evaluate(`(() => { const g = praha.renderer.getContext(), d = g.getExtension('WEBGL_debug_renderer_info'); return d ? g.getParameter(d.UNMASKED_RENDERER_WEBGL) : '?'; })()`);
-    const file = await evaluate('praha.sheet()');
+    const file = await evaluate(`praha.sheet(0, ${JSON.stringify(suffix)})`);
     console.log(`${id}: ${file}  (${((Date.now() - t0) / 1000).toFixed(0)} s, ${gpu})`);
   }
 } finally {
   ws.close();
-  chrome.kill();
+  chrome.kill('SIGKILL');
   await close();
+  // Chrome's pipes can keep the event loop alive after it is gone.
+  process.exit(process.exitCode ?? 0);
 }

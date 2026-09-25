@@ -3,7 +3,8 @@
 
 import * as THREE from 'three';
 import { HeightGrid } from './heightgrid.ts';
-import { GROUND_COLOURS } from '../core/landuse.ts';
+import { GROUND_COLOURS, Ground } from '../core/landuse.ts';
+import { patchLit } from '../sky/lit.ts';
 
 const CHUNK = 1000;
 const STEPS = [1, 2, 4, 8]; // grid steps per level (5, 10, 20, 40 m)
@@ -28,7 +29,7 @@ export class Terrain {
   constructor(grid: HeightGrid, landuse: THREE.Texture, world: { xMin: number; xMax: number; zMin: number; zMax: number }) {
     this.grid = grid;
     this.world = world;
-    this.material = new THREE.MeshStandardMaterial({ map: landuse, roughness: 0.95, metalness: 0 });
+    this.material = terrainMaterial(landuse);
     const per = CHUNK / grid.cell;
     for (let j0 = 0; j0 < grid.nz - 1; j0 += per)
       for (let i0 = 0; i0 < grid.nx - 1; i0 += per) {
@@ -141,13 +142,22 @@ export class Terrain {
   }
 }
 
-/** Land-use classes to an sRGB texture, with a little per-texel variation so flat areas breathe. */
+/**
+ * Land-use classes to an sRGB texture, with a little per-texel variation so flat areas breathe.
+ * Alpha carries the paving the ground shader draws (terrainMaterial): 0 none, then gravel,
+ * asphalt, square setts, cobbles.
+ */
 export function landuseTexture(classes: Uint8Array, nx: number, nz: number): THREE.DataTexture {
   const lut = new Uint8Array(256 * 3);
   for (const [k, hex] of Object.entries(GROUND_COLOURS)) {
     const c = parseInt(hex.slice(1), 16);
     lut.set([(c >> 16) & 255, (c >> 8) & 255, c & 255], Number(k) * 3);
   }
+  const pave = new Uint8Array(256);
+  pave[Ground.Path] = 64;
+  pave[Ground.Road] = pave[Ground.Parking] = pave[Ground.Industrial] = 128;
+  pave[Ground.Square] = 192;
+  pave[Ground.Cobbles] = 255;
   const data = new Uint8Array(nx * nz * 4);
   let seed = 1234567;
   for (let k = 0; k < nx * nz; k++) {
@@ -157,7 +167,7 @@ export function landuseTexture(classes: Uint8Array, nx: number, nz: number): THR
     data[k * 4] = Math.min(255, lut[c] * jitter);
     data[k * 4 + 1] = Math.min(255, lut[c + 1] * jitter);
     data[k * 4 + 2] = Math.min(255, lut[c + 2] * jitter);
-    data[k * 4 + 3] = 255;
+    data[k * 4 + 3] = pave[classes[k]];
   }
   const tex = new THREE.DataTexture(data, nx, nz, THREE.RGBAFormat);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -167,6 +177,66 @@ export function landuseTexture(classes: Uint8Array, nx: number, nz: number): THR
   tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
   tex.needsUpdate = true;
   return tex;
+}
+
+// Paving drawn on the ground (design.md §8.3): cobbles in the old streets (the small setts of the
+// core, about 11 cm), larger setts on squares with a lighter grid, asphalt grain on roads, gravel
+// on paths. Each fades to its average as its stones fall below a pixel.
+const PAVING = /* glsl */ `
+{
+  float pave = sampledDiffuseColor.a;
+  diffuseColor.a = 1.0;
+  if (pave > 0.1) {
+    vec2 xz = vPraWorld.xz;
+    float n1 = praGNoise(xz * 0.35), n2 = praGNoise(xz * 2.3);
+    // Asphalt and gravel: patches and grain.
+    float grain = 0.93 + 0.1 * n1 + 0.08 * (n2 - 0.5);
+    float setts = smoothstep(0.62, 0.8, pave), cobbles = smoothstep(0.85, 0.98, pave);
+    vec3 c = diffuseColor.rgb * mix(grain, 1.0, setts);
+    if (setts > 0.0) {
+      // Setts in rows, every other row offset; cobbles smaller than the square's setts.
+      float size = mix(0.2, 0.11, cobbles);
+      vec2 p = xz / size;
+      p.x += 0.5 * mod(floor(p.y), 2.0);
+      vec2 cell = floor(p), f = fract(p);
+      float w = max(fwidth(p.x), fwidth(p.y));
+      float edge = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
+      float gap = 1.0 - smoothstep(0.04, 0.14, edge);
+      float tone = 0.82 + 0.34 * praGHash(cell);
+      float stones = mix(tone, 0.55, gap);
+      // Averaged away when a stone is under about two pixels.
+      float fade = 1.0 - smoothstep(0.25, 0.6, w);
+      float mean = 0.9;
+      // The squares' grid of lighter granite lines, every 2.4 m.
+      vec2 g = xz / 2.4;
+      float gw = max(fwidth(g.x), fwidth(g.y));
+      float lines = (1.0 - cobbles) * max(praGPulse(g.x, 0.0, 0.06, gw), praGPulse(g.y, 0.0, 0.06, gw));
+      c *= mix(1.0, mix(mean, stones, fade), setts) * (1.0 + 0.35 * lines * setts);
+    }
+    diffuseColor.rgb = c;
+  }
+}`;
+
+const PAVING_PARS = /* glsl */ `
+float praGHash(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
+float praGNoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(praGHash(i), praGHash(i + vec2(1.0, 0.0)), f.x), mix(praGHash(i + vec2(0.0, 1.0)), praGHash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+float praGPulse(float x, float a, float b, float w) {
+  w = max(w, 1e-4);
+  float x0 = x - 0.5 * w, x1 = x + 0.5 * w;
+  return ((floor(x1) * (b - a) + clamp(fract(x1), a, b)) - (floor(x0) * (b - a) + clamp(fract(x0), a, b))) / w;
+}`;
+
+function terrainMaterial(landuse: THREE.Texture): THREE.MeshStandardMaterial {
+  const m = new THREE.MeshStandardMaterial({ map: landuse, roughness: 0.95, metalness: 0 });
+  return patchLit(m, (shader) => {
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>\n${PAVING_PARS}`)
+      .replace('#include <map_fragment>', `#include <map_fragment>\n${PAVING}`);
+  }, '-terrain');
 }
 
 /** The ring of terrain from the world's edge to 16 km, without land use: the fog does the rest. */
@@ -200,7 +270,8 @@ export function horizonMesh(grid: HeightGrid, world: { xMin: number; xMax: numbe
   geom.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
   geom.setIndex(index);
   geom.computeBoundingSphere();
-  const mat = new THREE.MeshStandardMaterial({ color: '#7f7b6a', roughness: 1, metalness: 0 });
+  // Towns, fields and woods beyond the world, as they read from 10 km: light, with the haze on top.
+  const mat = new THREE.MeshStandardMaterial({ color: '#8f8c7c', roughness: 1, metalness: 0 });
   const mesh = new THREE.Mesh(geom, mat);
   mesh.receiveShadow = false;
   mesh.matrixAutoUpdate = false;

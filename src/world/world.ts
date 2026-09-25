@@ -8,6 +8,8 @@ import { Terrain, landuseTexture, horizonMesh } from './terrain.ts';
 import { Buildings, type TileInfo } from './buildings.ts';
 import type { Ground } from '../drone/drone.ts';
 import { patchLit } from '../sky/lit.ts';
+import { Streets } from './streets.ts';
+import type { Pack } from '../core/pack.ts';
 
 export interface Manifest {
   datum: number;
@@ -23,11 +25,12 @@ export class World implements Ground {
   readonly manifest: Manifest;
   readonly terrain: Terrain;
   readonly buildings: Buildings;
+  readonly streets: Streets;
   readonly bounds: Manifest['world'];
   readonly height: HeightGrid;
   private surf: HeightGrid;
 
-  private constructor(base: string, manifest: Manifest, height: HeightGrid, surf: HeightGrid, landuse: THREE.Texture, horizon: HeightGrid, water: THREE.BufferGeometry, renderer: THREE.WebGLRenderer) {
+  private constructor(base: string, manifest: Manifest, height: HeightGrid, surf: HeightGrid, landuse: THREE.Texture, horizon: HeightGrid, water: THREE.BufferGeometry, streets: Pack, renderer: THREE.WebGLRenderer) {
     this.manifest = manifest;
     this.bounds = manifest.world;
     this.height = height;
@@ -40,26 +43,29 @@ export class World implements Ground {
 
     // Until the river's own shader (M4): dark, and reflecting the sky less than a mirror would, as
     // rippled water does.
-    const waterMat = new THREE.MeshStandardMaterial({ color: '#34495a', roughness: 0.28, metalness: 0, envMapIntensity: 0.55 });
+    const waterMat = new THREE.MeshStandardMaterial({ color: '#2d3c43', roughness: 0.3, metalness: 0, envMapIntensity: 0.32 });
     const waterMesh = new THREE.Mesh(water, waterMat);
     waterMesh.receiveShadow = true;
     waterMesh.matrixAutoUpdate = false;
     this.group.add(waterMesh);
 
-    this.buildings = new Buildings(base, manifest.kinds, manifest.tile, manifest.world);
+    this.buildings = new Buildings(base, manifest.tile, manifest.world);
     this.group.add(this.buildings.group);
+    this.streets = new Streets(streets);
+    this.group.add(this.streets.group);
     // Every lit material takes the sky's haze and the terrain and cloud shadows.
-    for (const m of [this.terrain.material, horizonRing.material as THREE.Material, waterMat, this.buildings.material]) patchLit(m);
+    for (const m of [horizonRing.material as THREE.Material, waterMat]) patchLit(m);
   }
 
   static async load(base: string, renderer: THREE.WebGLRenderer): Promise<World> {
     const manifest: Manifest = await (await fetch(`${base}/manifest.json`)).json();
-    const [terrain, surface, landuse, horizon, water] = await Promise.all([
+    const [terrain, surface, landuse, horizon, water, streets] = await Promise.all([
       fetchPack(`${base}/terrain.bin`),
       fetchPack(`${base}/surface.bin`),
       fetchPack(`${base}/landuse.bin`),
       fetchPack(`${base}/horizon.bin`),
       fetchPack(`${base}/water.bin`),
+      fetchPack(`${base}/streets.bin`),
     ]);
     const lu = landuse.meta as { nx: number; nz: number };
     const waterGeom = new THREE.BufferGeometry();
@@ -71,7 +77,7 @@ export class World implements Ground {
       base, manifest,
       HeightGrid.fromPack(terrain), HeightGrid.fromPack(surface),
       landuseTexture(landuse.arrays.ground as Uint8Array, lu.nx, lu.nz),
-      HeightGrid.fromPack(horizon), waterGeom, renderer,
+      HeightGrid.fromPack(horizon), waterGeom, streets, renderer,
     );
   }
 

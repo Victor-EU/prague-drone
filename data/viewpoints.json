@@ -1,7 +1,15 @@
 {
   "note": "Viewpoints of the hero frames (design.md §12.1): where the camera stood, where it looked, its 35 mm equivalent focal length from EXIF, and the local clock (CEST: EXIF time + 1 h, design.md §3.1). x and north in metres (§6.1); 'agl' is the eye height above the ground there. heading in degrees clockwise from north, tilt in degrees (negative looks down). 'weather' fixes the clouds: seed, peak coverage, overcast, cirrus, and 'cloudAt', a ground point the densest cumulus cell is moved over. Authored by lining the render up with the photograph (open /?view=<id> in development and call praha.sheet() in the console).",
   "frames": [
-    {"id": "8372", "x": 545, "north": -2342, "agl": 12, "heading": -16, "tilt": -4.5, "focal35": 24, "aspect": 1.5, "clock": "12:08",
+    {"id": "7924", "x": -1155, "north": -334, "agl": 52, "heading": 73, "tilt": -7.5, "focal35": 70, "aspect": 1.5, "clock": "18:49",
+      "weather": {"seed": 7924, "coverage": 0.05, "overcast": false, "cirrus": 0}},
+    {"id": "7940", "x": -1155, "north": -334, "agl": 52, "heading": 122, "tilt": -5.5, "focal35": 83, "aspect": 1.5, "clock": "18:54",
+      "weather": {"seed": 7940, "coverage": 0.05, "overcast": false, "cirrus": 0}},
+    {"id": "7944", "x": -1155, "north": -334, "agl": 52, "heading": 74, "tilt": -8.7, "focal35": 83, "aspect": 1.5, "clock": "18:55",
+      "weather": {"seed": 7944, "coverage": 0.05, "overcast": false, "cirrus": 0}},
+    {"id": "8385", "x": 665, "north": -2390, "agl": 14, "heading": 0, "tilt": -6.5, "focal35": 77, "aspect": 1.5, "clock": "12:11",
+      "weather": {"seed": 8385, "coverage": 0.55, "overcast": false, "cirrus": 0}},
+    {"id": "8372", "x": 545, "north": -2342, "agl": 18, "heading": -16, "tilt": -4.5, "focal35": 24, "aspect": 1.5, "clock": "12:08",
       "weather": {"seed": 8372, "coverage": 0.5, "overcast": false, "cirrus": 0}},
     {"id": "9369", "x": 900, "north": 1180, "agl": 1.6, "heading": 20, "tilt": 18, "focal35": 53, "aspect": 1.5, "clock": "16:54",
       "weather": {"seed": 9369, "coverage": 0.3, "overcast": false, "cirrus": 0.4, "cloudAt": [3000, 6800]}},

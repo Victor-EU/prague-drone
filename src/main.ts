@@ -29,6 +29,9 @@ const view: Viewpoint | undefined = import.meta.env.DEV && params.has('view')
   ? ((await import('../data/viewpoints.json')).default.frames as Viewpoint[]).find((f) => f.id === params.get('view'))
   : undefined;
 if (view) {
+  // Nudging a viewpoint while lining it up: /?view=8385&heading=40&tilt=-9 (tools/compare.ts id@heading=40,tilt=-9).
+  for (const k of ['x', 'north', 'agl', 'heading', 'tilt', 'focal35'] as const) if (params.has(k)) view[k] = Number(params.get(k));
+  if (params.has('vclock')) view.clock = params.get('vclock')!;
   params.set('clock', view.clock);
   params.set('seed', String(view.weather.seed));
   params.set('coverage', String(view.weather.coverage));
@@ -62,6 +65,9 @@ const route = new Route(routeData as unknown as RouteData);
 const [lut, world] = await Promise.all([loadCube(lutUrl), World.load(BASE, renderer)]);
 const atmosphere = new Atmosphere(renderer, scene, session, overcast);
 const pipeline = new Pipeline(renderer, lut);
+if (import.meta.env.DEV) for (const [k, v] of params) if (k.startsWith('light.')) (atmosphere.lightOverride as Record<string, number | number[]>)[k.slice(6)] = v.includes(':') ? v.split(':').map(Number) : Number(v);
+if (import.meta.env.DEV && params.get('ao') === '0') pipeline.ao = false;
+if (import.meta.env.DEV && params.get('grade') === '0') pipeline.grade = false;
 const terrainShadow = new TerrainShadow(world.height);
 scene.add(world.group);
 
@@ -124,6 +130,7 @@ if (import.meta.env.DEV) {
     praha: {
       renderer, scene, camera, world, atmosphere, pipeline, drone, route, bench, worldLoadedAt,
       setClock: (h: number) => { dayAdvances = false; fixedClock = clock = h; },
+      frame: (n = 1) => { for (let k = 0; k < n; k++) once(); },
       capture: (name = 'capture.png') => dev.capture(canvas, once, name),
       sheet: (width = 0, suffix = '') => view && dev.sheet(canvas, once, view.id, width, suffix),
     },
@@ -151,6 +158,8 @@ function renderFrame(dt: number) {
   atmosphere.updateEnvironment();
   terrainShadow.update(renderer, atmosphere.sunDir);
   world.terrain.update(camera.position);
+  world.buildings.update(camera.position);
+  world.streets.update(camera.position);
   pipeline.render(scene, camera, {
     dt,
     light: atmosphere.light,
@@ -229,6 +238,7 @@ function frame(time: number) {
       hud.stats.style.display = statsOn ? 'block' : 'none';
     } else if (k === 'KeyC') atmosphere.reseed(rollSession());
     else if (k === 'KeyG' && import.meta.env.DEV) pipeline.grade = !pipeline.grade;
+    else if (k === 'KeyO' && import.meta.env.DEV) pipeline.ao = !pipeline.ao;
   }
 
   if (!view) drone.update(dt, keys);
@@ -265,7 +275,7 @@ function frame(time: number) {
         `t ${drone.t.toFixed(1)} s  stop ${route.stopAt(drone.t).n}  ${drone.focal.toFixed(0)} mm\n` +
         `x ${drone.position.x.toFixed(0)}  north ${(-drone.position.z).toFixed(0)}  y ${drone.position.y.toFixed(0)}\n` +
         `clouds seed ${s.seed}  peak ${(s.coverage * 100).toFixed(0)}%  base ${s.base.toFixed(0)} m  wind ${s.wind.toFixed(1)} m/s  cirrus ${s.cirrus.toFixed(2)}\n` +
-        `tiles ${world.buildings.loaded}/${world.buildings.total}  grade ${pipeline.grade ? 'on' : 'off'}`;
+        `tiles ${world.buildings.loaded}/${world.buildings.total}  grade ${pipeline.grade ? 'on' : 'off'}  ao ${pipeline.ao ? 'on' : 'off'}`;
     }
   }
   if (loading.style.opacity !== '0') {

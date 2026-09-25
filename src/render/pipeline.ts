@@ -74,6 +74,75 @@ void main() {
   gl_FragColor = vec4(decomp(rgb(mix(h, cur, alpha))), 1.0);
 }`;
 
+// Ambient occlusion of the sky light (design.md §11), at half resolution from the depth buffer: for
+// each pixel, how much of the hemisphere above its surface nearby geometry hides, from a spiral
+// of samples within AO_RADIUS metres. The spiral turns every frame and TAA averages the noise.
+// The next frame's materials reproject into it and dim only their sky light (src/sky/lit.ts).
+const AO_FRAG = /* glsl */ `
+uniform sampler2D tDepth;
+uniform mat4 uProjInv;
+uniform vec2 uTexel;
+uniform float uProjScale;
+uniform float uRadius;
+uniform float uStrength;
+uniform float uFrame;
+varying vec2 vUv;
+vec3 viewPos(vec2 uv) {
+  vec4 p = uProjInv * vec4(uv * 2.0 - 1.0, texture2D(tDepth, uv).r, 1.0);
+  return p.xyz / p.w;
+}
+void main() {
+  if (texture2D(tDepth, vUv).r <= 0.0) { gl_FragColor = vec4(1.0); return; }
+  vec3 P = viewPos(vUv);
+  vec3 x1 = viewPos(vUv + vec2(uTexel.x, 0.0)), x0 = viewPos(vUv - vec2(uTexel.x, 0.0));
+  vec3 y1 = viewPos(vUv + vec2(0.0, uTexel.y)), y0 = viewPos(vUv - vec2(0.0, uTexel.y));
+  vec3 dx = abs(x1.z - P.z) < abs(P.z - x0.z) ? x1 - P : P - x0;
+  vec3 dy = abs(y1.z - P.z) < abs(P.z - y0.z) ? y1 - P : P - y0;
+  vec3 n = normalize(cross(dx, dy));
+  if (dot(n, P) > 0.0) n = -n;
+  float rpx = min(uRadius * uProjScale / -P.z, 120.0);
+  if (rpx < 1.5) { gl_FragColor = vec4(1.0); return; }
+  float noise = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+  float rot = (noise + uFrame * 0.618034) * 6.2831853;
+  float R2 = uRadius * uRadius, sum = 0.0;
+  for (int i = 0; i < 8; i++) {
+    float a = (float(i) + 0.5) / 8.0;
+    float ang = a * 6.2831853 * 2.0 + rot;
+    vec2 uv = vUv + vec2(cos(ang), sin(ang)) * (a * rpx) * uTexel;
+    vec3 v = viewPos(uv) - P;
+    float vv = dot(v, v);
+    float cosA = dot(v, n) * inversesqrt(vv + 1e-6);
+    sum += max(0.0, cosA - 0.12) * max(0.0, 1.0 - vv / R2);
+  }
+  gl_FragColor = vec4(max(0.0, 1.0 - uStrength * sum / 8.0), 0.0, 0.0, 1.0);
+}`;
+
+// A five-tap blur of the occlusion (centre and a diagonal cross) that does not cross depth edges.
+const AO_BLUR_FRAG = /* glsl */ `
+uniform sampler2D tAO;
+uniform sampler2D tDepth;
+uniform mat4 uProjInv;
+uniform vec2 uTexel;
+varying vec2 vUv;
+float viewZ(vec2 uv) {
+  vec4 p = uProjInv * vec4(uv * 2.0 - 1.0, texture2D(tDepth, uv).r, 1.0);
+  return p.z / p.w;
+}
+void main() {
+  float z0 = viewZ(vUv);
+  float s = 0.0, w = 0.0;
+  for (int i = 0; i < 5; i++) {
+    vec2 o = i == 0 ? vec2(0.0) : vec2(i == 1 || i == 2 ? -1.0 : 1.0, i == 1 || i == 3 ? -1.0 : 1.0);
+    vec2 uv = vUv + o * uTexel;
+    float k = exp(-abs(viewZ(uv) - z0) / (0.02 * abs(z0) + 0.05));
+    s += texture2D(tAO, uv).r * k;
+    w += k;
+  }
+  gl_FragColor = vec4(s / max(w, 1e-4), 0.0, 0.0, 1.0);
+}`;
+
+const AO_RADIUS = 5;
+
 // Each texel of the small meter image averages a patch of the frame; mipmaps average the rest.
 const LUM_FRAG = /* glsl */ `
 uniform sampler2D tColor;
@@ -213,6 +282,12 @@ export class Pipeline {
   private hist: THREE.WebGLRenderTarget[];
   private lum: THREE.WebGLRenderTarget;
   private expo: THREE.WebGLRenderTarget[];
+  private aoRaw: THREE.WebGLRenderTarget;
+  private aoOut: THREE.WebGLRenderTarget;
+  private aoPass: FullScreen;
+  private aoBlur: FullScreen;
+  /** Occlusion on; key O in development turns it off. */
+  ao = true;
   private taa: FullScreen;
   private lumPass: FullScreen;
   private adapt: FullScreen;
@@ -237,6 +312,23 @@ export class Pipeline {
       const t = new THREE.WebGLRenderTarget(1, 1, { type: THREE.FloatType, depthBuffer: false });
       t.texture.minFilter = t.texture.magFilter = THREE.NearestFilter;
       return t;
+    });
+    this.aoRaw = halfTarget(1, 1);
+    this.aoOut = halfTarget(1, 1);
+    this.aoPass = new FullScreen(AO_FRAG, {
+      tDepth: { value: this.hdr.depthTexture },
+      uProjInv: { value: new THREE.Matrix4() },
+      uTexel: { value: new THREE.Vector2() },
+      uProjScale: { value: 1 },
+      uRadius: { value: AO_RADIUS },
+      uStrength: { value: 1.6 },
+      uFrame: { value: 0 },
+    });
+    this.aoBlur = new FullScreen(AO_BLUR_FRAG, {
+      tAO: { value: this.aoRaw.texture },
+      tDepth: { value: this.hdr.depthTexture },
+      uProjInv: this.aoPass.uniforms.uProjInv,
+      uTexel: { value: new THREE.Vector2() },
     });
     this.taa = new FullScreen(TAA_FRAG, {
       tColor: { value: this.hdr.texture },
@@ -285,6 +377,11 @@ export class Pipeline {
     this.height = h;
     this.hdr.setSize(w, h);
     for (const t of this.hist) t.setSize(w, h);
+    const hw = Math.max(1, Math.round(w / 2)), hh = Math.max(1, Math.round(h / 2));
+    this.aoRaw.setSize(hw, hh);
+    this.aoOut.setSize(hw, hh);
+    (this.aoPass.uniforms.uTexel.value as THREE.Vector2).set(1 / w, 1 / h);
+    (this.aoBlur.uniforms.uTexel.value as THREE.Vector2).set(1 / hw, 1 / hh);
     (this.taa.uniforms.uTexel.value as THREE.Vector2).set(1 / w, 1 / h);
     (this.final.uniforms.uResolution.value as THREE.Vector2).set(w, h);
     this.reset = true;
@@ -307,8 +404,25 @@ export class Pipeline {
     camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
 
     o.beforeScene?.(camera);
+    // Last frame's occlusion is only valid if the camera did not jump.
+    if (this.reset || !this.ao) U.uAOOn.value = 0;
     r.setRenderTarget(this.hdr);
     r.render(scene, camera);
+
+    if (this.ao) {
+      const au = this.aoPass.uniforms;
+      (au.uProjInv.value as THREE.Matrix4).copy(camera.projectionMatrixInverse);
+      // Half-resolution pixels per metre at a view distance of one metre.
+      au.uProjScale.value = camera.projectionMatrix.elements[5] * this.height / 4;
+      au.uFrame.value = this.frame % 64;
+      // The samples step in full-resolution texels scaled to half-resolution pixels.
+      (au.uTexel.value as THREE.Vector2).set(2 / this.width, 2 / this.height);
+      this.aoPass.render(r, this.aoRaw);
+      this.aoBlur.render(r, this.aoOut);
+      U.tAO.value = this.aoOut.texture;
+      U.uAOViewProj.value.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+      U.uAOOn.value = 1;
+    }
 
     const [histIn, histOut] = this.frame % 2 ? [this.hist[1], this.hist[0]] : [this.hist[0], this.hist[1]];
     const [expoIn, expoOut] = this.frame % 2 ? [this.expo[1], this.expo[0]] : [this.expo[0], this.expo[1]];

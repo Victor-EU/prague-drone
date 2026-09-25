@@ -23,6 +23,7 @@ export const U = {
   aSunE: { value: SUN_E },
   aSkySat: { value: 1 },
   aSkyFlat: { value: 0 },
+  aSkyHorizon: { value: 0 },
   // Sky summary, 4 × 1: zenith, upper hemisphere mean, horizon mean, ground bounce (radiance)
   uSkyStats: tex(),
   uSunDir: { value: new THREE.Vector3(0, 1, 0) },
@@ -39,4 +40,9 @@ export const U = {
   uOvercast: { value: 0 },
   uOvercastSky: { value: new THREE.Color() },
   uNight: { value: 0 },
+  // Ambient occlusion of the sky light (src/render/pipeline.ts): last frame's, with the matrix it
+  // was rendered with, so each material finds its own pixel in it; off after a camera jump.
+  tAO: tex(),
+  uAOViewProj: { value: new THREE.Matrix4() },
+  uAOOn: { value: 0 },
 };

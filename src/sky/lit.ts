@@ -14,7 +14,16 @@ const LIGHTS = THREE.ShaderChunk.lights_fragment_begin.replace(
   `${SUN_LINE}\n\t\tdirectLight.color *= praSunVisibility( vPraWorld );`,
 );
 
-export function patchLit<T extends THREE.Material>(material: T): T {
+/** `extend` edits the shader further (after the sky patch); `key` names that variant for the program cache. */
+// Occlusion dims the sky's light only: sunlit ground in a narrow street stays sunlit.
+const AO = `#include <aomap_fragment>
+	{
+		float praOcc = praAO( vPraWorld );
+		reflectedLight.indirectDiffuse *= praOcc;
+		reflectedLight.indirectSpecular *= mix( 1.0, praOcc, 0.7 );
+	}`;
+
+export function patchLit<T extends THREE.Material>(material: T, extend?: (shader: THREE.WebGLProgramParametersWithUniforms) => void, key = ''): T {
   material.onBeforeCompile = (shader) => {
     for (const [k, v] of Object.entries(U)) shader.uniforms[k] = v;
     shader.vertexShader = shader.vertexShader
@@ -23,8 +32,10 @@ export function patchLit<T extends THREE.Material>(material: T): T {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <fog_pars_fragment>', `varying vec3 vPraWorld;\n${ATMOSPHERE}\n${SKY_LOOKUP}\n${LIT}`)
       .replace('#include <lights_fragment_begin>', LIGHTS)
+      .replace('#include <aomap_fragment>', AO)
       .replace('#include <fog_fragment>', 'gl_FragColor.rgb = praAerial(gl_FragColor.rgb, vPraWorld);');
+    extend?.(shader);
   };
-  material.customProgramCacheKey = () => 'praha-lit-1';
+  material.customProgramCacheKey = () => `praha-lit-2${key}`;
   return material;
 }

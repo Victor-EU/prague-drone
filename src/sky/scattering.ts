@@ -25,7 +25,7 @@ void main() {
   float dt = tMax / float(N);
   for (int i = 0; i < N; i++) {
     vec3 p = ro + rd * ((float(i) + 0.5) * dt);
-    vec3 sR; float sM; vec3 e;
+    vec3 sR, sM, e;
     aMedium(length(p) - A_RG, sR, sM, e);
     od += e * dt;
   }
@@ -58,10 +58,10 @@ void main() {
       t = tn;
       vec3 p = ro + rd * t;
       float rr = length(p);
-      vec3 sR; float sM; vec3 e;
+      vec3 sR, sM, e;
       aMedium(rr - A_RG, sR, sM, e);
       vec3 sT = exp(-dt * e);
-      vec3 scat = sR + vec3(sM);
+      vec3 scat = sR + sM;
       vec3 ee = max(e, vec3(1e-7));
       F += T * (scat - scat * sT) / ee;
       vec3 inS = scat * (1.0 / (4.0 * A_PI)) * aSunTransmittance(rr, dot(p / rr, sunDir));
@@ -113,11 +113,11 @@ void main() {
     t = tn;
     vec3 p = ro + rd * t;
     float rr = length(p);
-    vec3 sR; float sM; vec3 e;
+    vec3 sR, sM, e;
     aMedium(rr - A_RG, sR, sM, e);
     vec3 sT = exp(-dt * e);
     float muSp = dot(p / rr, sunDir);
-    vec3 S = (sR * pR + vec3(sM * pM)) * aSunTransmittance(rr, muSp) + (sR + vec3(sM)) * aMultiScat(rr, muSp);
+    vec3 S = (sR * pR + sM * pM) * aSunTransmittance(rr, muSp) + (sR + sM) * aMultiScat(rr, muSp);
     L += T * (S - S * sT) / max(e, vec3(1e-7));
     T *= sT;
   }
@@ -223,10 +223,11 @@ export class Scattering {
       odM += Math.exp(-h / 1.2) * dt;
       odO += Math.max(0, 1 - Math.abs(h - 25) / 15) * dt;
     }
+    // The aerosol's spectrum as in glsl.ts (A_MIE_SPECTRUM).
     return out.setRGB(
-      Math.exp(-(ray.x * odR + mie * odM + oz.x * odO)) * vis,
+      Math.exp(-(ray.x * odR + mie * 0.76 * odM + oz.x * odO)) * vis,
       Math.exp(-(ray.y * odR + mie * odM + oz.y * odO)) * vis,
-      Math.exp(-(ray.z * odR + mie * odM + oz.z * odO)) * vis,
+      Math.exp(-(ray.z * odR + mie * 1.34 * odM + oz.z * odO)) * vis,
     );
   }
 }

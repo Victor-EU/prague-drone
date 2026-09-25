@@ -109,6 +109,8 @@ export class Atmosphere {
   readonly scattering = new Scattering();
   readonly clouds: Clouds;
   light: Light = lightAt(12, 0);
+  /** Development: family values forced while tuning (URL ?light.ambient=0.6&light.haze=0.05). */
+  lightOverride: Partial<Light> = {};
   elevation = 0;
   azimuth = 0;
   /** Overcast weather, eased toward `overcastTarget`. */
@@ -189,12 +191,13 @@ export class Atmosphere {
 
     this.overcast += (this.overcastTarget - this.overcast) * (1 - Math.exp(-dt / 1.2));
     if (Math.abs(this.overcast - this.overcastTarget) < 1e-3) this.overcast = this.overcastTarget;
-    const L = (this.light = lightAt(clock, this.overcast));
+    const L = (this.light = { ...lightAt(clock, this.overcast), ...this.lightOverride });
 
     // Atmosphere and haze.
     this.scattering.setAerosol(this.renderer, L.aerosol);
     U.aSkySat.value = L.skySat;
     U.aSkyFlat.value = L.skyFlat;
+    U.aSkyHorizon.value = L.skyHorizon;
     U.uHaze.value.set(L.haze / 1000, L.hazeHeight, 17000, smooth(-4, 5, elevation));
     U.uNight.value = L.night;
     U.uOvercast.value = this.overcast;

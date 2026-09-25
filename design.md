@@ -198,6 +198,8 @@ The time-of-day slider blends between these anchors. Each anchor has a sun eleva
 | Late afternoon and golden hour | 16:00 to 21:00 | Petřín panoramas (7924 to 7958, 18:50), Letná bridges (9486, 9492, 18:51), Charles Bridge evening (8683 to 8715, 20:00) | Lower, warmer sun from the west. Stone glows. Sky still cyan-grey. |
 | Blue hour and night | 21:00 to 23:00 | 9530 to 9608 (21:33 to 22:39) | Deep blue sky, city lights warm, floodlit landmarks, water reflecting lights. |
 
+As built in M2: the late-afternoon key at 18:30 is tuned against the Petřín panoramas: clear air (a third of the M1 haze), the sky's light on shaded surfaces at 55%, contrast 1.12, so shadowed walls go dark and sunlit plaster reaches near white as in 7924. With real roofs the midday keys needed the same in milder form (sky light 72%, contrast 1.1, a fifth of a stop brighter), the morning keys milder still; the golden-hour and blue-hour keys are as in M1. Each family also has a horizon knob: three wavelengths make the low sky away from a low sun greenish (yellowed sunlight over the air's blue), where the photographs show pale blue, so that band takes a pale version of the hue 15° above it. Aerosol scatters with an Ångström exponent of 1.3.
+
 Weather variant, independent of time: **overcast pastel** (8952 to 9026, 8881 to 8918, 9203 to 9204). Flat light, no shadows, colours go pastel, sky is a bright grey with texture. Rolled with 20% probability at session start, or forced from the UI.
 
 ### 5.4 Sun position
@@ -286,6 +288,8 @@ From map reading, then verified against OpenStreetMap on 2026-09-25: rows more t
 | Tram network | OSM `railway=tram`, tram routes 9, 12, 17, 20, 22, 23 | Tram paths and overhead wire poles |
 | Streets | OSM highways with `surface=cobblestone` where tagged | Road textures, tram streets |
 | Bridges | OSM with `bridge=yes`, `man_made=bridge` | Span geometry and piers |
+| Districts | OSM cadastral areas (`boundary=cadastral`: Malá Strana, Staré Město, Josefov, Hradčany, Nové Město, Vyšehrad, Smíchov, and the 19th-century districts) | District rules of §7.2 and §8.1 |
+| Street lamps | OSM `highway=street_lamp` | Lamp posts, and the night lights of M4 |
 
 A build script (`tools/fetch-data.ts`) downloads and caches raw data in `cache/` (git-ignored). OSM comes from the extract by default: on 2026-09-25 the public Overpass servers timed out on most requests and then refused connections, while the extract is a single 73 MB download that the script filters in seconds; `--overpass` switches back. Buildings use OSM's `building:part` elements where mappers drew them (an outline with parts is drawn as its parts), which gives the churches and towers their real massing even as blocks. Then a second script (`tools/build-world.ts`) turns it into binary files under `public/world/` (8.5 MB gzipped for M0) and writes `cache/preview.png`, a top-down map with the route, for checking a build by eye. The app never calls a map service at runtime.
 
@@ -331,6 +335,8 @@ Modelled as glTF, low-poly but true in silhouette from every angle the drone can
 
 Districts built from OSM footprints with real roof forms, district material rules, and procedural detail. Districts: Malá Strana, Kampa, Old Town, Josefov, Hradčany (the Castle district on the ridge), Vyšehrad and Podskalí, New Town along the river (Rašín, Masaryk, Smetana embankments), the Smíchov bank opposite Petřín, Wenceslas Square.
 
+As built in M2: a building's district is the OSM cadastral area its footprint's centre falls in (Kampa is part of Malá Strana, Podskalí and Wenceslas Square of Nové Město). All of Nové Město and Smíchov take the Tier 2 rules, not only their river banks: the cadastral lines are the ones the data has, and both are in view from Petřín. The rules per district live in `tools/lib/districts.ts`.
+
 ### 7.3 Tier 3: the rest
 
 OSM extrusion with a per-district palette, hipped or flat roofs by footprint, no dormers, no chimneys beyond a statistical scatter. Vinohrady and Žižkov get the 19th-century block treatment (mansard roofs, 5 to 6 storeys, courtyards). Panel-housing estates beyond are grey slabs with a green base.
@@ -354,13 +360,26 @@ From the air the city is roofs. Rules, applied per building at world build time:
 5. **Colour distribution** in the core, sampled from the Petřín and Vyšehrad panoramas: terracotta family 78%, dark slate and grey 14%, green copper 5% (churches, palaces), other 3%. Terracotta itself is a spread of at least 6 tones so no two neighbours match. Vyšehrad and Podskalí lean brighter orange; Malá Strana has more weathered browns; Josefov has more slate.
 6. **Weathering.** Ridge lines lighter, valleys darker, moss and lichen tint on north slopes. One 2k weathering mask atlas reused with random UV offsets.
 
+As built in M2, at world build time (`tools/lib/roofs.ts`, `props.ts`, `plan.ts`, run on a pool of worker threads, about 20 s):
+
+- **Forms from the straight skeleton** of each footprint, holes included (CGAL through the `straight-skeleton` package, WebAssembly, a build-time dependency only). Hipped roofs are the skeleton; a gabled end is a triangular face stood upright; a party wall's triangular face stands upright as a firewall with 60 to 85% chance by district. Mansards bend the profile (70° for the first 1.2 m in, then the district pitch), domes and onions curve it, and above a height cap (10 m in the core, 8 to 9 m in the blocks) the roof turns flat, as the big Prague blocks do. Pyramids and skillions are built directly. Tagged `roof:shape`, `roof:height`, `roof:levels`, `roof:angle` and `roof:direction` are used; untagged parts of Simple 3D Buildings are flat, and so are industrial, retail and large post-war footprints. Of 51,000 buildings and parts, 37,800 get pitched roofs; 20 degenerate footprints fall back to flat.
+- **Party walls** are found geometrically: an edge that runs along a neighbour's edge for more than half its length (73,000 of 379,000 edges).
+- **Heights**: the eave from `height` or `building:levels` (storeys of 3.0 to 3.6 m by facade style), or the district's storey range when untagged; the roof rises above the eave. Footprints under 60 m² stay low.
+- **Dormers** (19,900) are placed along eaves that face a street or courtyard, not on party walls, alternating small gabled and large gabled or flat ones, at the district density (1.0 per 10 m in Malá Strana, 0.6 in the New Town, 0.15 in the 19th-century blocks); **chimneys** (30,500) stand on ridges and on the tops of party gables; flat roofs carry a few machine-room boxes (5,400).
+- **Colour** follows rule 5, with `roof:colour` and `roof:material` snapped to the palette where tagged. Copper belongs to churches and palaces: untagged ordinary roofs draw terracotta and slate only.
+- **Weathering** is drawn in the building shader instead of an atlas: tile courses and joints filtered by distance, world-space noise patches, lighter ridges, lichen on north slopes; valleys darken through the ambient occlusion of §11.
+
 ### 8.2 Facades
 
 Procedural: storey count from OSM or footprint area, window grid with district-specific rhythm (Malá Strana: small windows, deep reveals, 2 to 3 storeys; Old Town: 3 to 4 storeys, arcades on the square; New Town embankments: 5 to 6 storeys, tall windows, balconies, Art Nouveau cornices), plaster colour from the district palette (§8.9), ground-floor darkening, a cornice line, shutters occasionally. No text, no signs.
 
+As built in M2: the windows are drawn in the shader from wall coordinates (along the wall, height above ground, the eave) and five styles (`src/core/buildings.ts`): baroque, Old Town, block, modern, house. Each wall gets as many window columns as fit, centred; storeys divide the height below the cornice evenly; the ground floor has shopfronts or plain windows by style; a cornice and a string course; glass dark with a little variation per window, and glossy, so it takes the sky at a glance. Party walls are blank and a shade greyer, which shows where a building rises above its neighbour. Every pattern is box-filtered to its own pixel size, so it fades to its average instead of shimmering. Balconies, shutters and the Old Town Square arcades are not built yet; the square's houses come with the square in M3.
+
 ### 8.3 Streets and squares
 
 Cobble texture in the core, asphalt elsewhere, tram rails inlaid where tram lines run, lamp posts as instanced props on embankments and bridges. Old Town Square, Malostranské náměstí, Kampa and the embankments get their own paving patterns. Náplavka has the barrel-vaulted cellar doors along the embankment wall and moored boats.
+
+As built in M2: the ground shader draws small setts on cobbled streets, larger setts with a lighter granite grid on squares and pedestrian areas, grain on asphalt and gravel, each fading to its average with distance. Tram rails are steel strips on 242 km of OSM tram track, off the bridges until M4 builds the bridges; 5,750 lamp posts stand where OSM's lamp register puts them, on the ground or on a bridge deck. Both are drawn within about a kilometre of the camera. Náplavka's cellar doors and boats come with the river and its embankment walls (M4).
 
 ### 8.4 Terrain and vegetation
 
@@ -440,6 +459,8 @@ Sampled from the set with k-means on the reference frames, then rounded. Use as 
 | Sky, blue hour | `#376ba3` `#1f3247` |
 | Tram red | `#c8352a` with cream `#f2ede6` |
 | Rose red, geranium red | `#c8322a` `#b03040` |
+
+As built in M2: from the air Malá Strana reads whiter than its street-level ochres, so its light plasters weigh double; the Old Town's pale blue and pink are accents at one in eleven; the 19th-century districts have their own list of creams, sandstone yellows and light greys, and post-war buildings a list of greys. In the 19th-century districts and beyond, slate is a quarter of the roofs, not a third.
 
 ---
 
@@ -529,9 +550,10 @@ None. The app is silent. No audio assets, no speaker control.
 |---|---|---|
 | Language and build | TypeScript, Vite | Fast iteration, static output |
 | Renderer | Three.js, WebGL2, with the WebGPU renderer as a later option | Mature, well-understood, instancing and post pipeline available |
-| Post | Own full-screen passes: render, TAA, meter, filmic tonemap, LUT grade, vignette and grain. SSAO waits for M2; until then block walls darken toward the ground | §5.2 |
+| Post | Own full-screen passes: render, TAA, meter, filmic tonemap, LUT grade, vignette and grain. Ambient occlusion (M2) at half resolution from the depth buffer; the next frame's materials reproject into it and dim only the sky's light, so a sunlit street stays sunlit and a shaded courtyard goes dark | §5.2 |
 | World data | Prebuilt binary tiles under `public/world/`, gzip | No runtime API calls |
 | Landmarks | glTF with Draco, authored in Blender, in `assets/landmarks/` | Hand modelled per §7.1 |
+| Roofs | Straight skeletons at build time (CGAL through the `straight-skeleton` package, WebAssembly, a development dependency only); the tiles carry the finished roof faces and the props, and the tile workers make the meshes | §8.1; roofs from footprints at runtime would cost the loading budget |
 | Instancing | InstancedMesh for buildings (grouped by district and material), trees, props, people | Draw call budget under 600 |
 | Shadows | Cascaded shadow maps for buildings from three.js's `SunLight` (2 cascades of 2048 to 2.8 km), a heightfield shadow for the terrain computed on the GPU when the sun moves, and the cloud-shadow projection | Long morning shadows need reach. As built in M1: three r186 ships a two-cascade sun; 4096 cascades cost a millisecond more on an M2 for little visible gain. Hills shading the city (Petřín in the evening) come from the heightfield at any distance and softly; terrain in the cascades cost 3 ms a frame |
 | Reflections | Planar reflection for the river at half resolution | The evening frames depend on it |
@@ -546,10 +568,13 @@ design.md            this document
 Photos/              the reference set (422) and _excluded/
 mockup/              index.html (3D sketch), plan.html (set + route), set/ thumbnails
 data/                hero.json (starred frames), viewpoints.json, route.json, palette.json, landmarks.json
-tools/               fetch-data.ts, build-world.ts, check-route.ts, find-landmarks.ts, make-lut.ts, lut-fit.ts, compare.ts
+tools/               fetch-data.ts, build-world.ts, check-route.ts, find-landmarks.ts, make-lut.ts, lut-fit.ts, compare.ts;
+                     lib/ roofs.ts, skeleton.ts, props.ts, plan.ts (+ plan-worker.ts), districts.ts
 cache/               raw downloads from fetch-data.ts (generated, git-ignored)
 assets/              landmarks/*.glb, lut/classic-neg.cube, textures/
-src/                 app: core/, world/ (terrain, tiles), sky/ (atmosphere, families, clouds, shadows), render/ (post), drone/, ui/, dev/ (side-by-side, development only)
+src/                 app: core/ (incl. buildings.ts, shared with the build), world/ (terrain, tiles, buildings and their
+                     material, streets), sky/ (atmosphere, families, clouds, shadows), render/ (post), drone/, ui/,
+                     dev/ (side-by-side, development only)
 public/world/        built tiles (generated, git-ignored)
 compare/             side-by-side sheets from tools/compare.ts (generated, git-ignored)
 ```
@@ -567,6 +592,8 @@ For each hero frame in `data/hero.json`:
 3. The user judges each pair on three questions: same silhouette, same colours, same light mood. Each is pass or fail. A build is accepted when every hero frame passes all three.
 
 As built in M1: in development, `/?view=<id>` opens the app at a viewpoint (camera, lens, clock and a fixed cloud seed, at the photograph's 3:2 aspect, without the interface), and `praha.sheet()` in the console writes the sheet through the dev server. `npm run compare [ids]` does the same for every viewpoint in headless Chrome on the GPU, about 10 s a frame. Clock times are EXIF plus one hour (§3.1). Neither path reaches the production build.
+
+Added in M2, for lining up and tuning: a viewpoint can be nudged from the URL (`/?view=8385&heading=10&agl=14`, or `npm run compare -- 8385@heading=10,agl=14`, written to its own file), a light family's values forced (`&light.haze=0.05&light.wb=0.98:1:1.05`), and the grade or the occlusion turned off (`&grade=0`, `&ao=0`; keys G and O).
 
 ### 12.2 Motion tests
 
@@ -629,6 +656,19 @@ Measured in Chrome on an Apple M2 at 2360 × 1404: 3.5 to 9.9 ms a frame across 
 Measured on an Apple M2 at 2400 × 1600 with the synced benchmark (CPU and GPU in series, which the frame loop overlaps): 11.7 to 19.3 ms a frame across the 18 stops, 16.2 on average. Of that the shadow cascades take about 2.5 ms, the clouds 1.4, the sky patch on every material 1.7. Frame rate has to be judged in a visible Chrome window: this machine's embedded browser throttles, and headless Chrome runs M0 itself at 30 to 40 fps. The target machine of §11 (M1 Pro) has half again the M2's GPU; the lite preset (M7) and the render scale are the levers if needed.
 
 Known gaps after M1: cumulus are smoother than the photographs' cauliflower; the blue-hour horizon band is pinker than 9547; the river is a placeholder until M4; with no city lights until M4, the city is black after about 22:00.
+
+**M2, built 2026-09-25.** Roofs and materials, in `tools/lib/` (build) and `src/world/` (app):
+
+- **Roofs** from the straight skeleton of every footprint (§8.1): 37,800 pitched roofs, hipped, gabled, mansard, domed, with firewall gables on party walls and flat tops on the big blocks; 19,900 dormers, 30,500 chimneys, 5,400 boxes on flat roofs. Districts come from the OSM cadastral areas (§7.2), colours from the palette and the tags. The world build takes about 40 s, the roofs half of it on seven worker threads; the tiles grew from 1.8 to 6.4 MB, the world to 14.1 MB.
+- **Facades** drawn in the shader (§8.2): window grids by style, cornices, string courses, shopfronts, blank firewalls where a house rises above its neighbour. **Roofs** carry tile courses, weathering and lichen, filtered by distance.
+- **Streets** (§8.3): setts and cobbles, square paving, asphalt grain; tram rails; lamp posts from OSM.
+- **Ambient occlusion** (§11), dimming only the sky's light, reprojected from the previous frame.
+- **Light**: the 18:30 key retuned against the Petřín panoramas (clear air, deep shadows, contrast 1.12), the horizon band made pale blue away from the sun, spectral aerosol (§5.3). Woods, parks and gardens are darker on the ground, as their canopy reads from above, until M5 plants trees.
+- **Side-by-side**: viewpoints for 7924, 7940 and 7944 (the Petřín tower's gallery, 52 m up) and 8385 (the north-east bastion of Vyšehrad). The M1 viewpoint 8372 is raised from 12 to 18 m, since the houses below the rampart now have their roofs. On 7924, luminance in the band of the city (5th, 50th, 95th percentile) is 20, 73, 228 in the photograph and 25, 91, 216 in the render; the sky just above the horizon #b4c0cb against #a5b4c0.
+
+Measured on an Apple M2 at 2360 × 1404 with the synced benchmark: 7.7 to 14.6 ms a frame across the 18 stops, 10.5 on average. Buildings take about 3 ms of it, the roof detail 0.6, occlusion 0.9, streets 0.2. Benchmarks taken while a headless comparison run shared the GPU came out near 19 ms: measure with nothing else on the GPU.
+
+Known gaps after M2: trees wait for M5, so the forest in the foreground of the Petřín frames and the trees framing 8385 are dark ground, and 9369 has a block where the photograph has a tree; landmarks are boxes until M3; the 8385 viewpoint is approximate, the same kind of view rather than the same frame; balconies, shutters and the Old Town Square arcades are not built; tram rails stop at the bridges and Náplavka's cellar doors wait for the river (M4).
 
 ---
 
