@@ -1,0 +1,17 @@
+# Full-resolution photographs stay local (6 GB). The 800 px reference copies live in mockup/set/.
+Photos/*.JPG
+Photos/*.jpg
+Photos/_excluded/
+
+# Build output and dependencies
+node_modules/
+dist/
+public/world/
+compare/
+*.log
+
+# OS and editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
