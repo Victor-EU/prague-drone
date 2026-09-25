@@ -664,6 +664,10 @@ Proofread on 2026-09-25, fixes accepted by the user:
 - **Post chain** order: TAA before tonemap, grain last.
 - **Route**: stop 14 gazes at the Castle, stop 9 flies at 35 m, Old Town gaze uses the §6.2 Týn coordinate, leg times rebalanced.
 
+Decided on 2026-09-25 by the user, after M1:
+
+- **Evening photographs for the morning.** The Petřín panoramas were shot at 18:50, not in the morning (§3.1), and the set has no dawn frames. The route keeps Petřín in the morning (stops 5 and 6), and the evening panoramas stand as the reference for the dawn and warm-morning family: a warm low sun and haze, with the sun on the other side. The side-by-side still renders each hero frame at its own time (§12.1).
+
 ---
 
 ## 15. Open questions
