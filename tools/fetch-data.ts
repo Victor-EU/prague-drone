@@ -128,6 +128,7 @@ const LAYERS: { name: string; body: string; split?: number }[] = [
   },
   { name: 'districts', body: `relation["boundary"="cadastral"];` },
   { name: 'lamps', body: `node["highway"="street_lamp"];` },
+  { name: 'walls', body: `way["barrier"="city_wall"]; way["historic"="citywalls"];` },
 ];
 
 function cells(n: number): [number, number, number, number][] {
@@ -217,6 +218,8 @@ const FILTERS: Record<string, { way?: (t: Tags) => boolean; relation?: (t: Tags)
   // Cadastral areas (Malá Strana, Staré Město, …) for the district rules of design.md §7.2, §8.1.
   districts: { relation: (t) => t.boundary === 'cadastral' },
   lamps: { node: (t) => t.highway === 'street_lamp' },
+  // Fortress walls: the Vyšehrad ramparts of design.md §7.1.
+  walls: { way: (t) => t.barrier === 'city_wall' || t.historic === 'citywalls' },
 };
 
 async function downloadExtract() {
@@ -381,7 +384,8 @@ if (only.length === 0 || only.includes('osm')) {
   else {
     await downloadExtract();
     const stamp = join(CACHE, 'osm', '.from-extract');
-    if (FORCE || !existsSync(stamp) || statSync(stamp).mtimeMs < statSync(EXTRACT).mtimeMs) {
+    const missing = Object.keys(FILTERS).some((k) => !existsSync(join(CACHE, 'osm', `${k}.json`)));
+    if (FORCE || missing || !existsSync(stamp) || statSync(stamp).mtimeMs < statSync(EXTRACT).mtimeMs) {
       osmFromExtract();
       writeFileSync(stamp, '');
     } else console.log('osm: cached (from extract)');

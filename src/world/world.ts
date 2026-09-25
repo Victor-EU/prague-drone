@@ -1,5 +1,6 @@
 // Loads the prebuilt world (public/world/, made by tools/build-world.ts) and assembles the scene
-// parts: terrain, horizon, water, and the streamed tiles of buildings, bridge decks and landmark boxes.
+// parts: terrain, horizon, water, the streamed tiles of buildings and bridge decks, the streets'
+// furniture and the hand-built landmarks.
 
 import * as THREE from 'three';
 import { fetchPack } from '../core/pack.ts';
@@ -9,6 +10,7 @@ import { Buildings, type TileInfo } from './buildings.ts';
 import type { Ground } from '../drone/drone.ts';
 import { patchLit } from '../sky/lit.ts';
 import { Streets } from './streets.ts';
+import { Landmarks } from './landmarks.ts';
 import type { Pack } from '../core/pack.ts';
 
 export interface Manifest {
@@ -26,11 +28,12 @@ export class World implements Ground {
   readonly terrain: Terrain;
   readonly buildings: Buildings;
   readonly streets: Streets;
+  readonly landmarks: Landmarks;
   readonly bounds: Manifest['world'];
   readonly height: HeightGrid;
   private surf: HeightGrid;
 
-  private constructor(base: string, manifest: Manifest, height: HeightGrid, surf: HeightGrid, landuse: THREE.Texture, horizon: HeightGrid, water: THREE.BufferGeometry, streets: Pack, renderer: THREE.WebGLRenderer) {
+  private constructor(base: string, manifest: Manifest, height: HeightGrid, surf: HeightGrid, landuse: THREE.Texture, horizon: HeightGrid, water: THREE.BufferGeometry, streets: Pack, landmarks: Pack, renderer: THREE.WebGLRenderer) {
     this.manifest = manifest;
     this.bounds = manifest.world;
     this.height = height;
@@ -53,19 +56,22 @@ export class World implements Ground {
     this.group.add(this.buildings.group);
     this.streets = new Streets(streets);
     this.group.add(this.streets.group);
+    this.landmarks = new Landmarks(landmarks, this.buildings.material);
+    this.group.add(this.landmarks.group);
     // Every lit material takes the sky's haze and the terrain and cloud shadows.
     for (const m of [horizonRing.material as THREE.Material, waterMat]) patchLit(m);
   }
 
   static async load(base: string, renderer: THREE.WebGLRenderer): Promise<World> {
     const manifest: Manifest = await (await fetch(`${base}/manifest.json`)).json();
-    const [terrain, surface, landuse, horizon, water, streets] = await Promise.all([
+    const [terrain, surface, landuse, horizon, water, streets, landmarks] = await Promise.all([
       fetchPack(`${base}/terrain.bin`),
       fetchPack(`${base}/surface.bin`),
       fetchPack(`${base}/landuse.bin`),
       fetchPack(`${base}/horizon.bin`),
       fetchPack(`${base}/water.bin`),
       fetchPack(`${base}/streets.bin`),
+      fetchPack(`${base}/landmarks.bin`),
     ]);
     const lu = landuse.meta as { nx: number; nz: number };
     const waterGeom = new THREE.BufferGeometry();
@@ -77,7 +83,7 @@ export class World implements Ground {
       base, manifest,
       HeightGrid.fromPack(terrain), HeightGrid.fromPack(surface),
       landuseTexture(landuse.arrays.ground as Uint8Array, lu.nx, lu.nz),
-      HeightGrid.fromPack(horizon), waterGeom, streets, renderer,
+      HeightGrid.fromPack(horizon), waterGeom, streets, landmarks, renderer,
     );
   }
 

@@ -107,9 +107,9 @@ Hero frames are the frames the renders are tested against (see §12). Confirmed 
 | 8753 | Petřín / Strahov looking north to the Castle | Castle massing and ridge |
 | 9204 | Kampa, the Čertovka channel, soft light | Overcast grade in daylight, the mill channel |
 | 8372, 8385 | Vyšehrad ramparts looking north | Red roofs, cumulus, cloud shadows, Castle on the horizon |
-| 8683, 8704 | Novotného lávka / Smetana embankment looking west | Charles Bridge, towers, evening grade |
+| 8683, 8704 | Smetana embankment looking west (8683); Mánes Bridge looking south (8704) | Charles Bridge, towers, evening grade |
 | 8849 | On Charles Bridge looking upstream | Pedal boats, river colour, Střelecký island |
-| 8607, 8608 | Old Town Square, north side | Týn, the square |
+| 8607, 8608 | Old Town Square, south-west corner, below the astronomical clock | Týn, the square |
 | 8903 | Charles Bridge west end, overcast | Lesser Town towers |
 | 8942 | Malostranské náměstí | St Nicholas, tram |
 | 8158 | Rašín embankment | Dancing House, tram |
@@ -290,6 +290,7 @@ From map reading, then verified against OpenStreetMap on 2026-09-25: rows more t
 | Bridges | OSM with `bridge=yes`, `man_made=bridge` | Span geometry and piers |
 | Districts | OSM cadastral areas (`boundary=cadastral`: Malá Strana, Staré Město, Josefov, Hradčany, Nové Město, Vyšehrad, Smíchov, and the 19th-century districts) | District rules of §7.2 and §8.1 |
 | Street lamps | OSM `highway=street_lamp` | Lamp posts, and the night lights of M4 |
+| City walls | OSM `barrier=city_wall`, `historic=citywalls` | Vyšehrad's ramparts (§7.1) |
 
 A build script (`tools/fetch-data.ts`) downloads and caches raw data in `cache/` (git-ignored). OSM comes from the extract by default: on 2026-09-25 the public Overpass servers timed out on most requests and then refused connections, while the extract is a single 73 MB download that the script filters in seconds; `--overpass` switches back. Buildings use OSM's `building:part` elements where mappers drew them (an outline with parts is drawn as its parts), which gives the churches and towers their real massing even as blocks. Then a second script (`tools/build-world.ts`) turns it into binary files under `public/world/` (8.5 MB gzipped for M0) and writes `cache/preview.png`, a top-down map with the route, for checking a build by eye. The app never calls a map service at runtime.
 
@@ -330,6 +331,12 @@ Modelled as glTF, low-poly but true in silhouette from every angle the drone can
 | Powder Tower | none in set | Massing only; it anchors the east end of Old Town from the air. |
 | Bridges: Legion, Mánes, Čechův, Jiráskův, Palacký, Štefánik, railway bridge | 8418 to 8420, 8440 to 8441, 8177 to 8185, 8270 to 8273, 9252 to 9298, 9470 to 9500 | Each with its own profile: stone arches (Legion, Palacký), concrete arches (Jiráskův, Mánes), steel arch (Čechův, with the Art Nouveau lamps), riveted iron truss (railway bridge, with pedestrian walkways). |
 | The weirs | 8126 to 8143, 8821 to 8826, 9014 | Šítkov, Staroměstský and Helmovský weirs: diagonal sills with white foam lines, the pinched ship lock walls. |
+
+As built in M3, and a change from the first paragraph: the landmarks are modelled in code, not in Blender, and ship as one mesh pack, not as glTF with Draco. There is no Blender on the build machine; and a landmark written as code stands on its OSM footprint and the terrain, rebuilds with the world, and can be read in review. `tools/landmarks/kit.ts` is a small modelling kit (prisms, lofts, solids of revolution, spires, beams, extruded slabs, window and opening plates, and the straight-skeleton roofs of §8.1), with one module per landmark. The world build packs the finished meshes into `public/world/landmarks.bin` in the vertex layout of the building tiles (0.8 MB gzipped for all of them), and the building shader draws them with four surfaces of their own instead of texture atlases: stone (ashlar, brick, rubble, render, setts, each blackened in patches as Prague sandstone is), metal (slate, copper with standing seams and streaked patina, lead, gold), glazed windows with tracery or a rose, and dark openings. Small parts (statues, finials, lamps, lattice bracing, flying buttresses) go into a second mesh that the app hides beyond 1.4 km. Each model replaces the OSM buildings, parts and bridge decks it stands for. Proportions follow the photographs where they and OSM disagree: Týn's galleries are at 44 m, as 8607 shows, not OSM's 55 m.
+
+Built in M3: Charles Bridge (sixteen arches on fifteen piers, placed where OSM's outline of the bridge widens round the cutwaters; pointed cutwaters upstream with wooden ice guards, square buttresses downstream, pilasters carrying the thirty statue groups, lamps, the cobbled deck rising four metres to the middle of the river), the Old Town Bridge Tower, the Lesser Town towers with the Judith tower and the gate, Týn, St Nicholas with the city belfry, the Castle (St Vitus in full massing, and the palace wings with even rows of windows, grey roofs over the west wings and red over the Old Royal Palace), the Petřín tower, and Vyšehrad (the ramparts, the Leopold, Brick and Tábor gates, the rotunda of St Martin, the basilica). From 900 triangles (the Old Town Bridge Tower) to 25,000 (Charles Bridge), 47,000 in all: well under the budget of the first paragraph, because shape carries them and the shader the surface. The landmarks still to come in M4 stand as their OSM 3D parts with the roof shapes mapped there (the water tower's spire, St Francis's dome, the Klementinum's onion) instead of boxes.
+
+Vyšehrad's ramparts are retaining walls 10 to 15 m high, which the 5 m terrain grid smears into slopes. Each wall on OSM's line (`barrier=city_wall`) is built as a solid rampart: a battered brick face, a parapet, and the grassed walk behind it, 14.5 m deep. The build lowers the terrain at the foot of the face and for 7 m behind it, under the walk, so no slope of the grid lies in front of the brick.
 
 ### 7.2 Tier 2: the photographed quarters
 
@@ -552,7 +559,7 @@ None. The app is silent. No audio assets, no speaker control.
 | Renderer | Three.js, WebGL2, with the WebGPU renderer as a later option | Mature, well-understood, instancing and post pipeline available |
 | Post | Own full-screen passes: render, TAA, meter, filmic tonemap, LUT grade, vignette and grain. Ambient occlusion (M2) at half resolution from the depth buffer; the next frame's materials reproject into it and dim only the sky's light, so a sunlit street stays sunlit and a shaded courtyard goes dark | §5.2 |
 | World data | Prebuilt binary tiles under `public/world/`, gzip | No runtime API calls |
-| Landmarks | glTF with Draco, authored in Blender, in `assets/landmarks/` | Hand modelled per §7.1 |
+| Landmarks | Modelled in code on their OSM footprints (`tools/landmarks/`), packed as finished meshes into `landmarks.bin`, drawn with the building material | §7.1, which says why not Blender and glTF |
 | Roofs | Straight skeletons at build time (CGAL through the `straight-skeleton` package, WebAssembly, a development dependency only); the tiles carry the finished roof faces and the props, and the tile workers make the meshes | §8.1; roofs from footprints at runtime would cost the loading budget |
 | Instancing | InstancedMesh for buildings (grouped by district and material), trees, props, people | Draw call budget under 600 |
 | Shadows | Cascaded shadow maps for buildings from three.js's `SunLight` (2 cascades of 2048 to 2.8 km), a heightfield shadow for the terrain computed on the GPU when the sun moves, and the cloud-shadow projection | Long morning shadows need reach. As built in M1: three r186 ships a two-cascade sun; 4096 cascades cost a millisecond more on an M2 for little visible gain. Hills shading the city (Petřín in the evening) come from the heightfield at any distance and softly; terrain in the cascades cost 3 ms a frame |
@@ -569,11 +576,12 @@ Photos/              the reference set (422) and _excluded/
 mockup/              index.html (3D sketch), plan.html (set + route), set/ thumbnails
 data/                hero.json (starred frames), viewpoints.json, route.json, palette.json, landmarks.json
 tools/               fetch-data.ts, build-world.ts, check-route.ts, find-landmarks.ts, make-lut.ts, lut-fit.ts, compare.ts;
-                     lib/ roofs.ts, skeleton.ts, props.ts, plan.ts (+ plan-worker.ts), districts.ts
+                     lib/ roofs.ts, skeleton.ts, props.ts, plan.ts (+ plan-worker.ts), districts.ts;
+                     landmarks/ kit.ts, index.ts, and one module per landmark (§7.1)
 cache/               raw downloads from fetch-data.ts (generated, git-ignored)
-assets/              landmarks/*.glb, lut/classic-neg.cube, textures/
+assets/              lut/classic-neg.cube
 src/                 app: core/ (incl. buildings.ts, shared with the build), world/ (terrain, tiles, buildings and their
-                     material, streets), sky/ (atmosphere, families, clouds, shadows), render/ (post), drone/, ui/,
+                     material, landmarks, streets), sky/ (atmosphere, families, clouds, shadows), render/ (post), drone/, ui/,
                      dev/ (side-by-side, development only)
 public/world/        built tiles (generated, git-ignored)
 compare/             side-by-side sheets from tools/compare.ts (generated, git-ignored)
@@ -594,6 +602,8 @@ For each hero frame in `data/hero.json`:
 As built in M1: in development, `/?view=<id>` opens the app at a viewpoint (camera, lens, clock and a fixed cloud seed, at the photograph's 3:2 aspect, without the interface), and `praha.sheet()` in the console writes the sheet through the dev server. `npm run compare [ids]` does the same for every viewpoint in headless Chrome on the GPU, about 10 s a frame. Clock times are EXIF plus one hour (§3.1). Neither path reaches the production build.
 
 Added in M2, for lining up and tuning: a viewpoint can be nudged from the URL (`/?view=8385&heading=10&agl=14`, or `npm run compare -- 8385@heading=10,agl=14`, written to its own file), a light family's values forced (`&light.haze=0.05&light.wb=0.98:1:1.05`), and the grade or the occlusion turned off (`&grade=0`, `&ao=0`; keys G and O).
+
+Added in M3: `/?view=look&x=…&north=…&agl=…&heading=…&tilt=…&focal35=…` is a free camera for inspecting the world, and `npm run compare -- look@x=…,north=…` writes the render alone; the weather can be nudged like the camera (`&coverage=0.9&overcast=0`); portrait frames take the 24 mm side of the frame as their width. The viewpoints of 8704, 8607, 8942 and 8753 were solved from the photographs: the bearings (and, for 8607, the heights) of spires and towers whose positions OSM gives. 8704 turned out to be taken from Mánes Bridge, 8607 from below the astronomical clock, 8942 from the mouth of Mostecká on the lower square, 8753 from the gardens below Strahov.
 
 ### 12.2 Motion tests
 
@@ -669,6 +679,20 @@ Known gaps after M1: cumulus are smoother than the photographs' cauliflower; the
 Measured on an Apple M2 at 2360 × 1404 with the synced benchmark: 7.7 to 14.6 ms a frame across the 18 stops, 10.5 on average. Buildings take about 3 ms of it, the roof detail 0.6, occlusion 0.9, streets 0.2. Benchmarks taken while a headless comparison run shared the GPU came out near 19 ms: measure with nothing else on the GPU.
 
 Known gaps after M2: trees wait for M5, so the forest in the foreground of the Petřín frames and the trees framing 8385 are dark ground, and 9369 has a block where the photograph has a tree; landmarks are boxes until M3; the 8385 viewpoint is approximate, the same kind of view rather than the same frame; balconies, shutters and the Old Town Square arcades are not built; tram rails stop at the bridges and Náplavka's cellar doors wait for the river (M4).
+
+**M3, built 2026-09-25.** The first landmarks, modelled in code (§7.1), in `tools/landmarks/`:
+
+- **Charles Bridge and its towers**: the bridge on the piers of OSM's outline, its statues and lamps; the Old Town Bridge Tower and the Lesser Town towers of blackened sandstone with their corner turrets, steep slate roofs, gilded finials and gates. From Mánes Bridge (8704) the tower, the arches and the bridge's line fall on the photograph.
+- **Týn**: the two towers with their spire clusters, the gable between them, the nave's steep roof. From below the astronomical clock (8607) the spires and galleries line up with the photograph's.
+- **St Nicholas**: the dome, drum and lantern, the nave, the belfry in stages. 8942 matches in the belfry and the dome behind it.
+- **The Castle**: St Vitus with its west spires, the south tower's copper helmet, the crossing spire, the buttressed choir; the palace wings. From below Strahov (8753) the silhouette on the ridge is right.
+- **The Petřín tower**, the camera stand of 7924 to 7944, and seen as a spike on the hill in 8372.
+- **Vyšehrad**: the ramparts with their walks, the gates, the rotunda and the basilica, on terrain lowered along the walls. 8372's camera is raised to 30 m so it looks down on the roofs below the rampart, as the photograph does.
+- The other landmarks stand as their OSM parts with mapped roof shapes; walls get the stone, metal and window surfaces of the building shader.
+
+The world grew by 0.8 MB to 14.9 MB; the full build takes about 35 s (`--landmarks` rebuilds `landmarks.bin` alone in 5 s, for modelling). Measured on the Apple M2 at 2048 × 1536 with the synced benchmark: 7.6 to 15.7 ms a frame across the 18 stops, 11.5 on average; the landmarks cost 0.1 ms of it.
+
+Known gaps after M3: trees are still missing (M5), and they frame 7924, 7940, 8372, 8385 and 8753 in the photographs; the river is a placeholder until M4, which matters in 8704; the houses of Old Town Square are the generic ones of M2, without the Týn school's Venetian gables, and stand a little taller than in 8607; the statues on the bridge are silhouettes; the Castle beyond St Vitus and the palace wings (the Old Royal Palace's roofs, St George's, Golden Lane) is OSM massing; the Brick Gate is a block; 8942's overcast is a little greyer and darker than the photograph's bright cloud.
 
 ---
 

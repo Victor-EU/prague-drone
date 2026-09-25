@@ -1,12 +1,14 @@
 // The material of every building: three's standard material with the sky patch (src/sky/lit.ts),
 // plus the surfaces of design.md §8.1 and §8.2 drawn in the shader: window grids by facade style,
 // cornices and ground floors on walls; tile courses, weathering and north-slope lichen on roofs;
-// dark tops on chimneys, a window in each dormer. Every pattern is box-filtered by its own screen
-// footprint, so at a distance it fades to its average instead of shimmering.
+// dark tops on chimneys, a window in each dormer; and for the landmarks (tools/landmarks/) stone
+// courses blackened in patches, slate, copper and gold, traceried windows and dark openings. Every
+// pattern is box-filtered by its own screen footprint, so at a distance it fades to its average
+// instead of shimmering.
 
 import * as THREE from 'three';
 import { patchLit } from '../sky/lit.ts';
-import { STYLES, Surface } from '../core/buildings.ts';
+import { STYLES, Surface, Stone, Metal, Glass } from '../core/buildings.ts';
 
 const GLSL_PARS = /* glsl */ `
 varying vec4 vFacade;
@@ -32,7 +34,7 @@ float praStep(float e, float x, float w) { return clamp((x - e) / max(w, 1e-4) +
 `;
 
 const GLSL_MAIN = /* glsl */ `
-float praGlass = 0.0;
+float praGlass = 0.0, praMetal = 0.0, praRough = -1.0;
 {
   int kind = int(vInfo.x + 0.5);
   int style = int(vInfo.y + 0.5);
@@ -119,6 +121,81 @@ float praGlass = 0.0;
     float win = (praStep(0.2, x, wx) - praStep(0.8, x, wx)) * (praStep(0.18, y, wy) - praStep(0.86, y, wy));
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.04, 0.045, 0.05), win);
     praGlass = win;
+  } else if (kind == ${Surface.Stone}) {
+    // Courses of blocks (ashlar, brick, rubble) or setts, each block its own tone, the joints
+    // darker; then the blackening Prague sandstone takes on in patches and streaks, and grime at
+    // the foot. Every pattern fades to its average below a pixel.
+    float u = vFacade.x, v = vFacade.y, wea = vFacade.z;
+    vec3 c = diffuseColor.rgb;
+    if (style != ${Stone.Render}) {
+      vec2 cell = style == ${Stone.Brick} ? vec2(0.29, 0.085) : style == ${Stone.Rubble} ? vec2(0.62, 0.34) : style == ${Stone.Setts} ? vec2(0.16, 0.16) : vec2(0.95, 0.47);
+      float row = v / cell.y;
+      float rw = max(fwidth(row), 1e-4);
+      float col = u / cell.x + (style == ${Stone.Setts} ? 0.37 * floor(row) : 0.5 * floor(row));
+      if (style == ${Stone.Rubble}) col += 0.4 * praHash(vec2(floor(row), seed));
+      float cw = max(fwidth(col), 1e-4);
+      float jr = style == ${Stone.Brick} ? 0.16 : style == ${Stone.Setts} ? 0.14 : 0.06;
+      float jc = style == ${Stone.Brick} ? 0.05 : style == ${Stone.Setts} ? 0.14 : 0.035;
+      float joint = max(praPulse(row, 0.0, jr, rw), praPulse(col, 0.0, jc, cw));
+      float fade = 1.0 - smoothstep(0.25, 0.6, max(rw, cw));
+      float tone = 0.88 + 0.24 * praHash(vec2(floor(col) + seed * 1.7, floor(row)));
+      c *= mix(1.0, tone, fade);
+      c *= 1.0 - (style == ${Stone.Brick} ? 0.1 : 0.3) * joint;
+    }
+    float n1 = praNoise(vec2(u * 0.3, v * 0.07) + seed * 0.13), n2 = praNoise(vec2(u, v) * 0.9 + seed);
+    float black = wea * smoothstep(0.3, 0.8, 0.65 * n1 + 0.45 * n2);
+    c = mix(c, c * vec3(0.4, 0.39, 0.38), black);
+    c *= mix(0.82, 1.0, smoothstep(0.0, 2.5, v));
+    diffuseColor.rgb = c;
+  } else if (kind == ${Surface.Metal}) {
+    float u = vFacade.x, s = vFacade.y, smax = vFacade.z;
+    vec3 c = diffuseColor.rgb;
+    if (style == ${Metal.Gold}) {
+      c = vec3(0.78, 0.52, 0.2);
+      praMetal = 1.0; praRough = 0.32;
+    } else if (style == ${Metal.Copper}) {
+      // Standing seams down the slope, patina in streaks, darker where the run-off gathers.
+      float k = u / 0.55;
+      float seam = praPulse(k, 0.0, 0.1, max(fwidth(k), 1e-4));
+      float n = praNoise(vec2(u * 0.7, s * 0.12) + seed), n3 = praNoise(wp.xz * 0.4 + wp.y * 0.3);
+      c *= (1.0 - 0.16 * seam) * (0.84 + 0.26 * n + 0.1 * (n3 - 0.5));
+      c *= mix(0.85, 1.0, smoothstep(0.0, 1.5, s));
+      praRough = 0.55;
+    } else {
+      // Slate and lead: small courses.
+      float course = s / (style == ${Metal.Slate} ? 0.24 : 0.7);
+      float cw = max(fwidth(course), 1e-4);
+      float line = praPulse(course, 0.0, 0.16, cw);
+      float colc = u / 0.32 + 0.5 * floor(course);
+      float fade = 1.0 - smoothstep(0.3, 0.7, max(fwidth(colc), cw));
+      float tone = 0.9 + 0.18 * praHash(vec2(floor(colc), floor(course)) + seed);
+      float n = praNoise(wp.xz * 0.3 + wp.y * 0.2 + seed);
+      c *= (1.0 - 0.22 * line) * mix(1.0, tone, fade) * (0.9 + 0.2 * n);
+      praRough = 0.6;
+    }
+    diffuseColor.rgb = c;
+  } else if (kind == ${Surface.Glass}) {
+    // A window: dark glass in stone tracery (mullions, and a transom where the head begins) or a
+    // rose; coordinates across and up in metres, with the window's width and height.
+    float x = vFacade.x, y = vFacade.y, W = max(vFacade.z, 0.1), H = max(vFacade.w, 0.1);
+    vec3 g = vec3(0.03, 0.036, 0.044) * (0.75 + 0.6 * praHash(vec2(seed, floor(y / 2.0))));
+    float stone = 0.0;
+    if (style == ${Glass.Tracery}) {
+      float n = max(2.0, floor(W / 0.85 + 0.5));
+      float k = x / W * n;
+      stone = praPulse(k + 0.06, 0.0, 0.12, max(fwidth(k), 1e-4)) * step(0.02, x / W) * step(x / W, 0.98);
+      float bars = y / 1.1;
+      stone = max(stone, 0.5 * praPulse(bars, 0.0, 0.05, max(fwidth(bars), 1e-4)));
+    } else if (style == ${Glass.Rose}) {
+      vec2 d = vec2(x - W * 0.5, y - H * 0.5) / (0.5 * W);
+      float r = length(d), a = atan(d.y, d.x) * 12.0 / 6.2832;
+      stone = max(praPulse(a, 0.0, 0.12, max(fwidth(a), 1e-4)) * step(0.25, r), 1.0 - smoothstep(0.18, 0.25, r) + praPulse(r * 3.0, 0.0, 0.1, max(fwidth(r * 3.0), 1e-4)));
+    }
+    stone = clamp(stone, 0.0, 1.0);
+    diffuseColor.rgb = mix(g, diffuseColor.rgb, stone);
+    praGlass = 1.0 - stone;
+  } else if (kind == ${Surface.Opening}) {
+    praRough = 1.0;
   }
 }
 `;
@@ -135,6 +212,7 @@ export function buildingMaterial(): THREE.MeshStandardMaterial {
       .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nvFacade = aFacade;\nvInfo = aInfo;\nvPraN = objectNormal;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${GLSL_PARS}`)
-      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\n${GLSL_MAIN}\nroughnessFactor = mix(roughnessFactor, 0.14, praGlass);`);
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\n${GLSL_MAIN}\nif (praRough >= 0.0) roughnessFactor = praRough;\nroughnessFactor = mix(roughnessFactor, 0.14, praGlass);`)
+      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = max(metalnessFactor, praMetal);');
   }, '-buildings');
 }

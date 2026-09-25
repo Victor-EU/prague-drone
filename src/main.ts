@@ -25,18 +25,21 @@ interface Viewpoint {
   id: string; x: number; north: number; agl: number; heading: number; tilt: number; focal35: number; aspect: number; clock: string;
   weather: { seed: number; coverage: number; overcast: boolean; cirrus: number; cloudAt?: [number, number] };
 }
+// `?view=look` is a free camera for inspecting the world (set it with the nudges below).
+const LOOK: Viewpoint = { id: 'look', x: 0, north: 0, agl: 60, heading: 0, tilt: -10, focal35: 24, aspect: 1.5, clock: '17:30', weather: { seed: 1, coverage: 0.15, overcast: false, cirrus: 0 } };
 const view: Viewpoint | undefined = import.meta.env.DEV && params.has('view')
-  ? ((await import('../data/viewpoints.json')).default.frames as Viewpoint[]).find((f) => f.id === params.get('view'))
+  ? params.get('view') === 'look' ? LOOK : ((await import('../data/viewpoints.json')).default.frames as Viewpoint[]).find((f) => f.id === params.get('view'))
   : undefined;
 if (view) {
   // Nudging a viewpoint while lining it up: /?view=8385&heading=40&tilt=-9 (tools/compare.ts id@heading=40,tilt=-9).
-  for (const k of ['x', 'north', 'agl', 'heading', 'tilt', 'focal35'] as const) if (params.has(k)) view[k] = Number(params.get(k));
+  for (const k of ['x', 'north', 'agl', 'heading', 'tilt', 'focal35', 'aspect'] as const) if (params.has(k)) view[k] = Number(params.get(k));
   if (params.has('vclock')) view.clock = params.get('vclock')!;
   params.set('clock', view.clock);
-  params.set('seed', String(view.weather.seed));
-  params.set('coverage', String(view.weather.coverage));
-  params.set('overcast', view.weather.overcast ? '1' : '0');
-  params.set('cirrus', String(view.weather.cirrus));
+  // The viewpoint's weather, unless the URL nudges it too.
+  if (!params.has('seed')) params.set('seed', String(view.weather.seed));
+  if (!params.has('coverage')) params.set('coverage', String(view.weather.coverage));
+  if (!params.has('overcast')) params.set('overcast', view.weather.overcast ? '1' : '0');
+  if (!params.has('cirrus')) params.set('cirrus', String(view.weather.cirrus));
   document.body.classList.add('viewpoint');
 }
 
@@ -146,7 +149,8 @@ function placeCamera() {
     camera.position.copy(drone.position);
     camera.quaternion.copy(drone.quaternion);
   }
-  const hfov = view ? 2 * Math.atan(18 / view.focal35) : hfovFor(drone.focal);
+  // A 35 mm frame is 36 mm wide in landscape and 24 mm in portrait.
+  const hfov = view ? 2 * Math.atan((view.aspect >= 1 ? 18 : 12) / view.focal35) : hfovFor(drone.focal);
   camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(hfov / 2) / camera.aspect));
   camera.updateProjectionMatrix();
   camera.updateMatrixWorld();
@@ -160,6 +164,7 @@ function renderFrame(dt: number) {
   world.terrain.update(camera.position);
   world.buildings.update(camera.position);
   world.streets.update(camera.position);
+  world.landmarks.update(camera.position);
   pipeline.render(scene, camera, {
     dt,
     light: atmosphere.light,

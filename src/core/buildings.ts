@@ -4,8 +4,21 @@
 /** Roof faces as shipped in the tiles. */
 export const Face = { Slope: 1, Flat: 2, Gable: 3 } as const;
 
-/** What a piece of surface is, for the building shader (the `aKind` attribute). */
-export const Surface = { Wall: 0, Roof: 1, FlatRoof: 2, Gable: 3, Chimney: 4, DormerFront: 5, DormerRoof: 6, Plain: 7 } as const;
+/**
+ * What a piece of surface is, for the building shader (the `aKind` attribute). The last four are
+ * the landmarks' own (tools/landmarks/): stone and brick, metal roofs, glazed windows, openings.
+ */
+export const Surface = {
+  Wall: 0, Roof: 1, FlatRoof: 2, Gable: 3, Chimney: 4, DormerFront: 5, DormerRoof: 6, Plain: 7,
+  Stone: 8, Metal: 9, Glass: 10, Opening: 11,
+} as const;
+
+/** Styles of Surface.Stone: its facade is (along, up, weathering 0–1, unused). */
+export const Stone = { Ashlar: 0, Brick: 1, Rubble: 2, Render: 3, Setts: 4 } as const;
+/** Styles of Surface.Metal: its facade is (along, up the slope, slope length, unused). */
+export const Metal = { Slate: 0, Copper: 1, Lead: 2, Gold: 3 } as const;
+/** Styles of Surface.Glass: its facade is (across, up, width, height) in metres. */
+export const Glass = { Plain: 0, Tracery: 1, Rose: 2 } as const;
 
 /** Small things on roofs, placed at build time and made into boxes by the app. */
 export const Prop = { Chimney: 0, DormerGabled: 1, DormerFlat: 2, RoofBox: 3 } as const;
@@ -33,5 +46,7 @@ export const STYLES: FacadeStyle[] = [
   { name: 'modern', cell: 2.6, winW: 1.9, winH: 1.45, sill: 0.9, storey: 3.0, ground: 1 },
   // Houses and villas.
   { name: 'house', cell: 3.2, winW: 1.2, winH: 1.4, sill: 0.9, storey: 3.0, ground: 0 },
+  // The palace wings of the Castle (tools/landmarks/castle.ts): tall storeys, long even rows.
+  { name: 'palace', cell: 3.0, winW: 1.25, winH: 2.1, sill: 1.0, storey: 3.9, ground: 0 },
 ];
-export const Style = { Blank: 0, Baroque: 1, OldTown: 2, Block: 3, Modern: 4, House: 5 } as const;
+export const Style = { Blank: 0, Baroque: 1, OldTown: 2, Block: 3, Modern: 4, House: 5, Palace: 6 } as const;

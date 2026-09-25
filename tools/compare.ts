@@ -6,6 +6,7 @@
 //   node tools/compare.ts            all viewpoints
 //   node tools/compare.ts 8372 9369  some
 //   node tools/compare.ts 8385@heading=40,tilt=-9   a viewpoint nudged, written to compare/8385-heading_40-tilt_-9.png
+//   node tools/compare.ts look@x=-1100,north=-300,heading=250   a free camera, the render alone
 //
 // The photographs are read by the page from Photos/ (or mockup/set/) through the dev server; this
 // is build-side only and nothing of it ships (design.md §1).
@@ -21,7 +22,7 @@ const sleep = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
 
 const all = (JSON.parse(readFileSync('data/viewpoints.json', 'utf8')).frames as { id: string }[]).map((f) => f.id);
 const ids = process.argv.slice(2).length ? process.argv.slice(2) : all;
-for (const arg of ids) if (!all.includes(arg.split('@')[0])) throw new Error(`no viewpoint ${arg} in data/viewpoints.json`);
+for (const arg of ids) if (arg.split('@')[0] !== 'look' && !all.includes(arg.split('@')[0])) throw new Error(`no viewpoint ${arg} in data/viewpoints.json`);
 
 // The dev server: reuse a running one, else start one for the duration.
 let close = async () => {};
@@ -89,7 +90,8 @@ try {
     }
     await sleep(4000);
     const gpu = await evaluate(`(() => { const g = praha.renderer.getContext(), d = g.getExtension('WEBGL_debug_renderer_info'); return d ? g.getParameter(d.UNMASKED_RENDERER_WEBGL) : '?'; })()`);
-    const file = await evaluate(`praha.sheet(0, ${JSON.stringify(suffix)})`);
+    // A free look (id "look") has no photograph: the render alone.
+    const file = await evaluate(id === 'look' ? `praha.capture(${JSON.stringify(`look${suffix}.png`)})` : `praha.sheet(0, ${JSON.stringify(suffix)})`);
     console.log(`${id}: ${file}  (${((Date.now() - t0) / 1000).toFixed(0)} s, ${gpu})`);
   }
 } finally {

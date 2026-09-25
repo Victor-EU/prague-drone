@@ -4,13 +4,13 @@
 
 import { roofModel, meshRoof, type Roof, type RoofModel, type RoofSpec, type Shape } from './roofs.ts';
 import { placeProps, flatRoofBoxes, rng, type PropRec } from './props.ts';
-import { RULES, roofColour, wallColour, LANDMARK_COLOURS, type DistrictId } from './districts.ts';
+import { RULES, roofColour, wallColour, parseColour, LANDMARK_COLOURS, type DistrictId } from './districts.ts';
 import { parseLength, parseNumber, pointInPolygon, type Polygon, type Ring, type Tags } from './osm.ts';
 import { STYLES, Style, BFlag, EFlag } from '../../src/core/buildings.ts';
 
 export interface PlanInput {
   key: string; part: boolean; tags: Tags; area: number; cx: number; poly: Polygon;
-  /** Landmark id when the footprint is one (a stand-in box until M3). */
+  /** Landmark id when the footprint is one that is not modelled by hand. */
   landmark?: string;
   /** Ground under the footprint: lowest, and the reference storeys count from. */
   gmin: number; gref: number;
@@ -124,13 +124,32 @@ export function planBuilding(b: PlanInput): PlanOutput {
   minH = Math.max(0, minH ?? 0);
 
   if (b.landmark !== undefined) {
-    // Landmarks stay stand-in boxes until M3 models them.
+    // Landmarks not yet modelled by hand (tools/landmarks/) stand as their OSM parts, with the
+    // roof shapes and colours mapped there: spires, domes, onions. Plain walls, no dormers.
     const { h, minH: m2 } = boxHeights(t, b.area);
-    out.top = out.eave = b.gref + h;
-    out.base = m2 > 0 ? b.gref + m2 : b.gmin - 1;
     const c = LANDMARK_COLOURS[b.landmark] ?? ['#d9c9a8', '#6d6a62'];
-    out.wall = c[0]; out.roofC = c[1];
+    const hex = (v: [number, number, number] | undefined, dflt: string) => v ? '#' + v.map((q) => q.toString(16).padStart(2, '0')).join('') : dflt;
+    out.wall = hex(parseColour(t['building:colour']), c[0]);
+    out.roofC = /copper/.test(t['roof:material'] ?? '') && !t['roof:colour'] ? '#6f9a88' : hex(parseColour(t['roof:colour']), c[1]);
     out.flags = BFlag.Landmark;
+    const lshape: Shape = SHAPES[t['roof:shape'] ?? ''] ?? 'flat';
+    const lrings = [b.poly.outer, ...b.poly.holes];
+    let lmodel: RoofModel | null = null;
+    if (lshape !== 'flat') {
+      const angle = parseNumber(t['roof:angle']);
+      const rh = parseLength(t['roof:height']) ?? (parseNumber(t['roof:levels']) ?? 0) * 2.6;
+      lmodel = roofModel(lrings, {
+        shape: lshape, pitch: angle && angle > 5 && angle < 85 ? angle : 45, cap: 99, height: rh > 0 ? Math.min(rh, h - m2 - 0.5) : undefined,
+        gable: () => lshape === 'gabled' || lshape === 'gambrel' || lshape === 'round',
+      });
+    }
+    const roofH = lmodel ? roofTop(lmodel) : 0;
+    out.base = m2 > 0 ? b.gref + m2 : b.gmin - 1;
+    out.eave = b.gref + Math.max(m2 + 0.5, h - roofH);
+    out.roof = lmodel ? meshRoof(lmodel, lrings) : null;
+    if (out.roof && out.roof.faces.length === 0) out.roof = null;
+    out.top = out.eave + (out.roof ? out.roof.height : 0);
+    out.failed = lshape !== 'flat' && !out.roof;
     return out;
   }
 

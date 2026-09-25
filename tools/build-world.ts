@@ -8,6 +8,8 @@
 //   surface.bin   10 m grid of the highest thing at each place (ground, water, roofs, decks)
 //   landuse.bin   2.5 m ground classes (src/core/landuse.ts)
 //   water.bin     the water surface as a triangle mesh
+//   streets.bin   tram rails and lamp posts
+//   landmarks.bin the hand-built landmarks (tools/landmarks/) as finished meshes
 //   tiles/*.bin   per 1 km tile: buildings, bridge decks and landmark boxes as footprints
 //                 with base and top heights
 // and cache/preview.png, a top-down map for checking the build by eye.
@@ -33,10 +35,14 @@ import type { PropRec } from './lib/props.ts';
 import type { PlanInput, PlanOutput } from './lib/plan.ts';
 import { District, districtMaps, districtAt, LANDMARK_COLOURS, BRIDGE, hexRgb, type DistrictId } from './lib/districts.ts';
 import { Style, BFlag, EFlag } from '../src/core/buildings.ts';
+import { buildLandmarks, packLandmarks, raiseSurface, MODELS, type Site, type Built } from './landmarks/index.ts';
+import { rampartLines, carveRamparts } from './landmarks/vysehrad.ts';
 
 const OUT = join('public', 'world');
 /** --partial: build with whatever layers are cached, for testing while a fetch is still running. */
 const PARTIAL = process.argv.includes('--partial');
+/** --landmarks: rebuild landmarks.bin only (the rest of public/world/ stays as it is), for modelling. */
+const ONLY_LANDMARKS = process.argv.includes('--landmarks');
 function layer(name: string) {
   if (PARTIAL && !layerExists(name)) {
     console.warn(`  (partial build: no ${name} yet)`);
@@ -273,6 +279,16 @@ const level = new Float32Array(NX * NZ).fill(NaN);
   log('river level and bed');
 }
 
+// Vyšehrad's ramparts (tools/landmarks/vysehrad.ts): the ground at their feet and under their walks.
+const wallLines = (PARTIAL && !layerExists('walls') ? [] : layer('walls'))
+  .filter((el) => el.type === 'way')
+  .map((el) => ({ key: `way/${el.id}`, tags: el.tags ?? {}, line: lineOf(el) }));
+{
+  const lines = rampartLines(wallLines, (x, z) => bare.sample(x, z));
+  const nodes = carveRamparts(lines, ground);
+  log(`ramparts: ${lines.length} walls, ${nodes} terrain nodes lowered`);
+}
+
 function levelAt(x: number, z: number): number {
   const i = Math.round((x - ground.x0) / CELL), j = Math.round((z - ground.z0) / CELL);
   if (i < 0 || j < 0 || i >= NX || j >= NZ) return NaN;
@@ -419,6 +435,8 @@ function quantize(r: Ring): Ring {
 const SKIP_BUILDING = new Set(['no', 'roof', 'construction', 'proposed', 'demolished', 'ruins', 'abandoned', 'razed', 'destroyed', 'collapsed']);
 
 const buildings: Building[] = [];
+/** Every OSM building, part and bridge by key, for the landmark models. */
+const featureOf = new Map<string, Feature>();
 {
   const els = layer('buildings');
   for (const f of features(els, (t) => {
@@ -427,6 +445,7 @@ const buildings: Building[] = [];
     return !!t.building && !SKIP_BUILDING.has(t.building);
   })) {
     const part = !!f.tags['building:part'] && f.tags['building:part'] !== 'no' && !f.tags.building;
+    featureOf.set(f.key, f);
     for (const p of f.polygons) {
       const poly = { outer: quantize(simplify(p.outer)), holes: p.holes.map((h) => quantize(simplify(h))).filter((h) => h.length >= 6) };
       if (poly.outer.length < 6) continue;
@@ -470,6 +489,7 @@ const buildings: Building[] = [];
     const g = groundRef(b.poly);
     for (const p of inside) {
       (p as any).ground = g;
+      (p as any).outline = b.key;
       if (p.landmark < 0) p.landmark = b.landmark;
     }
   }
@@ -489,7 +509,59 @@ function groundRef(p: Polygon): { min: number; ref: number } {
   return { min, ref: (min + med) / 2 };
 }
 
-const kept = buildings.filter((b) => !(b as any).drop);
+let kept = buildings.filter((b) => !(b as any).drop);
+
+// ---- Landmarks modelled by hand (design.md §7.1, tools/landmarks/) ------------------------------
+
+const bridgeFeatures = features(layer('bridges'), (t) => t.man_made === 'bridge' && !underground(t));
+for (const f of bridgeFeatures) featureOf.set(f.key, f);
+const modelled = new Set<number>();
+for (const m of MODELS)
+  for (const id of [m.id, ...(m.covers ?? [])]) {
+    const k = landmarks.findIndex((l) => l.id === id);
+    if (k < 0) throw new Error(`landmark model ${id} is not in data/landmarks.json`);
+    modelled.add(k);
+  }
+const replacedKeys = new Set(MODELS.flatMap((m) => m.replaces ?? []));
+let landmarkMeshes: Built[];
+{
+  const featureCentre = new Map<string, [number, number]>();
+  const site: Site = {
+    ground: (x, z) => ground.sample(x, z),
+    bare: (x, z) => bare.sample(x, z),
+    water: (x, z) => {
+      const i = Math.round((x - ground.x0) / CELL), j = Math.round((z - ground.z0) / CELL);
+      return i >= 0 && j >= 0 && i < NX && j < NZ && water[j * NX + i] ? level[j * NX + i] : NaN;
+    },
+    feature: (key) => featureOf.get(key),
+    near: (x, z, r) => {
+      const out: Feature[] = [];
+      for (const [key, f] of featureOf) {
+        let c = featureCentre.get(key);
+        if (!c) { c = centroid(f.polygons[0].outer); featureCentre.set(key, c); }
+        if (Math.hypot(c[0] - x, c[1] - z) <= r) out.push(f);
+      }
+      return out;
+    },
+    walls: wallLines,
+    landmark: (id) => {
+      const l = landmarks.find((q) => q.id === id);
+      if (!l) throw new Error(`no landmark ${id}`);
+      return { x: l.x, z: -l.north };
+    },
+  };
+  landmarkMeshes = await buildLandmarks(site, log);
+  if (ONLY_LANDMARKS) {
+    const bytes = gzipSync(packLandmarks(landmarkMeshes), { level: 9 });
+    writeFileSync(join(OUT, 'landmarks.bin'), bytes);
+    log(`wrote ${join(OUT, 'landmarks.bin')}: ${(bytes.length / 1e6).toFixed(2)} MB (landmarks only)`);
+    process.exit(0);
+  }
+  const before = kept.length;
+  // A replaced outline takes its parts with it.
+  kept = kept.filter((b) => !(b.landmark >= 0 && modelled.has(b.landmark)) && !replacedKeys.has(b.key) && !replacedKeys.has((b as any).outline));
+  log(`landmarks: ${landmarkMeshes.length} modelled, ${before - kept.length} OSM buildings and parts replaced`);
+}
 
 // ---- Districts, party walls, roofs (design.md §7.2, §8.1, §8.2) -------------------------------
 
@@ -631,7 +703,10 @@ for (const f of features(layer('bridges'), (t) => t.man_made === 'bridge' && !un
     decks.push({ poly: { outer: simplify(r), holes: [] }, base: deck - 1.6, top: deck + 0.4, key: f.key, landmark: landmarkOf.get(f.key) ?? -1 });
   }
 }
-log(`bridges: ${decks.length} decks`);
+/** Decks a landmark model stands in for: dropped, with the lamps OSM puts on them. */
+const modelledDecks = decks.filter((d) => (d.landmark >= 0 && modelled.has(d.landmark)) || replacedKeys.has(d.key));
+decks.splice(0, decks.length, ...decks.filter((d) => !modelledDecks.includes(d)));
+log(`bridges: ${decks.length} decks (${modelledDecks.length} modelled)`);
 
 // Landmarks placed as boxes (those without an OSM footprint, such as towers mapped as points).
 const boxes: { poly: Polygon; base: number; top: number; landmark: number }[] = [];
@@ -657,6 +732,11 @@ landmarks.forEach((l, k) => {
     let sx = 0, sz = 0, sa = 0;
     for (const b of mine) { sx += b.cx * b.area; sz += b.cz * b.area; sa += b.area; }
     for (const d of mineDecks) { const [cx, cz] = centroid(d.poly.outer); const a = polygonArea(d.poly); sx += cx * a; sz += cz * a; sa += a; }
+    if (modelled.has(k)) {
+      const b = landmarkMeshes.find((q) => q.id === l.id);
+      rows.push(`${l.id.padEnd(26)} modelled${b ? ` (${(b.main.index.length + b.detail.index.length) / 3} triangles)` : ''}`);
+      return;
+    }
     if (sa === 0) { rows.push(`${l.id.padEnd(26)} ${l.box ? 'box' : l.osm ? 'MISSING' : '-'}`); return; }
     const cx = sx / sa, cn = -sz / sa;
     const top = mine.length ? Math.max(...mine.map((b) => b.top)) : Math.max(...mineDecks.map((d) => d.top));
@@ -699,6 +779,13 @@ const surface = new Grid(WORLD.xMin, WORLD.zMin, SC, SNX, SNZ, new Float32Array(
   for (const b of kept) raise(b.poly, b.top);
   for (const d of decks) raise(d.poly, d.top);
   for (const b of boxes) raise(b.poly, b.top);
+  raiseSurface(landmarkMeshes, (x, z, y) => {
+    const i = Math.round((x - surface.x0) / SC), j = Math.round((z - surface.z0) / SC);
+    if (i >= 0 && j >= 0 && i < SNX && j < SNZ && surface.data[j * SNX + i] < y) surface.data[j * SNX + i] = y;
+  }, (x0, z0, x1, z1, f) => {
+    for (let j = Math.ceil((z0 - surface.z0) / SC); j <= Math.floor((z1 - surface.z0) / SC); j++)
+      for (let i = Math.ceil((x0 - surface.x0) / SC); i <= Math.floor((x1 - surface.x0) / SC); i++) f(surface.x0 + i * SC, surface.z0 + j * SC);
+  });
   log('surface grid');
 }
 
@@ -748,6 +835,7 @@ let streetsPack: Uint8Array;
     if (el.type !== 'node' || el.lat === undefined || el.lon === undefined) continue;
     const x = lonToX(el.lon), z = latToZ(el.lat);
     if (x <= WORLD.xMin || x >= WORLD.xMax || z <= WORLD.zMin || z >= WORLD.zMax) continue;
+    if (modelledDecks.some((d) => pointInPolygon(x, z, d.poly))) continue;
     let y = ground.sample(x, z);
     for (const d of decks) if (pointInPolygon(x, z, d.poly)) { y = d.top; break; }
     if (Number.isNaN(y)) continue;
@@ -806,6 +894,11 @@ writeFileSync(join(OUT, 'water.bin'), gzipSync(waterPack, { level: 9 }));
   const bytes = gzipSync(streetsPack, { level: 9 });
   writeFileSync(join(OUT, 'streets.bin'), bytes);
   sizes.streets = bytes.length;
+}
+{
+  const bytes = gzipSync(packLandmarks(landmarkMeshes), { level: 9 });
+  writeFileSync(join(OUT, 'landmarks.bin'), bytes);
+  sizes.landmarks = bytes.length;
 }
 
 interface Item {
@@ -918,6 +1011,7 @@ const manifest = {
   landuse: { file: 'landuse.bin', ...grid(landuse) },
   water: { file: 'water.bin' },
   streets: { file: 'streets.bin' },
+  landmarks: { file: 'landmarks.bin' },
   tiles,
   kinds: KIND,
   attribution: 'Map data © OpenStreetMap contributors (ODbL). Terrain © ČÚZK, DMR 5G (CC BY 4.0).',
