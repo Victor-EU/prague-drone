@@ -20,6 +20,7 @@ import { dancingHouse } from './dancing-house.ts';
 import { nationalTheatre, sitkovTower, stFrancis, klementinumTower, rudolfinum } from './riverside.ts';
 import { powderTower, oldTownHall, stNicholasOldTown, husMemorial } from './old-town.ts';
 import { legionBridge, manesBridge, cechBridge, jirasekBridge, palackyBridge, stefanikBridge, railwayBridge } from './bridges.ts';
+import { schonbornGloriette } from './gardens.ts';
 
 /** What a model may ask of the world it stands in. */
 export interface Site {
@@ -56,7 +57,7 @@ export const MODELS: Model[] = [
   charlesBridge, oldTownBridgeTower, lesserTownBridgeTowers, tyn, stNicholas, castle, petrinTower, vysehrad,
   legionBridge, manesBridge, cechBridge, jirasekBridge, palackyBridge, stefanikBridge, railwayBridge,
   smetanaMuseum, dancingHouse, nationalTheatre, sitkovTower, stFrancis, klementinumTower, rudolfinum,
-  powderTower, oldTownHall, stNicholasOldTown, husMemorial,
+  powderTower, oldTownHall, stNicholasOldTown, husMemorial, schonbornGloriette,
 ];
 
 export interface Built {

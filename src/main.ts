@@ -171,6 +171,7 @@ function renderFrame(dt: number) {
   world.buildings.update(camera.position);
   world.streets.update(camera.position);
   world.landmarks.update(camera.position);
+  world.trees?.update(camera.position);
   world.lights.update();
   U.uTime.value += dt;
   world.water.renderMirror(renderer, scene, camera);

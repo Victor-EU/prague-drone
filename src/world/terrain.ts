@@ -3,8 +3,9 @@
 
 import * as THREE from 'three';
 import { HeightGrid } from './heightgrid.ts';
-import { GROUND_COLOURS, Ground } from '../core/landuse.ts';
+import { GROUND_COLOURS, Ground, CANOPY_SHIFT, CANOPY_MASK, CANOPY_FLOOR } from '../core/landuse.ts';
 import { patchLit } from '../sky/lit.ts';
+import { BLOOMS } from './blooms.ts';
 
 const CHUNK = 1000;
 const STEPS = [1, 2, 4, 8]; // grid steps per level (5, 10, 20, 40 m)
@@ -154,20 +155,24 @@ export function landuseTexture(classes: Uint8Array, nx: number, nz: number): THR
     lut.set([(c >> 16) & 255, (c >> 8) & 255, c & 255], Number(k) * 3);
   }
   const pave = new Uint8Array(256);
+  // Alpha 32 marks a rose bed for the shader (GREENS); paving starts above 50.
+  pave[Ground.Flowerbed] = 32;
   pave[Ground.Path] = 64;
   pave[Ground.Road] = pave[Ground.Parking] = pave[Ground.Industrial] = 128;
   pave[Ground.Square] = 192;
   pave[Ground.Cobbles] = 255;
   const data = new Uint8Array(nx * nz * 4);
+  const floor = parseInt(CANOPY_FLOOR.slice(1), 16);
+  const fl = [(floor >> 16) & 255, (floor >> 8) & 255, floor & 255];
   let seed = 1234567;
   for (let k = 0; k < nx * nz; k++) {
     seed = (seed * 1103515245 + 12345) >>> 0;
     const jitter = 0.94 + ((seed >>> 16) & 255) / 255 * 0.12;
-    const c = classes[k] * 3;
-    data[k * 4] = Math.min(255, lut[c] * jitter);
-    data[k * 4 + 1] = Math.min(255, lut[c + 1] * jitter);
-    data[k * 4 + 2] = Math.min(255, lut[c + 2] * jitter);
-    data[k * 4 + 3] = pave[classes[k]];
+    const cls = classes[k] & CANOPY_MASK, c = cls * 3;
+    // Under the crowns, the ground is mostly in their shade: leaf litter and dark grass.
+    const shade = (classes[k] >> CANOPY_SHIFT) ? 0.6 : 0;
+    for (let ch = 0; ch < 3; ch++) data[k * 4 + ch] = Math.min(255, (lut[c + ch] * (1 - shade) + fl[ch] * shade) * jitter);
+    data[k * 4 + 3] = pave[cls];
   }
   const tex = new THREE.DataTexture(data, nx, nz, THREE.RGBAFormat);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -186,7 +191,7 @@ const PAVING = /* glsl */ `
 {
   float pave = sampledDiffuseColor.a;
   diffuseColor.a = 1.0;
-  if (pave > 0.1) {
+  if (pave > 0.19) {
     vec2 xz = vPraWorld.xz;
     float n1 = praGNoise(xz * 0.35), n2 = praGNoise(xz * 2.3);
     // Asphalt and gravel: patches and grain.
@@ -230,12 +235,51 @@ float praGPulse(float x, float a, float b, float w) {
   return ((floor(x1) * (b - a) + clamp(fract(x1), a, b)) - (floor(x0) * (b - a) + clamp(fract(x0), a, b))) / w;
 }`;
 
+// Grass, meadow and flower beds (design.md §8.4), on every ground whose colour is green and not
+// paved: patches yellowed by early summer, clumps, and near the camera the grain of the blades;
+// meadows (the yellower greens) more than lawns. A rose bed is known by its colour (Ground.Flowerbed
+// in src/core/landuse.ts): dark leaves with blooms scattered over them, one variety to a stretch of
+// bed, red, coral, pink and white.
+const GREENS = /* glsl */ `
+if (sampledDiffuseColor.a < 0.19) {
+  vec3 c = diffuseColor.rgb;
+  vec2 xz = vPraWorld.xz;
+  float mpp = length(fwidth(vPraWorld));
+  float a = sampledDiffuseColor.a;
+  // A bed by its alpha, and by its brown (a lawn blending into a path passes the same alpha, grey-green).
+  float bed = smoothstep(0.07, 0.11, a) * (1.0 - smoothstep(0.15, 0.19, a)) * smoothstep(1.3, 1.45, c.r / max(c.g, 1e-4));
+  float veg = clamp((c.g - max(c.r, c.b * 1.1)) / (0.01 + 0.25 * c.g), 0.0, 1.0);
+  if (bed > 0.01) {
+    vec3 leaves = PRA_ROSE_LEAF * (0.8 + 0.4 * praGNoise(xz * 2.1));
+    vec3 bloom = praBloom(xz);
+    vec2 p = xz / 0.28;
+    vec2 cell = floor(p), f = fract(p) - 0.5;
+    vec2 jit = vec2(praGHash(cell + 1.3), praGHash(cell + 2.7)) - 0.5;
+    float r = length(f - jit * 0.4);
+    float bloomHere = step(praGHash(cell), 0.5) * (1.0 - smoothstep(0.16, 0.3, r));
+    float fade = smoothstep(0.25, 0.7, max(fwidth(p.x), fwidth(p.y)));
+    float cover = mix(bloomHere, 0.22, fade);
+    diffuseColor.rgb = mix(c, mix(leaves, bloom * (0.85 + 0.3 * praGHash(cell + 5.1)), cover), bed);
+  } else if (veg > 0.0 && a < 0.05) {
+    // How much of a meadow: the yellower the green, the longer and drier the grass.
+    float meadow = smoothstep(0.34, 0.48, (c.r - c.b) / max(c.g, 1e-3));
+    float n1 = praGNoise(xz * 0.07), n2 = praGNoise(xz * 0.31 + 3.0), n3 = praGNoise(xz * 1.6 + 7.0), n4 = praGNoise(xz * vec2(9.0, 3.0) + 1.0);
+    vec3 g = c;
+    // Early summer: patches gone yellow, more of them in a meadow.
+    g = mix(g, g * vec3(1.16, 1.06, 0.8), smoothstep(0.5 - 0.15 * meadow, 0.85, n1) * (0.35 + 0.35 * meadow));
+    g *= 0.84 + 0.32 * n2;
+    g *= mix(1.0, 0.72 + 0.56 * n3, (1.0 - smoothstep(0.3, 1.2, mpp)) * (0.5 + 0.5 * meadow));
+    g *= mix(1.0, 0.7 + 0.6 * n4, (1.0 - smoothstep(0.05, 0.25, mpp)) * (0.4 + 0.6 * meadow));
+    diffuseColor.rgb = mix(c, g, veg);
+  }
+}`;
+
 function terrainMaterial(landuse: THREE.Texture): THREE.MeshStandardMaterial {
   const m = new THREE.MeshStandardMaterial({ map: landuse, roughness: 0.95, metalness: 0 });
   return patchLit(m, (shader) => {
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\n${PAVING_PARS}`)
-      .replace('#include <map_fragment>', `#include <map_fragment>\n${PAVING}`)
+      .replace('#include <common>', `#include <common>\n${PAVING_PARS}\n${BLOOMS}`)
+      .replace('#include <map_fragment>', `#include <map_fragment>\n${GREENS}\n${PAVING}`)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * praLampPool(vPraWorld, 0.0) * 0.15;');
   }, '-terrain');
 }

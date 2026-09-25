@@ -18,11 +18,11 @@ Node 24 or later (the build tools are TypeScript run directly by Node).
 
 ```
 npm install
-npm run world      # fetch OSM (BBBike Prague extract) and terrain (ČÚZK) into cache/, then build public/world/
+npm run world      # fetch OSM (BBBike Prague extract), terrain and canopy (ČÚZK) into cache/, then build public/world/
 npm run dev        # http://localhost:5173
 ```
 
-`npm run fetch-data` and `npm run build-world` run the two halves separately; the fetch only downloads what is not cached yet (`-- --overpass` takes OSM from Overpass instead of the extract). The build computes every roof from its footprint (straight skeletons, on worker threads, about 35 s in all), builds the landmarks and bridges from the models in `tools/landmarks/`, the river's weirs and embankment walls, and also writes `cache/preview.png`, a top-down map of the world with the flight path. While modelling, `npm run build-world -- --landmarks` rebuilds only the landmarks and the water, in a few seconds. `npm run build` makes the static site in `dist/`. `npm run lut` rewrites the Classic Negative grade, `assets/lut/classic-neg.cube`, from the parameters in `tools/make-lut.ts`.
+`npm run fetch-data` and `npm run build-world` run the two halves separately; the fetch only downloads what is not cached yet (`-- --overpass` takes OSM from Overpass instead of the extract; `-- dem`, `-- osm` or `-- chm` fetches one part, the last being the canopy heights the trees are found in, about 7 minutes and 86 MB). The build computes every roof from its footprint (straight skeletons, on worker threads, about 35 s in all), builds the landmarks and bridges from the models in `tools/landmarks/`, the river's weirs and embankment walls, the garden walls, finds the 470,000 trees in the canopy, and also writes `cache/preview.png`, a top-down map of the world with the flight path. While modelling, `npm run build-world -- --landmarks` rebuilds only the landmarks and the water, in a few seconds. `npm run build` makes the static site in `dist/`. `npm run lut` rewrites the Classic Negative grade, `assets/lut/classic-neg.cube`, from the parameters in `tools/make-lut.ts`.
 
 In the app: arrows take over (yaw and altitude), Shift is fast cruise, Space hovers, W and S tilt, A and D strafe, Enter returns to the auto route, C rolls new clouds. The WEATHER button switches the overcast on and off. The backquote key shows frame statistics; in development G turns the grade off and O the ambient occlusion. URL parameters: `?t=144` starts the route at that second, `?clock=20:30` fixes the time of day, `?fast`, `?manual`, `?stats`; for the weather `?seed=`, `?coverage=0.4`, `?overcast=1` or `0`, `?cirrus=0.5`.
 

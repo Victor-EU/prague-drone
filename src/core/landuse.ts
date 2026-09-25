@@ -27,19 +27,26 @@ export const Ground = {
   Construction: 22,
   Clay: 23,
   Farmland: 24,
+  Flowerbed: 25,
 } as const;
 export type GroundClass = (typeof Ground)[keyof typeof Ground];
+
+/** The land-use grid keeps the class in the low six bits and, above them, whether a tree crown stands over the cell. */
+export const CANOPY_SHIFT = 6;
+export const CANOPY_MASK = 63;
+/** The ground in the crowns' shade: leaf litter and dark grass. */
+export const CANOPY_FLOOR = '#353b2a';
 
 export const GROUND_COLOURS: Record<number, string> = {
   [Ground.Urban]: '#6c665e',
   [Ground.Water]: '#3a4a52',
-  [Ground.Grass]: '#7a8a52',
-  [Ground.Wood]: '#2e3b29',
-  [Ground.Park]: '#4f6139',
-  [Ground.Garden]: '#4a5c38',
-  [Ground.Orchard]: '#667645',
-  [Ground.Cemetery]: '#3f4c34',
-  [Ground.Pitch]: '#6f8a55',
+  [Ground.Grass]: '#455a34',
+  [Ground.Wood]: '#3a4330',
+  [Ground.Park]: '#425632',
+  [Ground.Garden]: '#3f5030',
+  [Ground.Orchard]: '#4d5a31',
+  [Ground.Cemetery]: '#4b5a37',
+  [Ground.Pitch]: '#445a35',
   [Ground.Residential]: '#6f695f',
   [Ground.Industrial]: '#716b62',
   [Ground.Road]: '#4f4d4b',
@@ -47,13 +54,16 @@ export const GROUND_COLOURS: Record<number, string> = {
   [Ground.Path]: '#8f877a',
   [Ground.Square]: '#6e685e',
   [Ground.Rail]: '#4c4540',
-  [Ground.Meadow]: '#8a9a5a',
-  [Ground.Scrub]: '#445234',
+  [Ground.Meadow]: '#505e32',
+  [Ground.Scrub]: '#4c5a35',
   [Ground.Rock]: '#8a8074',
   [Ground.Parking]: '#595755',
-  [Ground.Vineyard]: '#6f7d4a',
+  [Ground.Vineyard]: '#5c6a3c',
   [Ground.Sand]: '#c2b28f',
   [Ground.Construction]: '#9a8d78',
   [Ground.Clay]: '#b0654a',
   [Ground.Farmland]: '#a0a06a',
+  // Roses and their leaves, as a bed reads from a distance; the terrain shader scatters the blooms
+  // over it (src/world/terrain.ts).
+  [Ground.Flowerbed]: '#5e4a3e',
 };

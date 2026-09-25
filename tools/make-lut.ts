@@ -17,8 +17,10 @@ const P = {
   red: { centre: 40, width: 32, chroma: 1.06, hue: -2 },
   // Yellows muted and slightly green.
   yellow: { centre: 88, width: 22, chroma: 0.82, hue: 6 },
-  // Greens desaturated and cooled toward olive-teal, never lime.
-  green: { centre: 135, width: 34, chroma: 0.72, hue: 12, lightness: -0.015 },
+  // Greens desaturated and cooled toward olive-teal, never lime. The window reaches down to the
+  // yellow-greens of sunlit grass and young leaves, which the photographs turn teal (8725: the
+  // meadow at OKLCh hue 141, chroma 0.043); widened and strengthened in M5.
+  green: { centre: 130, width: 42, chroma: 0.64, hue: 17, lightness: -0.02 },
   // Blues toward a muted cyan, lighter and greyer.
   blue: { centre: 238, width: 40, chroma: 0.8, hue: -9, lightness: 0.012 },
   // Violets and magentas fall back toward blue: the film has no purple dusk (9530 to 9608).

@@ -13,8 +13,8 @@
       "weather": {"seed": 8385, "coverage": 0.55, "overcast": false, "cirrus": 0}},
     {"id": "8372", "x": 545, "north": -2342, "agl": 30, "heading": -16, "tilt": -6, "focal35": 24, "aspect": 1.5, "clock": "12:08",
       "weather": {"seed": 8372, "coverage": 0.5, "overcast": false, "cirrus": 0}},
-    {"id": "9369", "x": 900, "north": 1180, "agl": 1.6, "heading": 20, "tilt": 18, "focal35": 53, "aspect": 1.5, "clock": "16:54",
-      "weather": {"seed": 9369, "coverage": 0.3, "overcast": false, "cirrus": 0.4, "cloudAt": [3000, 6800]}},
+    {"id": "9369", "x": 730, "north": 1100, "agl": 1.6, "heading": 320, "tilt": 14, "focal35": 53, "aspect": 1.5, "clock": "16:54",
+      "weather": {"seed": 9369, "coverage": 0.3, "overcast": false, "cirrus": 0.4, "cloudAt": [-3100, 5700]}},
     {"id": "8704", "x": 22, "north": 333.5, "agl": 12, "heading": 165.9, "tilt": 0.2, "focal35": 83, "aspect": 1.5, "clock": "20:04",
       "weather": {"seed": 8704, "coverage": 0.05, "overcast": false, "cirrus": 0}},
     {"id": "8607", "x": 664, "north": 42.8, "agl": 1.6, "heading": 54.6, "tilt": 15.2, "focal35": 56, "aspect": 0.6667, "clock": "17:33",
@@ -34,6 +34,10 @@
     {"id": "9486", "x": 191, "north": 773, "agl": 24, "heading": 189.6, "tilt": -2.8, "focal35": 83, "aspect": 1.5, "clock": "18:51",
       "weather": {"seed": 9486, "coverage": 0.05, "overcast": false, "cirrus": 0.2}},
     {"id": "9542", "x": -40, "north": -562, "agl": 0, "y": 8, "heading": 33.3, "tilt": 1.7, "focal35": 51, "aspect": 1.5, "clock": "21:50",
-      "weather": {"seed": 9542, "coverage": 0.05, "overcast": false, "cirrus": 0}}
+      "weather": {"seed": 9542, "coverage": 0.05, "overcast": false, "cirrus": 0}},
+    {"id": "8725", "x": -768, "north": -225, "agl": 1.6, "heading": 12.9, "tilt": 9, "focal35": 24, "aspect": 1.5, "clock": "10:00",
+      "weather": {"seed": 8725, "coverage": 0.3, "overcast": false, "cirrus": 0.6}},
+    {"id": "8722", "x": -1176.6, "north": -413.2, "agl": 0.8, "heading": 270, "tilt": 6, "focal35": 64, "aspect": 0.6667, "clock": "09:57",
+      "weather": {"seed": 8722, "coverage": 0.2, "overcast": false, "cirrus": 0.3}}
   ]
 }

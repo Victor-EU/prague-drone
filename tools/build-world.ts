@@ -18,7 +18,7 @@ import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import { join } from 'node:path';
 import { WORLD, TILE, HORIZON, DATUM, xToLon, zToLat, lonToX, latToZ } from '../src/core/geo.ts';
-import { Ground, GROUND_COLOURS } from '../src/core/landuse.ts';
+import { Ground, GROUND_COLOURS, CANOPY_SHIFT, CANOPY_MASK } from '../src/core/landuse.ts';
 import { encodePack, type Typed } from '../src/core/pack.ts';
 import {
   loadLayer, layerExists, features, lineOf, parseLength, parseNumber, pointInPolygon, pointInRing, signedArea,
@@ -39,6 +39,9 @@ import { buildLandmarks, packLandmarks, raiseSurface, MODELS, type Site, type Bu
 import { rampartLines, carveRamparts } from './landmarks/vysehrad.ts';
 import { Kit } from './landmarks/kit.ts';
 import { Flow, flowLines, weirs, inWeirBand, weirStrip, embankments } from './lib/river.ts';
+import { loadCanopy, findTrees, tally, hash as treeHash } from './lib/trees.ts';
+import { gardenWalls } from './lib/walls.ts';
+import { Kind as TreeKind, TREE_XZ, TREE_H, TREE_R } from '../src/core/trees.ts';
 
 const OUT = join('public', 'world');
 /** --partial: build with whatever layers are cached, for testing while a fetch is still running. */
@@ -128,7 +131,8 @@ function groundClass(t: Tags): number | undefined {
   if (le === 'golf_course' || le === 'common') return Ground.Grass;
   if (lu === 'forest' || na === 'wood') return Ground.Wood;
   if (na === 'scrub' || na === 'heath') return Ground.Scrub;
-  if (lu === 'grass' || lu === 'village_green' || lu === 'recreation_ground' || lu === 'flowerbed' || na === 'grassland')
+  if (lu === 'flowerbed') return Ground.Flowerbed;
+  if (lu === 'grass' || lu === 'village_green' || lu === 'recreation_ground' || na === 'grassland')
     return Ground.Grass;
   if (lu === 'meadow') return Ground.Meadow;
   if (lu === 'orchard') return Ground.Orchard;
@@ -154,7 +158,7 @@ function groundClass(t: Tags): number | undefined {
 const RANK: Record<number, number> = {
   [Ground.Residential]: 0, [Ground.Industrial]: 0, [Ground.Farmland]: 0, [Ground.Construction]: 0, [Ground.Meadow]: 0,
   [Ground.Wood]: 1, [Ground.Scrub]: 1, [Ground.Grass]: 1, [Ground.Park]: 1, [Ground.Garden]: 1, [Ground.Orchard]: 1,
-  [Ground.Vineyard]: 1, [Ground.Cemetery]: 1, [Ground.Rock]: 1, [Ground.Sand]: 1,
+  [Ground.Vineyard]: 1, [Ground.Cemetery]: 1, [Ground.Rock]: 1, [Ground.Sand]: 1, [Ground.Flowerbed]: 1,
   [Ground.Pitch]: 2, [Ground.Clay]: 2, [Ground.Parking]: 2, [Ground.Square]: 2, [Ground.Road]: 2, [Ground.Path]: 2,
 };
 
@@ -584,6 +588,16 @@ let landmarkMeshes: Built[];
     landmarkMeshes.push({ id: 'embankments', main: k.finish(), detail: d.finish() });
     log(`embankments: ${(metres / 1000).toFixed(1)} km of wall, ${k.triangles} triangles`);
   }
+  // Garden walls in the photographed city (tools/lib/walls.ts).
+  {
+    const k = new Kit(), d = new Kit();
+    // The gardens the route and the photographs see: Petřín, Strahov, Malá Strana, Hradčany, the Old Town.
+    const seen = (x: number, z: number) => x > -1900 && x < 1500 && z > -900 && z < 1300;
+    const els = PARTIAL && !layerExists('gardenwalls') ? [] : layer('gardenwalls');
+    const { metres, count } = gardenWalls(els, (x, z) => ground.sample(x, z), k, seen);
+    landmarkMeshes.push({ id: 'garden-walls', main: k.finish(), detail: d.finish() });
+    log(`garden walls: ${count} walls, ${(metres / 1000).toFixed(1)} km, ${k.triangles} triangles`);
+  }
   if (ONLY_LANDMARKS) {
     const bytes = gzipSync(packLandmarks(landmarkMeshes), { level: 9 });
     writeFileSync(join(OUT, 'landmarks.bin'), bytes);
@@ -905,6 +919,139 @@ let streetsPack: Uint8Array;
   log(`streets: ${km.toFixed(0)} km of tram track in ${starts.length - 1} runs, ${lp.length / 3} lamps`);
 }
 
+// ---- Trees -------------------------------------------------------------------------------------
+
+// Every crown of the canopy height model (design.md §8.4, tools/lib/trees.ts), where no building,
+// deck or water stands, and the kind of tree the land use and the mapped trees suggest.
+let treesPack: Uint8Array | null = null;
+{
+  const c = loadCanopy();
+  if (!c) console.warn('  (no canopy in cache/chm: no trees; run tools/fetch-data.ts chm)');
+  else {
+    const mask = new Uint8Array(c.nx * c.nz);
+    const fill = (p: Polygon) => scanPolygon(polygonRings(p), c.x0 + 0.5, c.z0 + 0.5, 1, c.nx, c.nz, (i, j) => { mask[j * c.nx + i] = 1; });
+    for (const b of buildings) fill(b.poly);
+    for (const d of decks) fill(d.poly);
+    for (const f of waterFeatures) for (const p of f.polygons) fill(p);
+    // Rail lines: trains and their wires stand as high as young trees.
+    for (const el of layer('railways')) {
+      const t = el.tags ?? {};
+      if (el.type !== 'way' || !t.railway || t.railway === 'tram' || t.railway === 'subway' || underground(t)) continue;
+      scanLine(lineOf(el), 3, c.x0 + 0.5, c.z0 + 0.5, 1, c.nx, c.nz, (i, j) => { mask[j * c.nx + i] = 1; });
+    }
+    // A metre round every footprint: outlines and the survey disagree by about that much.
+    const grown = mask.slice();
+    for (let j = 1; j < c.nz - 1; j++)
+      for (let i = 1; i < c.nx - 1; i++) {
+        const k = j * c.nx + i;
+        if (!mask[k] && (mask[k - 1] | mask[k + 1] | mask[k - c.nx] | mask[k + c.nx])) grown[k] = 1;
+      }
+    // Mapped trees say which are conifers.
+    const needles = new Set<string>();
+    for (const el of PARTIAL && !layerExists('trees') ? [] : layer('trees'))
+      if (el.lat !== undefined && el.lon !== undefined && el.tags?.leaf_type === 'needleleaved')
+        needles.add(`${Math.round(lonToX(el.lon) / 4)},${Math.round(latToZ(el.lat) / 4)}`);
+    const isNeedle = (x: number, z: number) => {
+      const i = Math.round(x / 4), j = Math.round(z / 4);
+      for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) if (needles.has(`${i + di},${j + dj}`)) return true;
+      return false;
+    };
+    // Islands and narrow banks: water on three sides within 150 m.
+    const wet = (x: number, z: number) => landuse.nearest(x, z) === Ground.Water;
+    const island = (x: number, z: number) => {
+      let n = 0;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        for (let d = 10; d <= 150; d += 10) if (wet(x + dx * d, z + dz * d)) { n++; break; }
+      }
+      return n >= 3;
+    };
+    const GREEN = new Set<number>([Ground.Park, Ground.Garden, Ground.Grass, Ground.Meadow, Ground.Orchard, Ground.Scrub, Ground.Vineyard, Ground.Pitch, Ground.Flowerbed]);
+    const kind = (x: number, z: number, h: number, r: number, seed: number) => {
+      const cls = landuse.nearest(x, z);
+      const a = seed / 256, b = ((seed * 97) % 256) / 256;
+      if (isNeedle(x, z)) return TreeKind.Conifer;
+      if (cls === Ground.Orchard && h < 12) return TreeKind.Fruit;
+      if (h < 7.5 && r < 4.5 && GREEN.has(cls)) return TreeKind.Fruit;
+      if (h > 14 && island(x, z) && a < 0.25) return TreeKind.Poplar;
+      if (h > 18 && r < 0.2 * h) return a < 0.3 ? TreeKind.Poplar : a < 0.6 ? TreeKind.Conifer : TreeKind.Broad;
+      const conifers = cls === Ground.Cemetery ? 0.3 : cls === Ground.Wood ? 0.1 : cls === Ground.Park || cls === Ground.Garden ? 0.07 : 0.03;
+      if (h > 6 && b < conifers) return TreeKind.Conifer;
+      return TreeKind.Broad;
+    };
+    const LOW = new Set<number>([Ground.Park, Ground.Garden, Ground.Grass, Ground.Meadow, Ground.Orchard, Ground.Cemetery]);
+    // The Petřín rose garden (design.md §8.4): OSM draws its lawns and paths; the open ground
+    // between the lawn panels, where no crown stands over it, is the rose beds.
+    for (const f of features(layer('landuse'), (t) => t.name === 'Růžový sad'))
+      for (const p of f.polygons)
+        scanPolygon(polygonRings(p), landuse.x0, landuse.z0, LU, LNX, LNZ, (i, j) => {
+          const k = j * LNX + i;
+          if (landuse.data[k] !== Ground.Park) return;
+          const x = landuse.x0 + i * LU, z = landuse.z0 + j * LU;
+          let lawn = false, open = true;
+          for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) if (landuse.data[(j + dj) * LNX + i + di] === Ground.Grass) lawn = true;
+          for (let dz = -2; dz <= 2 && open; dz++)
+            for (let dx = -2; dx <= 2; dx++) {
+              const ci = Math.round(x + dx - c.x0), cj = Math.round(z + dz - c.z0);
+              if (c.data[cj * c.nx + ci] > 8) { open = false; break; }
+            }
+          if (lawn && open) landuse.data[k] = Ground.Flowerbed;
+        });
+    const trees = findTrees(c, { mask: grown, kind, minHeight: (x, z) => (LOW.has(landuse.nearest(x, z)) ? 1.8 : 2.5) });
+    // Rose bushes in the beds, about one to a square metre and a half, in bloom.
+    for (let j = 0; j < LNZ; j++)
+      for (let i = 0; i < LNX; i++) {
+        if ((landuse.data[j * LNX + i] & CANOPY_MASK) !== Ground.Flowerbed) continue;
+        for (let b = 0; b < 2; b++)
+          for (let a = 0; a < 2; a++) {
+            const x0 = landuse.x0 + i * LU + (a - 0.5) * LU / 2, z0 = landuse.z0 + j * LU + (b - 0.5) * LU / 2;
+            const seed = treeHash(x0, z0), u = seed / 256, v = ((seed * 131) % 256) / 256;
+            trees.push({ x: x0 + (u - 0.5) * 0.4, z: z0 + (v - 0.5) * 0.4, h: 0.8 + 0.5 * v, r: 0.42 + 0.18 * u, kind: TreeKind.Rose, seed });
+          }
+      }
+    // By world tile, positions within the tile.
+    const TNX = W / TILE, TNZ = D / TILE;
+    const byTile: (typeof trees)[] = Array.from({ length: TNX * TNZ }, () => []);
+    for (const t of trees) {
+      const i = Math.floor((t.x - WORLD.xMin) / TILE), j = Math.floor((t.z - WORLD.zMin) / TILE);
+      if (i >= 0 && j >= 0 && i < TNX && j < TNZ) byTile[j * TNX + i].push(t);
+    }
+    const start = new Uint32Array(TNX * TNZ + 1);
+    const xz = new Uint16Array(trees.length * 2), hr = new Uint8Array(trees.length * 2), ks = new Uint8Array(trees.length * 2);
+    let n = 0;
+    byTile.forEach((list, k) => {
+      start[k] = n;
+      const x0 = WORLD.xMin + (k % TNX) * TILE, z0 = WORLD.zMin + Math.floor(k / TNX) * TILE;
+      for (const t of list) {
+        xz[n * 2] = Math.min(65535, Math.round((t.x - x0) * TREE_XZ));
+        xz[n * 2 + 1] = Math.min(65535, Math.round((t.z - z0) * TREE_XZ));
+        hr[n * 2] = Math.min(255, Math.round(t.h / TREE_H));
+        hr[n * 2 + 1] = Math.min(255, Math.round(t.r / TREE_R));
+        ks[n * 2] = t.kind;
+        ks[n * 2 + 1] = t.seed;
+        n++;
+      }
+    });
+    start[TNX * TNZ] = n;
+    treesPack = encodePack({ nx: TNX, nz: TNZ, tile: TILE, x0: WORLD.xMin, z0: WORLD.zMin }, { start, xz, hr, ks });
+    // The ground under the crowns is in their shade: a bit above the class says a crown stands over
+    // the cell (src/core/landuse.ts, CANOPY_SHIFT).
+    const SHADED = new Set<number>([Ground.Urban, Ground.Grass, Ground.Wood, Ground.Park, Ground.Garden, Ground.Orchard, Ground.Cemetery, Ground.Residential, Ground.Meadow, Ground.Scrub, Ground.Vineyard, Ground.Farmland, Ground.Pitch]);
+    for (const t of trees) {
+      const rr = t.r * 0.8;
+      const i0 = Math.max(0, Math.ceil((t.x - rr - landuse.x0) / LU)), i1 = Math.min(LNX - 1, Math.floor((t.x + rr - landuse.x0) / LU));
+      const j0 = Math.max(0, Math.ceil((t.z - rr - landuse.z0) / LU)), j1 = Math.min(LNZ - 1, Math.floor((t.z + rr - landuse.z0) / LU));
+      for (let j = j0; j <= j1; j++)
+        for (let i = i0; i <= i1; i++) {
+          const dx = landuse.x0 + i * LU - t.x, dz = landuse.z0 + j * LU - t.z;
+          if (dx * dx + dz * dz > rr * rr) continue;
+          const k = j * LNX + i, cls = landuse.data[k] & CANOPY_MASK;
+          if (SHADED.has(cls)) landuse.data[k] = cls | (1 << CANOPY_SHIFT);
+        }
+    }
+    log(`trees: ${n} crowns (${tally(trees)})`);
+  }
+}
+
 // ---- Horizon ----------------------------------------------------------------------------------
 
 const HC = 100;
@@ -954,6 +1101,11 @@ writeFileSync(join(OUT, 'water.bin'), gzipSync(waterPack, { level: 9 }));
   const bytes = gzipSync(streetsPack, { level: 9 });
   writeFileSync(join(OUT, 'streets.bin'), bytes);
   sizes.streets = bytes.length;
+}
+if (treesPack) {
+  const bytes = gzipSync(treesPack, { level: 9 });
+  writeFileSync(join(OUT, 'trees.bin'), bytes);
+  sizes.trees = bytes.length;
 }
 {
   const bytes = gzipSync(packLandmarks(landmarkMeshes), { level: 9 });
@@ -1072,9 +1224,10 @@ const manifest = {
   water: { file: 'water.bin' },
   streets: { file: 'streets.bin' },
   landmarks: { file: 'landmarks.bin' },
+  trees: treesPack ? { file: 'trees.bin' } : null,
   tiles,
   kinds: KIND,
-  attribution: 'Map data © OpenStreetMap contributors (ODbL). Terrain © ČÚZK, DMR 5G (CC BY 4.0).',
+  attribution: 'Map data © OpenStreetMap contributors (ODbL). Terrain and trees © ČÚZK, DMR 5G and DMP OK (CC BY 4.0).',
 };
 writeFileSync(join(OUT, 'manifest.json'), JSON.stringify(manifest, null, 1));
 const total = Object.values(sizes).reduce((a, b) => a + b, 0);
@@ -1090,7 +1243,7 @@ log(`wrote ${OUT}: ${Object.entries(sizes).map(([k, v]) => `${k} ${(v / 1e6).toF
   for (let py = 0; py < ph; py++)
     for (let px = 0; px < pw; px++) {
       const x = WORLD.xMin + (px + 0.5) * P, z = WORLD.zMin + (py + 0.5) * P;
-      const c = colours[landuse.nearest(x, z)] ?? [255, 0, 255];
+      const c = colours[landuse.nearest(x, z) & CANOPY_MASK] ?? [255, 0, 255];
       // Hillshade from the north-west.
       const hx = ground.sample(x + CELL, z) - ground.sample(x - CELL, z);
       const hz = ground.sample(x, z + CELL) - ground.sample(x, z - CELL);

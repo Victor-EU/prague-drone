@@ -185,6 +185,8 @@ Render physically based in linear light. Post chain, in order:
 
 As built in M1: the tonemap is a per-channel filmic curve with separate toe and shoulder (the Uchimura form), chosen over AgX because the two ends of the Classic Negative curve are tuned independently, and per-channel compression is what turns bright sky grey-cyan and sunlit plaster cream. The meter weights bright pixels more than dark ones and may move at most one stop either side of each light family's base exposure, so the key of a light stays put while the drone turns. The LUT is written by `tools/make-lut.ts` from the §5.1 table (hue-selective chroma and hue moves in OKLCh, split toning, a slight lift of the blacks); its parameters are the hand authoring, and `lut-fit.ts` refines them later. Each family adds a trim on top: white balance, saturation, contrast.
 
+Changed in M5, the greens: the green window of the LUT reaches down to the yellow-greens of sunlit grass and young leaves (centred at OKLCh hue 130 instead of 135, 42° wide instead of 34), turns them 17° toward teal instead of 12°, and takes more of their chroma (0.64 instead of 0.72). Measured in 8725, the photograph's sunlit meadow is at hue 141 and chroma 0.043; the render's had been at 119 and 0.066, a yellow olive, and is now at 130 to 135 and 0.048. Reds, ochres and the sky are outside the window and unchanged.
+
 Provide a runtime toggle (key G, developer builds only) that bypasses steps 4 and 5 so the grade can be judged. Comparison against photographs happens only in the offline tool `tools/compare.ts` (§12.1); the app itself never loads a photograph.
 
 ### 5.3 The four light families
@@ -287,19 +289,23 @@ From map reading, then verified against OpenStreetMap on 2026-09-25: rows more t
 | Building footprints, heights, levels, roof shape and colour where tagged | OpenStreetMap, bbox 14.34 to 14.49 E, 50.04 to 50.13 N (about 5 km around Charles Bridge, the outer ring of §2), from the BBBike Prague extract (one PBF file, refreshed weekly) filtered locally, or from Overpass with the same queries | Tier 2 and 3 buildings |
 | Terrain | ČÚZK DMR 5G through the ČÚZK image service (`ags.cuzk.gov.cz`, open data, CC BY 4.0), resampled to a 5 m grid over the world and a 100 m grid out to 16 km for the horizon | Height field |
 | Water | OSM `natural=water`, `waterway=river`, weirs (`waterway=weir`), islands | River mesh and weirs |
-| Land use | OSM `leisure=park`, `landuse=forest`, `natural=wood`, `landuse=orchard`, `leisure=garden`, `landuse=grass` | Vegetation placement |
+| Land use | OSM `leisure=park`, `landuse=forest`, `natural=wood`, `landuse=orchard`, `leisure=garden`, `landuse=grass` | Ground colours, and the kind of tree that grows where |
+| Trees | ČÚZK DMP OK, the surface model from image correlation of the aerial survey (same service, same licence, 0.5 m), minus DMR 5G: a canopy height model at 1 m over the world, from which every tree crown is found (M5, see §8.4); OSM `natural=tree` for the leaf type where mapped | Tree positions, heights, crown sizes |
 | Tram network | OSM `railway=tram`, tram routes 9, 12, 17, 20, 22, 23 | Tram paths and overhead wire poles |
 | Streets | OSM highways with `surface=cobblestone` where tagged | Road textures, tram streets |
 | Bridges | OSM with `bridge=yes`, `man_made=bridge` | Span geometry and piers |
 | Districts | OSM cadastral areas (`boundary=cadastral`: Malá Strana, Staré Město, Josefov, Hradčany, Nové Město, Vyšehrad, Smíchov, and the 19th-century districts) | District rules of §7.2 and §8.1 |
 | Street lamps | OSM `highway=street_lamp` | Lamp posts, and the night lights of M4 |
+| Garden walls | OSM `barrier=wall`, `barrier=retaining_wall` (M5) | The walls of the gardens in the photographed city (§8.4) |
 | City walls | OSM `barrier=city_wall`, `historic=citywalls` | Vyšehrad's ramparts (§7.1) |
 
 A build script (`tools/fetch-data.ts`) downloads and caches raw data in `cache/` (git-ignored). OSM comes from the extract by default: on 2026-09-25 the public Overpass servers timed out on most requests and then refused connections, while the extract is a single 73 MB download that the script filters in seconds; `--overpass` switches back. Buildings use OSM's `building:part` elements where mappers drew them (an outline with parts is drawn as its parts), which gives the churches and towers their real massing even as blocks. Then a second script (`tools/build-world.ts`) turns it into binary files under `public/world/` (8.5 MB gzipped for M0) and writes `cache/preview.png`, a top-down map with the route, for checking a build by eye. The app never calls a map service at runtime.
 
 The horizon uses DMR 5G too, not the Copernicus DEM of the first draft: Copernicus is a surface model that includes buildings and trees, and the whole 16 km horizon lies inside Czechia, where DMR 5G is bare earth throughout. The built world is the rectangle x −5000 to 5000, north −5000 to 4000 (1 km tiles), inside the OSM box above; beyond it only the horizon terrain.
 
-The app shows the attribution the data licences require: OpenStreetMap contributors (ODbL) and ČÚZK (CC BY 4.0).
+The app shows the attribution the data licences require: OpenStreetMap contributors (ODbL) and ČÚZK (CC BY 4.0, for DMR 5G and, from M5, DMP OK).
+
+As built in M5: `tools/fetch-data.ts chm` downloads DMP OK and DMR 5G over the world rectangle in kilometre tiles at 1 m and keeps their difference, the canopy height, as bytes in 0.2 m steps (cache/chm/, 86 MB, about 7 minutes). The service keeps its pixels square in degrees whatever size is asked for, so each tile is fetched with a margin in square pixels and resampled from the extent the server reports; asked for square metres, it returned tiles stretched north to south by half, which the building outlines showed at once.
 
 ### 6.4 Terrain notes
 
@@ -340,6 +346,8 @@ As built in M3, and a change from the first paragraph: the landmarks are modelle
 Built in M3: Charles Bridge (sixteen arches on fifteen piers, placed where OSM's outline of the bridge widens round the cutwaters; pointed cutwaters upstream with wooden ice guards, square buttresses downstream, pilasters carrying the thirty statue groups, lamps, the cobbled deck rising four metres to the middle of the river), the Old Town Bridge Tower, the Lesser Town towers with the Judith tower and the gate, Týn, St Nicholas with the city belfry, the Castle (St Vitus in full massing, and the palace wings with even rows of windows, grey roofs over the west wings and red over the Old Royal Palace), the Petřín tower, and Vyšehrad (the ramparts, the Leopold, Brick and Tábor gates, the rotunda of St Martin, the basilica). From 900 triangles (the Old Town Bridge Tower) to 25,000 (Charles Bridge), 47,000 in all: well under the budget of the first paragraph, because shape carries them and the shader the surface. The landmarks still to come in M4 stand as their OSM 3D parts with the roof shapes mapped there (the water tower's spire, St Francis's dome, the Klementinum's onion) instead of boxes.
 
 As built in M4, the rest of the table, in the same way. One generator (`tools/landmarks/bridges.ts`) makes the seven bridges from OSM's outline of each deck: the axis and width, the runs of water the axis crosses, and in them the number of spans each bridge has, its arch (segmental, flat elliptical, steel ribs), piers and cutwaters, parapet or railing and lamps. Legion Bridge has granite arches, candelabra on the piers and a land arch over Střelecký island's promenade; Mánes Bridge flat arches with open spandrels and lamp pylons; Čechův Bridge steel ribs between stone piers and the four columns with gilded figures; Jiráskův and Štefánik bridges pale concrete; Palacký Bridge red voussoirs among the grey; the railway bridge three trusses with a walkway outside each and its stone viaduct. The landmarks: Novotného lávka's water tower and the Smetana Museum (OSM's `way/30619188`, the building at the tip, not the one first listed); the Dancing House, Ginger lofted from pinched rings on her slanting legs, Fred's cylinder of staggered framed windows and the Medusa; the National Theatre, its dark vault over the auditorium with the gilded band and crown and the chariots on the front, the stage house from its OSM parts; the Šítkov water tower; St Francis's dome on its drum; the Klementinum's tower with Atlas; the Rudolfinum from its OSM parts with statues along the balustrade; the Powder Tower and the Old Town Hall tower as the bridge towers' Gothic type, the tower with the astronomical clock's two dials in their frame and the chapel's oriel; on Old Town Square St Nicholas with its two onion towers and dome, the Jan Hus memorial and the Marian column (new rows in §6.2). Every modelled landmark is marked floodlit for the night (§8.7). 117,000 triangles in all, 70,000 of them new, the bridges 58,000 of those. The Mánes gallery stays as its OSM parts, white blocks, and the facades round Old Town Square stay the generic ones of M2.
+
+Added in M5: the gloriette at the top of the Schönborn garden (`tools/landmarks/gardens.ts`), the white pavilion over the Petřín orchards in 8725, with its open arcade, round windows, terrace and small belvedere under a grey pyramid roof. As OSM's block it was an ochre house.
 
 Vyšehrad's ramparts are retaining walls 10 to 15 m high, which the 5 m terrain grid smears into slopes. Each wall on OSM's line (`barrier=city_wall`) is built as a solid rampart: a battered brick face, a parapet, and the grassed walk behind it, 14.5 m deep. The build lowers the terrain at the foot of the face and for 7 m behind it, under the walk, so no slope of the grid lies in front of the brick.
 
@@ -409,6 +417,20 @@ Height field from §6.4. Vegetation instanced by land-use polygon and district:
 
 Greens are graded per §5.1: olive and teal, never lime. Trees cast shadows and sway slightly.
 
+Changed in M5, before building it: trees stand where the real ones stand, not scattered over land-use polygons. OSM maps 58 trees on all of Petřín and tags none of its orchards, so polygons would put forest where the Seminary garden has fruit trees in rows on meadow. ČÚZK's surface model from the aerial survey, less the bare terrain, is a canopy height model in which single crowns show at 1 m, orchard rows included; each crown found in it becomes a tree with its own height and spread. Land use and district then choose the kind: fruit trees in the Petřín gardens and orchards, poplars on the islands, conifers as dark accents, broad round crowns elsewhere. The table above still describes the look of each kind. Exact placement stays out of scope (§4); the canopy model is simply the cheapest way to get the woods, the orchards and the lawns in the right proportions and places.
+
+As built in M5 (`tools/lib/trees.ts` at build time, `src/world/trees.ts` in the app):
+
+- **Finding the trees.** The canopy heights are masked where OSM has a building, bridge deck, water or railway, with a metre's margin, smoothed lightly, and every local maximum above 2.5 m (1.8 m on lawns, in parks and orchards, where no car stands) that stands higher than its surroundings within a radius growing with its height is a crown's top. Flat tops are dropped as roofs and vehicles the outlines missed; the leaves make a crown's top rough. The spread is where the canopy falls to half the height or rises toward a neighbour, looking out in eight directions. 470,000 crowns in the world: 384,000 broad, 63,000 fruit trees, 18,000 conifers, 1,400 poplars, and 4,500 rose bushes (below). `trees.bin` holds them in 3.3 MB.
+- **Kinds.** A tree OSM maps as needle-leaved within 4 m is a conifer; small trees (under 7.5 m, crown under 4.5 m) on lawns, in parks, gardens and orchards are fruit trees, which is what they are on Petřín and at Strahov; tall trees on the islands are poplars one time in four; tall narrow crowns elsewhere are poplars, conifers or broad trees in thirds; conifers are otherwise a small share by land use (3 in 10 in cemeteries, 1 in 10 in woods). Heights and spreads are the survey's; the crown's depth, the trunk and the shape come from the kind.
+- **Drawing them.** Within 250 m of the drone every tree is a crown of lobes on a trunk at three levels of detail (to 90 m, to 230 m, beyond), each lobe moved and resized by the tree's seed so no two crowns are alike, the nearest ones lumpy; beyond 250 m every tree is a sprite, a quad shaded as the ellipsoid it stands for with a lumpy outline, and far away the sprites thin out and grow so the canopy keeps its coverage with fewer layers. The near set is sorted again whenever the drone has moved 6 m. Crowns cast shadows (with their simplest geometry) and stand in the river's mirror.
+- **Foliage** is drawn in the shader from a tiling 3D noise texture at three scales: two-metre clumps that still show from 500 m, half-metre clusters, and near the camera the leaves themselves, crisp, with dark gaps between. Each lightens and darkens the albedo, tilts the normal and breaks the outline while it is bigger than a pixel or two; the lobes' normals are bent toward the whole crown's, so it is lit as one mass; the sky reaches less deep into a crown and less under it. Colours are the §8.9 foliage tones, a little darker, fruit trees lighter, conifers and poplars darker. The crowns sway a little.
+- **The ground under them.** A bit in each land-use cell marks a crown over it, and there the ground is mostly the dark floor of a wood; lawns in parks and gardens, which had stood in for the canopy since M2, are grass again. Lawns, meadows and orchards get patches yellowed by early summer, clumps, and near the camera the grain of the blades, more in the meadows (known by their yellower green).
+- **The rose garden.** In the Petřín rose garden the open ground between OSM's lawn panels, where no crown stands, is rose beds, and so are OSM's flower beds across the city. A bed is dark leaves with blooms scattered over them, one variety to a stretch of bed: red (half of them), coral, pink or white. On the beds stand rose bushes, about one to a square metre and a half, whose blooms (eight to ten centimetres, with their petals near) crowd their tops and outer sides.
+- **Garden walls.** OSM's walls and retaining walls of 1.6 m and more in Petřín, Strahov, Malá Strana, Hradčany and the Old Town, 30 km of them, cream plaster or stone, following the ground (`tools/lib/walls.ts`).
+
+Cost, and a lesson: the first version cost 8 ms a frame. Two things on the M2's tile-based GPU made it so. A shader that may discard (for the ragged outlines) is shaded under every crown that overlaps it, so only the two nearest levels of detail discard; and the frame's geometry matters (a quarter of a million crowns of 100 triangles made the tiler work far harder than their pixels), so meshes stop at 250 m instead of 600. Outlines drawn as polygons instead of discarded cost more in vertices than they saved. The noise became a texture instead of arithmetic. Trees now cost about 1.3 ms a frame on average.
+
 ### 8.5 The river
 
 - Surface mesh follows the OSM water polygon; flow direction south to north at 0.5 m/s in the shader; ripple normal map tiled at two scales.
@@ -424,7 +446,7 @@ As built in M4 (`src/world/water.ts`, `src/render/reflection.ts`, `tools/lib/riv
 - **Reflection**: planar, as §11 has it. The city is rendered once more from the camera mirrored in the water, at 40% resolution, every other frame, and only within 2.2 km. Everything below the plane is clipped by a world clipping plane: three's oblique-projection trick assumes an ordinary depth range, and this renderer's is reversed. The sky and its cumulus are not in the mirror; the water shader computes them along the reflected ray, over a band of heights above it, as the ripples too small to see tilt the facets. The mirror is sampled where a facet tilted by δ sends the ray, 2δ up or down the screen, and smeared into columns. Its lookup leans toward the sky, since at a grazing angle the facets facing the eye show most. About a third of every reflection is sky whatever lies across the river, and the whole is scaled to three quarters, as rippled water seen edge on reflects less than a flat surface.
 - **Weirs**: from OSM's weir lines (Staroměstský, Šítkovský, Helmovský and the small ones). The level each side is made even up to the crest, the pieces of one weir sharing their levels, so the step of 1 to 1.3 m falls exactly there. The water grid leaves a band round each crest to a finer strip: level water above, glassy over the crest, the glacis, the white roller at its foot and streaks trailing downstream, moving at the water's speed.
 - **Embankments**: stone walls wherever the bank stands a metre or more above the water, between Vyšehrad and Letná and on the islands, 21 km of them. Each has a face 2 m out from OSM's edge (the 5 m terrain grid's slope stays behind it), a parapet, and a paved walk 3.5 m deep that covers the slope. The stone's grime band sits at the waterline. There is no beach.
-- Not yet: the islands' trees (M5), the pontoon and the boats (M6).
+- The islands' trees came with M5 (§8.4). Not yet: the pontoon and the boats (M6).
 
 ### 8.6 Sky, sun, clouds
 
@@ -583,7 +605,7 @@ None. The app is silent. No audio assets, no speaker control.
 | World data | Prebuilt binary tiles under `public/world/`, gzip | No runtime API calls |
 | Landmarks | Modelled in code on their OSM footprints (`tools/landmarks/`), packed as finished meshes into `landmarks.bin`, drawn with the building material | §7.1, which says why not Blender and glTF |
 | Roofs | Straight skeletons at build time (CGAL through the `straight-skeleton` package, WebAssembly, a development dependency only); the tiles carry the finished roof faces and the props, and the tile workers make the meshes | §8.1; roofs from footprints at runtime would cost the loading budget |
-| Instancing | InstancedMesh for buildings (grouped by district and material), trees, props, people | Draw call budget under 600 |
+| Instancing | InstancedMesh for buildings (grouped by district and material), trees, props, people. As built in M5: the trees are instanced geometry with their own attributes, the near set in fifteen meshes (three levels of detail, five kinds) rewritten as the drone moves, and a sprite mesh per kilometre tile | Draw call budget under 600 |
 | Shadows | Cascaded shadow maps for buildings from three.js's `SunLight` (2 cascades of 2048 to 2.8 km), a heightfield shadow for the terrain computed on the GPU when the sun moves, and the cloud-shadow projection | Long morning shadows need reach. As built in M1: three r186 ships a two-cascade sun; 4096 cascades cost a millisecond more on an M2 for little visible gain. Hills shading the city (Petřín in the evening) come from the heightfield at any distance and softly; terrain in the cascades cost 3 ms a frame |
 | Reflections | Planar reflection for the river. As built in M4: at 40% resolution, every other frame, within 2.2 km, the sky and clouds computed by the water shader (§8.5) | The evening frames depend on it |
 | Hosting | Static, any CDN | No backend |
@@ -598,12 +620,12 @@ Photos/              the reference set (422) and _excluded/
 mockup/              index.html (3D sketch), plan.html (set + route), set/ thumbnails
 data/                hero.json (starred frames), viewpoints.json, route.json, palette.json, landmarks.json
 tools/               fetch-data.ts, build-world.ts, check-route.ts, find-landmarks.ts, make-lut.ts, lut-fit.ts, compare.ts;
-                     lib/ roofs.ts, skeleton.ts, props.ts, plan.ts (+ plan-worker.ts), districts.ts, river.ts;
+                     lib/ roofs.ts, skeleton.ts, props.ts, plan.ts (+ plan-worker.ts), districts.ts, river.ts, trees.ts, walls.ts;
                      landmarks/ kit.ts, index.ts, parts.ts, bridges.ts, and one module per landmark or group (§7.1)
 cache/               raw downloads from fetch-data.ts (generated, git-ignored)
 assets/              lut/classic-neg.cube
-src/                 app: core/ (incl. buildings.ts, shared with the build), world/ (terrain, tiles, buildings and their
-                     material, landmarks, streets, water, lights), sky/ (atmosphere, families, clouds, shadows),
+src/                 app: core/ (incl. buildings.ts and trees.ts, shared with the build), world/ (terrain, tiles, buildings
+                     and their material, landmarks, streets, water, lights, trees, blooms), sky/ (atmosphere, families, clouds, shadows),
                      render/ (post, the river's mirror), drone/, ui/,
                      dev/ (side-by-side, development only)
 public/world/        built tiles (generated, git-ignored)
@@ -629,6 +651,8 @@ Added in M2, for lining up and tuning: a viewpoint can be nudged from the URL (`
 Added in M3: `/?view=look&x=…&north=…&agl=…&heading=…&tilt=…&focal35=…` is a free camera for inspecting the world, and `npm run compare -- look@x=…,north=…` writes the render alone; the weather can be nudged like the camera (`&coverage=0.9&overcast=0`); portrait frames take the 24 mm side of the frame as their width. The viewpoints of 8704, 8607, 8942 and 8753 were solved from the photographs: the bearings (and, for 8607, the heights) of spires and towers whose positions OSM gives. 8704 turned out to be taken from Mánes Bridge, 8607 from below the astronomical clock, 8942 from the mouth of Mostecká on the lower square, 8753 from the gardens below Strahov.
 
 Added in M4: a viewpoint may give the eye's height `y` instead of `agl`, for views from bridges and over the water. The new viewpoints were solved the same way: 9486 from the piers of Charles Bridge (to 0.03°), on the Letná slope above the Edvard Beneš embankment; 8490 and 9542, like 9547, from Legion Bridge; 8809 from the north parapet of Charles Bridge near the Old Town end (the four spires of St Vitus fix only the bearing; the height of the far bank's waterline fixed the rest); 8158 on Jiráskovo náměstí, placed so Ginger and Fred stand at their sizes in the frame. Overcast views are exposed with the deck as the sky, nearly white as in the photographs; M3's 8942 is brighter for it.
+
+Added in M5: 8725 was taken in the Seminary garden, looking up at the gloriette of the Schönborn garden (the US Embassy's flag on it gives it away); its size in the frame puts the camera 147 m from it, and the street lamp at the right edge, 10 m away and 35° from it, with OSM's paths fixes the rest. 8722 is a close-up of single roses at 64 mm, which the world cannot give: its viewpoint is a rose bed near the Petřín tower, low and 5 m from the bushes, with the sky behind and the sun behind the camera, and it is judged on its colours and light. 9369's camera moved 200 m across the Letná lawn: at its M1 place it now stands in a grove.
 
 ### 12.2 Motion tests
 
@@ -739,6 +763,23 @@ Known gaps after M4:
 - **The hold at stop 18** looks steeply down on the dark rock. Its framing is M7's blue-hour hold.
 - **Not modelled.** Old Town Square's facade row (the Týn school's gables), the Mánes gallery (OSM's white blocks), the New Stage, and the penguins on Kampa.
 - **Frame pacing.** Because the mirror is drawn every other frame, frames at the busiest stops alternate by 3 to 4 ms.
+
+**M5, built 2026-09-26.** Vegetation and the season:
+
+- **Trees** where the real ones stand, 470,000 of them from ČÚZK's canopy model (§6.3, §8.4): Petřín's woods, the orchards of the Seminary and Strahov gardens, the islands, Kampa, Letná, the embankments and every courtyard tree of Malá Strana. The Petřín panoramas now have their dark forest in the foreground (7940), Vyšehrad its framing trees (8372, 8385), Letná its slope of big trees (9486).
+- **The season**: lawns and meadows yellowed in patches, the Petřín rose garden in bloom with its beds and bushes, the city's flower beds, garden walls, the Schönborn gloriette over the orchards (§7.1).
+- **The greens** of the grade turned toward teal (§5.2).
+- **Side-by-side**: 8725 (the meadow and orchard under the gloriette) and 8722 (roses), new viewpoints (§12.1).
+
+The world grew to 21.7 MB: trees.bin 3.3 MB, the land use 1 MB for the canopy's shade, the garden walls 0.7 MB. Measured on the Apple M2 at 2048 × 1536 with the synced benchmark: 8 to 17.8 ms a frame across the 18 stops, 13.4 on average, against 12.1 with the trees hidden. The take-off and the Malá Strana roofs, the stops that see the most of the city, are just over 16.7 ms on the M2; the target machine of §11 has half again its GPU.
+
+Known gaps after M5:
+
+- **Close up, a crown is a lumpy mass, not leaves.** From the ground (8725, 8753) the nearest trees read as foliage at a glance and as modelled shapes when looked at; 8722's single roses are beyond the world, and its render shows rose bushes in bloom instead.
+- **Young orchard trees** planted since the survey are not in it, so the Seminary garden is sparser than 8725 shows. Grass is a texture: from eye level it is a mown lawn, not the long meadow of 8725.
+- **7924's forest**: the canopy model puts the treetops below the tower 2 to 5° under the bottom of the frame; in the photograph they fill it. **8753**: the slope below Strahov is lawn with scattered trees where the photograph has dense bushes, and a tree beside the camera frames the view.
+- **Trees at night** stand as dark silhouettes; the lamps' pools do not light them.
+- **The cumulus** are still the smooth blobs of M1.
 
 ---
 

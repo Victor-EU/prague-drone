@@ -3,10 +3,11 @@
 //   node tools/fetch-data.ts               fetch whatever is missing from cache/
 //   node tools/fetch-data.ts --force       fetch everything again
 //   node tools/fetch-data.ts --overpass    take OSM from Overpass instead of the city extract
-//   node tools/fetch-data.ts dem | osm     only one of the two
+//   node tools/fetch-data.ts dem | osm | chm   only one of the three
 //
 // OSM comes from the BBBike Prague extract (one PBF file, filtered here into the same layers the
-// Overpass queries below describe), or from Overpass; terrain from the ČÚZK DMR 5G image service.
+// Overpass queries below describe), or from Overpass; terrain from the ČÚZK DMR 5G image service;
+// the canopy heights the trees are found in from ČÚZK's surface model less DMR 5G (design.md §8.4).
 
 import { mkdirSync, existsSync, writeFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -27,6 +28,8 @@ const OVERPASS = [
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
 ];
 const DMR5G = 'https://ags.cuzk.gov.cz/arcgis2/rest/services/dmr5g/ImageServer/exportImage';
+/** DMP OK: the surface model from image correlation of the aerial survey, vegetation and buildings included. */
+const DMP = 'https://ags.cuzk.gov.cz/arcgis2/rest/services/dmp/ImageServer/exportImage';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -129,6 +132,10 @@ const LAYERS: { name: string; body: string; split?: number }[] = [
   { name: 'districts', body: `relation["boundary"="cadastral"];` },
   { name: 'lamps', body: `node["highway"="street_lamp"];` },
   { name: 'walls', body: `way["barrier"="city_wall"]; way["historic"="citywalls"];` },
+  // Mapped trees, for their leaf type (design.md §8.4); the positions come from the canopy model.
+  { name: 'trees', body: `node["natural"="tree"];` },
+  // Garden walls and retaining walls (design.md §8.4).
+  { name: 'gardenwalls', body: `way["barrier"~"^(wall|retaining_wall)$"];` },
 ];
 
 function cells(n: number): [number, number, number, number][] {
@@ -220,6 +227,8 @@ const FILTERS: Record<string, { way?: (t: Tags) => boolean; relation?: (t: Tags)
   lamps: { node: (t) => t.highway === 'street_lamp' },
   // Fortress walls: the Vyšehrad ramparts of design.md §7.1.
   walls: { way: (t) => t.barrier === 'city_wall' || t.historic === 'citywalls' },
+  trees: { node: (t) => t.natural === 'tree' },
+  gardenwalls: { way: (t) => t.barrier === 'wall' || t.barrier === 'retaining_wall' },
 };
 
 async function downloadExtract() {
@@ -377,8 +386,89 @@ async function fetchTerrain() {
   await fetchDem('horizon', xToLon(-HORIZON), zToLat(HORIZON), xToLon(HORIZON), zToLat(-HORIZON), 0.0004);
 }
 
+// ---- Canopy ------------------------------------------------------------------------------
+
+/**
+ * One float32 grid from an ČÚZK image service over a lon/lat box, with invalid pixels as NaN, and
+ * the extent the server delivered: it keeps pixels square in degrees whatever size is asked for.
+ */
+async function exportGrid(url: string, lon0: number, lat0: number, lon1: number, lat1: number, width: number, height: number) {
+  const params = new URLSearchParams({
+    bbox: [lon0, lat0, lon1, lat1].map((v) => v.toFixed(8)).join(','),
+    bboxSR: '4326', imageSR: '4326', size: `${width},${height}`, format: 'bsq', pixelType: 'F32',
+    interpolation: 'RSP_BilinearInterpolation', f: 'json',
+  });
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const info = await (await fetch(`${url}?${params}`, { headers: { 'User-Agent': UA } })).json();
+      if (!info.href) throw new Error(JSON.stringify(info).slice(0, 200));
+      const w = info.width as number, h = info.height as number;
+      const buf = Buffer.from(await (await fetch(info.href, { headers: { 'User-Agent': UA } })).arrayBuffer());
+      const n = w * h;
+      if (buf.length < n * 4) throw new Error(`got ${buf.length} bytes`);
+      const data = new Float32Array(buf.buffer.slice(buf.byteOffset, buf.byteOffset + n * 4));
+      const mask = buf.subarray(n * 4);
+      if (mask.length * 8 >= n) for (let i = 0; i < n; i++) if (!(mask[i >> 3] & (0x80 >> (i & 7)))) data[i] = NaN;
+      return { data, w, h, extent: info.extent as { xmin: number; ymin: number; xmax: number; ymax: number } };
+    } catch (e) {
+      if (attempt >= 4) throw e;
+      await sleep(2000 * attempt);
+    }
+  }
+}
+
+/**
+ * Canopy heights over the world at 1 m, one file per kilometre tile (cache/chm/<x0>_<z0>.u8): the
+ * surface model less the bare terrain, in 0.2 m steps from 0 to 51 m, rows from north to south.
+ * Buildings are in it too; tools/lib/trees.ts masks them with the OSM footprints.
+ */
+async function fetchCanopy() {
+  mkdirSync(join(CACHE, 'chm'), { recursive: true });
+  const T = 1000;
+  const jobs: [number, number][] = [];
+  for (let z0 = WORLD.zMin; z0 < WORLD.zMax; z0 += T) for (let x0 = WORLD.xMin; x0 < WORLD.xMax; x0 += T) jobs.push([x0, z0]);
+  const t0 = Date.now();
+  let done = 0, fetched = 0;
+  const worker = async () => {
+    for (let job = jobs.shift(); job; job = jobs.shift()) {
+      const [x0, z0] = job;
+      const file = join(CACHE, 'chm', `${x0}_${z0}.u8`);
+      done++;
+      if (fresh(file)) continue;
+      // Square pixels of a metre north to south (0.64 m east to west), with a margin, then
+      // resampled to whole metres of the local frame, which is linear in longitude and latitude.
+      const lon0 = xToLon(x0 - 4), lon1 = xToLon(x0 + T + 4), lat0 = zToLat(z0 + T + 4), lat1 = zToLat(z0 - 4);
+      const step = 1 / 111200;
+      const w = Math.round((lon1 - lon0) / step), h = Math.round((lat1 - lat0) / step);
+      const [surface, bare] = await Promise.all([exportGrid(DMP, lon0, lat0, lon1, lat1, w, h), exportGrid(DMR5G, lon0, lat0, lon1, lat1, w, h)]);
+      const at = (g: typeof surface, lon: number, lat: number) => {
+        const e = g.extent;
+        const c = ((lon - e.xmin) / (e.xmax - e.xmin)) * g.w - 0.5, r = ((e.ymax - lat) / (e.ymax - e.ymin)) * g.h - 0.5;
+        const i = Math.max(0, Math.min(g.w - 2, Math.floor(c))), j = Math.max(0, Math.min(g.h - 2, Math.floor(r)));
+        const tx = c - i, tz = r - j, d = g.data, W = g.w;
+        return (d[j * W + i] * (1 - tx) + d[j * W + i + 1] * tx) * (1 - tz) + (d[(j + 1) * W + i] * (1 - tx) + d[(j + 1) * W + i + 1] * tx) * tz;
+      };
+      const chm = new Uint8Array(T * T);
+      for (let j = 0; j < T; j++) {
+        const lat = zToLat(z0 + j + 0.5);
+        for (let i = 0; i < T; i++) {
+          const lon = xToLon(x0 + i + 0.5);
+          const d = at(surface, lon, lat) - at(bare, lon, lat);
+          chm[j * T + i] = d > 0 ? Math.min(255, Math.round(d / 0.2)) : 0;
+        }
+      }
+      writeFileSync(file, chm);
+      fetched++;
+      if (fetched % 10 === 0) console.log(`chm: ${done}/${done + jobs.length} tiles, ${((Date.now() - t0) / 1000).toFixed(0)} s`);
+    }
+  };
+  await Promise.all([worker(), worker(), worker()]);
+  console.log(`chm: ${fetched} tiles fetched, ${done - fetched} cached, ${((Date.now() - t0) / 1000).toFixed(0)} s`);
+}
+
 const only = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 if (only.length === 0 || only.includes('dem')) await fetchTerrain();
+if (only.length === 0 || only.includes('chm')) await fetchCanopy();
 if (only.length === 0 || only.includes('osm')) {
   if (USE_OVERPASS) await fetchOsm();
   else {

@@ -13,6 +13,7 @@ import { Streets } from './streets.ts';
 import { Landmarks } from './landmarks.ts';
 import { Water, reflects } from './water.ts';
 import { CityLights } from './lights.ts';
+import { Trees } from './trees.ts';
 import type { Pack } from '../core/pack.ts';
 
 export interface Manifest {
@@ -21,6 +22,7 @@ export interface Manifest {
   tile: number;
   tiles: TileInfo[];
   kinds: { building: number; part: number; bridge: number; box: number };
+  trees?: { file: string } | null;
   attribution: string;
 }
 
@@ -33,11 +35,12 @@ export class World implements Ground {
   readonly landmarks: Landmarks;
   readonly water: Water;
   readonly lights: CityLights;
+  readonly trees: Trees | null;
   readonly bounds: Manifest['world'];
   readonly height: HeightGrid;
   private surf: HeightGrid;
 
-  private constructor(base: string, manifest: Manifest, height: HeightGrid, surf: HeightGrid, landuse: THREE.Texture, horizon: HeightGrid, water: Pack, streets: Pack, landmarks: Pack, renderer: THREE.WebGLRenderer) {
+  private constructor(base: string, manifest: Manifest, height: HeightGrid, surf: HeightGrid, landuse: THREE.Texture, horizon: HeightGrid, water: Pack, streets: Pack, landmarks: Pack, trees: Pack | null, renderer: THREE.WebGLRenderer) {
     this.manifest = manifest;
     this.bounds = manifest.world;
     this.height = height;
@@ -58,6 +61,9 @@ export class World implements Ground {
     this.group.add(this.streets.group);
     this.landmarks = new Landmarks(landmarks, this.buildings.material);
     this.group.add(this.landmarks.group);
+    // The trees of the canopy model (src/world/trees.ts).
+    this.trees = trees ? new Trees(trees as Pack<{ nx: number; nz: number; tile: number; x0: number; z0: number }>, height) : null;
+    if (this.trees) this.group.add(this.trees.group);
     this.lights = new CityLights(renderer, streets.arrays.lamp as Float32Array, ((landmarks.meta as { lights?: number[] }).lights ?? []));
     this.group.add(this.lights.points);
     reflects(this.terrain.group);
@@ -69,7 +75,7 @@ export class World implements Ground {
 
   static async load(base: string, renderer: THREE.WebGLRenderer): Promise<World> {
     const manifest: Manifest = await (await fetch(`${base}/manifest.json`)).json();
-    const [terrain, surface, landuse, horizon, water, streets, landmarks] = await Promise.all([
+    const [terrain, surface, landuse, horizon, water, streets, landmarks, trees] = await Promise.all([
       fetchPack(`${base}/terrain.bin`),
       fetchPack(`${base}/surface.bin`),
       fetchPack(`${base}/landuse.bin`),
@@ -77,13 +83,14 @@ export class World implements Ground {
       fetchPack(`${base}/water.bin`),
       fetchPack(`${base}/streets.bin`),
       fetchPack(`${base}/landmarks.bin`),
+      manifest.trees ? fetchPack(`${base}/trees.bin`) : Promise.resolve(null),
     ]);
     const lu = landuse.meta as { nx: number; nz: number };
     return new World(
       base, manifest,
       HeightGrid.fromPack(terrain), HeightGrid.fromPack(surface),
       landuseTexture(landuse.arrays.ground as Uint8Array, lu.nx, lu.nz),
-      HeightGrid.fromPack(horizon), water, streets, landmarks, renderer,
+      HeightGrid.fromPack(horizon), water, streets, landmarks, trees, renderer,
     );
   }
 

@@ -38,6 +38,7 @@
     { "id": "strelecky-island", "cz": "Střelecký ostrov", "en": "Střelecký Island", "kind": "island", "x": -100, "north": -612 },
     { "id": "slovansky-island", "cz": "Slovanský ostrov, Žofín", "en": "Slavonic Island", "kind": "island", "x": 43, "north": -834 },
     { "id": "kampa", "cz": "Kampa", "en": "Kampa Island", "kind": "island", "x": -243, "north": -167 },
-    { "id": "naplavka", "cz": "Náplavka", "en": "Rašín embankment", "kind": "place", "x": 257, "north": -1612 }
+    { "id": "naplavka", "cz": "Náplavka", "en": "Rašín embankment", "kind": "place", "x": 257, "north": -1612 },
+    { "id": "schonborn-gloriette", "cz": "Glorieta Schönbornské zahrady", "en": "Schönborn garden gloriette", "kind": "building", "x": -733, "north": -82, "osm": ["way/27580901"] }
   ]
 }
