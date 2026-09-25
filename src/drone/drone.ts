@@ -30,6 +30,10 @@ export class Drone {
   private world: Ground;
   mode: Mode = 'auto';
   fast = false;
+  /** True while the cover is up: the route waits at its start, drifting (design.md §10.2). */
+  waiting = false;
+  private waitTime = 0;
+  private driftGain = 0;
   /** Route time in 1× seconds. */
   t = 0;
   readonly position = new THREE.Vector3();
@@ -87,9 +91,15 @@ export class Drone {
     this.mode = 'auto';
   }
 
+  /** The cover lifts: the route starts and the drift settles over a second. */
+  fly() {
+    this.waiting = false;
+  }
+
   /** Hands control to the user at the current position and heading. */
   takeOver(hover = false) {
     if (this.mode === 'manual') return;
+    this.waiting = false;
     const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(this.quaternion);
     this.heading = Math.atan2(fwd.x, -fwd.z);
     this.pitch = THREE.MathUtils.clamp(Math.asin(THREE.MathUtils.clamp(fwd.y, -1, 1)), -60 * DEG, 20 * DEG);
@@ -122,13 +132,9 @@ export class Drone {
     const t = Math.min(this.t, r.end);
     r.position(t, this.position);
     r.target(t, this.look);
-    if (this.t >= r.end) {
-      // The hold: drift very slowly around the last stop.
-      const a = this.holdTime * 0.05;
-      this.position.x += Math.sin(a) * 12;
-      this.position.z += (Math.cos(a) - 1) * 12;
-      this.position.y += Math.sin(this.holdTime * 0.21) * 1.2;
-    }
+    // The blue-hour hold drifts very slowly around the last stop; the cover drifts the same way at the first.
+    if (this.t >= r.end) this.drift(this.holdTime, 1);
+    else if (this.driftGain > 0) this.drift(this.waitTime, this.driftGain);
     // Keep clear of roofs and hills: look a little ahead and rise early.
     let floor = -Infinity;
     for (const ahead of [0, 1, 2, 3]) {
@@ -151,9 +157,22 @@ export class Drone {
     this.focal = r.focal(t);
   }
 
+  private drift(time: number, gain: number) {
+    const a = time * 0.05;
+    this.position.x += Math.sin(a) * 12 * gain;
+    this.position.z += (Math.cos(a) - 1) * 12 * gain;
+    this.position.y += Math.sin(time * 0.21) * 1.2 * gain;
+  }
+
   private updateAuto(dt: number) {
     const r = this.route;
-    if (this.t < r.end) this.t = Math.min(r.end, this.t + dt * (this.fast ? 2 : 1));
+    if (this.waiting || this.driftGain > 0) {
+      this.waitTime += dt;
+      this.driftGain = this.waiting ? 1 : approach(this.driftGain, 0, 0.5, dt);
+      if (this.driftGain < 0.002) this.driftGain = 0;
+    }
+    if (this.waiting) { /* the route waits at its start under the cover */ }
+    else if (this.t < r.end) this.t = Math.min(r.end, this.t + dt * (this.fast ? 2 : 1));
     else this.holdTime += dt;
     this.autoPose(dt);
     if (this.blendFrom) {

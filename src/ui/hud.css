@@ -41,9 +41,24 @@ label.check { font-size: 9.5px; letter-spacing: 0.14em; color: var(--dim); displ
 .attribution { position: absolute; right: 22px; bottom: 4px; font-size: 8.5px; letter-spacing: 0.08em; color: rgba(255, 255, 255, 0.42); }
 #stats { position: absolute; left: 22px; top: 110px; font: 10px/1.6 ui-monospace, Menlo, monospace; color: #dfe; background: rgba(0, 0, 0, 0.45);
   padding: 6px 9px; border-radius: 6px; white-space: pre; display: none; text-shadow: none; }
-#loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 10px;
-  background: #0b1016; color: var(--dim); font-size: 11px; letter-spacing: 0.3em; transition: opacity 1.2s ease; }
-#loading h2 { margin: 0; color: var(--ink); font-weight: 400; font-size: 22px; letter-spacing: 0.42em; }
+/* The cover (design.md §10.2): the first view under three lines of small capitals. The dark ground
+   fades once the first frame is drawn; the words and the darkening fade when the cover lifts. */
+#hud { transition: opacity 2s ease; }
+#hud.covered { opacity: 0; }
+#cover { position: fixed; inset: 0; cursor: pointer; user-select: none; }
+#cover.lifted { pointer-events: none; }
+#cover .ground { position: absolute; inset: 0; background: #0b1016; transition: opacity 1.5s ease; }
+#cover.shown .ground, #cover.lifted .ground { opacity: 0; }
+#cover .veil { position: absolute; inset: 0; transition: opacity 1.5s ease;
+  background: linear-gradient(to top, rgba(8, 12, 16, 0.42) 0%, rgba(8, 12, 16, 0) 38%); }
+#cover.lifted .veil { opacity: 0; }
+#cover .words { position: absolute; left: max(24px, 3.2vw); bottom: max(24px, 3vw); text-shadow: var(--shadow); transition: opacity 1s ease; }
+#cover.lifted .words { opacity: 0; }
+#cover h1 { margin: 0; font-size: clamp(26px, 2.4vw, 54px); font-weight: 400; letter-spacing: 0.42em; }
+#cover .sub { margin-top: max(10px, 0.9vw); font-size: clamp(9px, 0.78vw, 15px); letter-spacing: 0.26em; color: var(--dim); }
+#cover .go { margin-top: max(22px, 2.2vw); font-size: clamp(9px, 0.72vw, 14px); letter-spacing: 0.32em; color: var(--dim); transition: color 0.8s ease; }
+#cover.ready .go { color: var(--gold); animation: breathe 3.2s ease-in-out infinite; }
+@keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 /* Viewpoint renders for the side-by-side: the frame alone, centred, no interface. */
-body.viewpoint #hud, body.viewpoint #loading { display: none; }
+body.viewpoint #hud, body.viewpoint #cover { display: none; }
 body.viewpoint canvas#view { margin: auto; position: absolute; inset: 0; }

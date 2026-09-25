@@ -555,8 +555,8 @@ Total 360 s (fast mode: identical path and gaze at 2× speed, 180 s). Time of da
 
 | # | Stop | t (s) | Clock | Position x, north, alt | Gaze x, north, alt | Lens | Move |
 |---|---|---|---|---|---|---|---|
-| 1 | Vyšehrad, take-off | 0 | 06:20 | 720, −2950, 340 | 458, −2446, 40 | wide | Hold 4 s high above the fortress looking north, then start north |
-| 2 | Down the Vltava | 20 | 07:15 | 300, −2300, 220 | 60, −1750, 10 | wide | Descend along the river, railway bridge and Palacký bridge below, rowers |
+| 1 | Vyšehrad, take-off | 0 | 06:20 | 420, −2500, 183 | 110, −1341, 14 | wide | The cover frame (§10.2): above the north edge of the rock, the river leading north to the bridges, the Old Town on the right, the Castle on the horizon. Hold 4 s, then start north |
+| 2 | Down the Vltava | 20 | 07:15 | 250, −2000, 200 | 100, −1250, 12 | wide | Descend along the river, railway bridge and Palacký bridge below, rowers |
 | 3 | Dancing House | 40 | 08:05 | 330, −1500, 130 | 215, −1215, 30 | long → wide | Approach, half orbit at 100 m radius, a tram passes |
 | 4 | National Theatre, Legion Bridge | 58 | 08:55 | 260, −900, 115 | 157, −600, 20 | wide | Pass the golden roof, cross the island, tram on the bridge |
 | 5 | Petřín, the climb | 74 | 09:40 | −450, −720, 190 | −1173, −334, 90 | wide | Rise over orchards and meadows |
@@ -576,7 +576,7 @@ Total 360 s (fast mode: identical path and gaze at 2× speed, 180 s). Time of da
 
 Leg speeds run from about 20 m/s in the Old Town orbit to about 65 m/s on the long sweeps from Wenceslas Square to Letná and from Letná back up the river; the sweeps are high and wide, so the ground speed reads as a glide. The last leg has 43 s so that the arrival slows down.
 
-The spline is timed: each stop is a knot at its time `t`, knot velocities are the three-point derivative (zero at the first and last stop), and altitude uses monotone tangents so the drone never sinks below a low stop between two higher ones. Where the route doubles back (stops 12, 14, 15) the drone nearly stops and the next leg peaks near 90 m/s at 200 to 300 m up; `tools/check-route.ts` prints the timeline. Stops 8 and 9 were moved on 2026-09-25 when the Lesser Town Bridge Towers turned out to stand 78 m north of their first coordinate (§6.2): stop 8 now looks at the towers, and stop 9 sits above the bridge deck 100 m east of them, over Kampa, so the descent passes north of the towers rather than through them, looking down the bridge to the Old Town tower.
+The spline is timed: each stop is a knot at its time `t`, knot velocities are the three-point derivative (zero at the first and last stop), and altitude uses monotone tangents so the drone never sinks below a low stop between two higher ones. Where the route doubles back (stops 12, 14, 15) the drone nearly stops and the next leg peaks near 90 m/s at 200 to 300 m up; `tools/check-route.ts` prints the timeline. Stops 8 and 9 were moved on 2026-09-25 when the Lesser Town Bridge Towers turned out to stand 78 m north of their first coordinate (§6.2): stop 8 now looks at the towers, and stop 9 sits above the bridge deck 100 m east of them, over Kampa, so the descent passes north of the towers rather than through them, looking down the bridge to the Old Town tower. Stops 1 and 2 were moved on 2026-09-26 when stop 1 became the cover (§10.2): the take-off had been 340 m up looking steeply down at the fortress, and now sits 183 m above the north edge of the rock looking down the river at 8° below the horizon; stop 2 moved 300 m on so the first leg keeps its pace.
 
 The route does not loop. At stop 18 the drone holds above Vyšehrad in the blue hour, drifting very slowly, clouds and river still moving, until the user presses a key. Arrows hand over manual control there; Enter restarts the flight from stop 1 at dawn. Fast mode uses the same table with `t / 2`.
 
@@ -592,12 +592,20 @@ Nearly nothing. The render fills the window. Elements:
 - Top right: the clock, sun elevation, cloud coverage, altitude. Small, tabular numbers.
 - Bottom centre: the landmark name in Czech with a one-line English subtitle, fading in as the drone approaches and out as it leaves.
 - Bottom: a thin time-of-day slider with a checkbox "day advances with flight", mode buttons, and a key hint that hides after 20 s.
-- Intro overlay on load: PRAHA, EARLY SUMMER, "click to fly". Auto mode starts under the overlay so the city is already moving when it lifts.
+- The cover on load (§10.2): the drone's first view under three lines of small capitals, "click to fly". The route waits at its start under the cover, drifting, and continues from it without a cut when the cover lifts.
 - Bottom right, very small: the data attribution (OpenStreetMap contributors, ČÚZK), which the licences require.
 
 Typography: a neutral grotesk (Helvetica Neue or Inter), letter-spaced small caps for labels, white at 90% with a soft shadow. Accent colour is a warm gold `#f0c26a`, used only for the mode chip and the slider thumb.
 
-### 10.2 Loading
+### 10.2 The cover and loading
+
+The app opens on the cover: the drone's own first view, stop 1 of the route, held and slowly drifting, with three lines of small capitals in the lower left corner. The picture is the cover; the words are a caption. Decided on 2026-09-26 (§14) over the alternative of the Petřín evening panorama with a fade to the dawn take-off.
+
+- **The picture.** Stop 1 (§9.2): 183 m above the north edge of Vyšehrad at 06:20, looking down the river to the bridges, the Old Town on the right, the Castle on the horizon in the dawn haze. The route waits at its start under the cover, so a slow click never misses stops 1 and 2. The drone drifts as it does in the blue-hour hold, the clouds move, the river moves. No blur and no panel over the city; only a faint darkening along the bottom edge, so the words read.
+- **The words.** Bottom left, the HUD's grotesk, letter-spaced capitals, white at 90% with the soft shadow: PRAHA at about 44 px on a 1800 px window, EARLY SUMMER · FROM THE AIR in the dim white, and CLICK TO FLY in the gold, breathing slowly. The HUD is hidden under the cover.
+- **Loading.** The words appear first on the dark ground (`#0b1016`), the third line reading LOADING THE CITY. When the first frame is drawn the picture fades in beneath the words over 1.5 s; the words do not move. When the tiles are in (or 6 s after the first frame) the third line becomes CLICK TO FLY. A click during loading flies anyway.
+- **The lift.** On a click or any key the words fade over 1 s and the darkening over 1.5 s; the HUD fades in over 2 s, starting a second later; the drift settles over a second and the route starts, holding its 4 s at stop 1 and then heading north. Arrows on the cover take over manually, as they do anywhere.
+- Development URLs with `view`, `t` or `manual` skip the cover.
 
 Under 8 s on a fast connection: a first frame with terrain, river, sky and Tier 3 blocks appears within 3 s; Tier 2 roofs and Tier 1 landmarks stream in over the next 5 s while the drone is still high above Vyšehrad, where detail is small. Textures load progressive. Total transfer budget 60 MB, cached.
 
@@ -814,6 +822,8 @@ Known gaps after M6:
 - **Cars** vanish at the ends of the embankment lanes.
 - **No historic trams.** 8942's photograph has line 42's 1900s car; the render has a T3 pair.
 
+**The cover, built 2026-09-26** (the first piece of M7), in `src/ui/cover.ts`: the words on the dark ground, the city fading in beneath them at the first frame, the call to fly once the tiles are in, and the lift into the flight; the drone waits at stop 1 with the hold's drift until the cover lifts (`Drone.waiting`), then the drift settles over a second. Stop 1 was reframed for it and stop 2 moved on (§9.2).
+
 ---
 
 ## 14. Decisions already made
@@ -851,6 +861,10 @@ Proofread on 2026-09-25, fixes accepted by the user:
 Decided on 2026-09-25 by the user, after M1:
 
 - **Evening photographs for the morning.** The Petřín panoramas were shot at 18:50, not in the morning (§3.1), and the set has no dawn frames. The route keeps Petřín in the morning (stops 5 and 6), and the evening panoramas stand as the reference for the dawn and warm-morning family: a warm low sun and haze, with the sun on the other side. The side-by-side still renders each hero frame at its own time (§12.1).
+
+Decided on 2026-09-26 by the user, the cover:
+
+- **The cover is the take-off.** The app opens on the route's stop 1, waiting and drifting, under a three-line caption, and the flight continues from it without a cut (§10.2). The alternative, the Petřín evening panorama as the cover with a fade to black into the dawn take-off, was shown as the more beautiful frame and declined for the continuity. Stop 1 was reframed lower and flatter for the cover, and stop 2 moved on with it (§9.2).
 
 ---
 

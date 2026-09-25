@@ -13,6 +13,7 @@ import { Route, hfovFor, WIDE, LONG, type RouteData } from './drone/route.ts';
 import { Drone } from './drone/drone.ts';
 import { Keys } from './drone/input.ts';
 import { Hud } from './ui/hud.ts';
+import { Cover } from './ui/cover.ts';
 import { parseClock } from './core/sun.ts';
 import routeData from '../data/route.json';
 import landmarkData from '../data/landmarks.json';
@@ -59,10 +60,10 @@ renderer.info.autoReset = false;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(50, 1, 3, 60000);
 
-const loading = document.createElement('div');
-loading.id = 'loading';
-loading.innerHTML = '<h2>PRAHA</h2><div>EARLY SUMMER · LOADING THE CITY</div>';
-document.body.appendChild(loading);
+// The cover (design.md §10.2): the loading screen, then the first view under the title, until a
+// click or a key. Development URLs that place the drone skip it.
+const cover = !view && !params.has('t') && !params.has('manual') ? new Cover(document.body, () => fly()) : undefined;
+let firstFrameAt = 0;
 
 // The weather of this session: clouds rolled per session (design.md §8.6), overcast on one in five.
 const session = rollSession(params.has('seed') ? Number(params.get('seed')) : undefined);
@@ -114,6 +115,7 @@ if (params.has('clock')) {
 if (params.has('t')) drone.setAuto(Number(params.get('t')));
 drone.fast = params.has('fast');
 if (params.has('manual')) drone.takeOver();
+drone.waiting = cover !== undefined;
 if (dayAdvances) clock = route.clock(drone.t);
 
 const hud = new Hud(document.getElementById('hud')!, {
@@ -128,6 +130,14 @@ const hud = new Hud(document.getElementById('hud')!, {
 }, world.manifest.attribution.replace('Map data ', '').replace(/\. /g, ' · '));
 let statsOn = params.has('stats');
 hud.stats.style.display = statsOn ? 'block' : 'none';
+const hudEl = document.getElementById('hud')!;
+hudEl.classList.toggle('covered', cover !== undefined);
+
+/** The cover lifts: the drone starts the route, the interface follows a second later. */
+function fly() {
+  drone.fly();
+  setTimeout(() => hudEl.classList.remove('covered'), 1000);
+}
 
 world.buildings.load(world.manifest.tiles, drone.position);
 const worldLoadedAt = performance.now();
@@ -250,7 +260,9 @@ function frame(time: number) {
   timer.update(time);
   const dt = Math.min(timer.getDelta(), 0.1);
 
-  for (const k of keys.drain()) {
+  const pressed = keys.drain();
+  if (pressed.length && cover?.up) cover.lift();
+  for (const k of pressed) {
     if (k === 'ArrowLeft' || k === 'ArrowRight' || k === 'ArrowUp' || k === 'ArrowDown' || k === 'KeyA' || k === 'KeyD') drone.takeOver();
     else if (k === 'Space') drone.toggleHover();
     else if (k === 'Enter' || k === 'NumpadEnter') {
@@ -301,11 +313,12 @@ function frame(time: number) {
         `tiles ${world.buildings.loaded}/${world.buildings.total}  grade ${pipeline.grade ? 'on' : 'off'}  ao ${pipeline.ao ? 'on' : 'off'}`;
     }
   }
-  if (loading.style.opacity !== '0') {
-    if (import.meta.env.DEV) console.info(`first frame at ${performance.now().toFixed(0)} ms`);
-    loading.style.opacity = '0';
-    setTimeout(() => loading.remove(), 1300);
+  if (!firstFrameAt) {
+    firstFrameAt = performance.now();
+    if (import.meta.env.DEV) console.info(`first frame at ${firstFrameAt.toFixed(0)} ms`);
+    cover?.showCity();
   }
+  if (cover?.up && (world.buildings.loaded >= world.buildings.total || performance.now() - firstFrameAt > 6000)) cover.ready();
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
