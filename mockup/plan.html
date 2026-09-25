@@ -109,25 +109,24 @@ const IDS = `7843 7862 7885 7888 7889 7896 7924 7927 7928 7934 7935 7936 7937 79
 // places: key, title, what it teaches, stops, camera position (x east, north), id ranges [lo,hi] inclusive
 const PLACES = [
  ['petrin_am','PETŘÍN · MORNING PANORAMAS','<b>The roofscape bible.</b> Malá Strana and the Old Town from the drone\'s own angle in warm clear morning light: roof forms, the river, the bridges, St Nicholas dome, the Castle. Also the default daylight grade.',[5,6],[-1100,-300],[[7913,7958],[7862,7862]]],
- ['petrin_castle','PETŘÍN · STRAHOV · THE CASTLE VIEW','St Vitus and the Castle across Malá Strana roofs; the ridge silhouette the drone sweeps along.',[7],[-1250,100],[[7964,7981],[8749,8759],[9092,9092],[9631,9633]]],
- ['petrin_soft','PETŘÍN · OVERCAST PANORAMAS','Same viewpoints in soft light. Defines the overcast end of the slider and how the roofs read without sun.',[5,7],[-1100,-300],[[9179,9202]]],
- ['petrin_garden','PETŘÍN · ROSE GARDEN · ORCHARDS · MEADOWS','<b>The season.</b> Roses, peonies, orchard paths, meadow grass, cumulus over the hill. Petřín is a garden, not a green blob.',[5,6],[-1140,-450],[[7885,7900],[8721,8748],[8760,8764],[9617,9630]]],
+ ['petrin_castle','PETŘÍN · STRAHOV · THE CASTLE VIEW','St Vitus and the Castle across Malá Strana roofs; the ridge silhouette the drone sweeps along.',[7],[-1250,100],[[7964,7981],[8749,8759]]],
+ ['petrin_garden','PETŘÍN · ROSE GARDEN · ORCHARDS · MEADOWS','<b>The season.</b> Roses, peonies, orchard paths, meadow grass, cumulus over the hill. Petřín is a garden, not a green blob.',[5,6],[-1140,-450],[[7885,7900],[8721,8748],[8760,8764]]],
  ['vysehrad_top','VYŠEHRAD · ROOFS · GATES · PANORAMAS WITH CLOUDS','<b>Cumulus over red roofs.</b> The take-off view; roof tile colour under midday sun; the brick gates and walls of the fortress; the clay courts as a colour note.',[1],[458,-2446],[[8284,8403]]],
- ['vysehrad_river','VYŠEHRAD FROM THE RIVER · RAILWAY BRIDGE · NÁPLAVKA','The twin spires from the water, the iron railway bridge, the embankment, chimneys and graffiti of the south.',[1,2],[100,-2100],[[8186,8273]]],
- ['dancing','DANCING HOUSE · JIRÁSKŮV BRIDGE · WEIRS','The glass tower with red trams; the weirs and their foam; Palacký bridge; the Rašín embankment facades.',[2,3],[200,-1250],[[8111,8185],[8951,8951]]],
+ ['vysehrad_river','NÁPLAVKA · THE RAILWAY BRIDGE','The Rašín embankment looking north, moored boats, the riveted deck and walkway of the railway bridge. No frame in the set shows the Vyšehrad basilica.',[1,2],[100,-2100],[[8270,8273]]],
+ ['dancing','DANCING HOUSE · JIRÁSKŮV BRIDGE · WEIRS','The glass tower with red trams; the weirs and their foam; Palacký bridge; the Rašín embankment facades.',[2,3],[200,-1250],[[8111,8185]]],
  ['legion','LEGION BRIDGE · NATIONAL THEATRE · STŘELECKÝ ISLAND · ŠÍTKOV TOWER','<b>Midday river with cumulus.</b> Trams on the bridge with the Castle behind, pedal boats, the golden roof, the water tower, rowers at the weir.',[4],[-64,-655],[[8093,8099],[8404,8540],[8645,8649]]],
- ['malastrana','MALÁ STRANA · STREETS · FACADES · ST NICHOLAS','<b>Materials.</b> Red and ochre plaster, dormers, cobbles, lamps, window boxes; the dome and bell tower with trams; Újezd trams.',[8],[-500,150],[[7982,7995],[8082,8083],[8541,8556],[8767,8797],[8813,8818],[8920,8942]]],
- ['towers','LESSER TOWN TOWERS · ON CHARLES BRIDGE','The bridge towers and gate, statues, tourists, the view along the bridge in overcast light.',[8,9],[-336,11],[[7996,8003],[8584,8594],[8800,8801],[8881,8918]]],
- ['charles_water','CHARLES BRIDGE FROM THE WATER · GOLDEN EVENING','<b>Hero landmark.</b> Arches, Old Town tower, Smetana museum, St Francis dome; pedal boats and swans; warm evening light on stone.',[9,17],[-100,-350],[[8005,8035],[8559,8583],[8683,8715],[8845,8872],[9029,9057],[9515,9521],[9640,9643]]],
- ['kampa','KAMPA · ČERTOVKA · THE WEIR BELOW PETŘÍN','The mill channel, Kampa roofs, the weir with Petřín rising behind, ducks and pigeons.',[10],[-243,-167],[[7840,7843],[8066,8069],[8709,8709],[8802,8806],[8821,8826],[9203,9204],[9612,9614]]],
+ ['malastrana','MALÁ STRANA · STREETS · FACADES · ST NICHOLAS','<b>Materials.</b> Red and ochre plaster, dormers, cobbles, lamps, window boxes; the dome and bell tower with trams; Újezd trams.',[8],[-500,150],[[7982,7995],[8082,8083],[8541,8556],[8767,8797],[8920,8942]]],
+ ['towers','LESSER TOWN TOWERS · ON CHARLES BRIDGE','The bridge towers and gate, statues, tourists, the view along the bridge in overcast light.',[8,9],[-336,11],[[8881,8918]]],
+ ['charles_water','CHARLES BRIDGE FROM THE WATER · GOLDEN EVENING','<b>Hero landmark.</b> Arches, Old Town tower, Smetana museum, St Francis dome; pedal boats and swans; warm evening light on stone.',[9,17],[-100,-350],[[8005,8035],[8683,8715],[8845,8872],[9029,9057],[9515,9521]]],
+ ['kampa','KAMPA · ČERTOVKA · THE WEIR BELOW PETŘÍN','The mill channel in soft light, Kampa roofs, the weir with Petřín rising behind, ducks and pigeons. Also the daylight overcast reference.',[10],[-243,-167],[[7840,7843],[8066,8069],[8709,8709],[8821,8826],[9203,9204]]],
  ['oldtown','OLD TOWN SQUARE · TÝN · THE CLOCK · LANES','<b>Hero landmark.</b> Týn towers and facade, the astronomical clock, the square, Karlova and the lanes.',[11,12,13],[808,111],[[8595,8616],[8830,8839]]],
  ['manes','MÁNES BRIDGE · THE CASTLE ACROSS THE WATER','Castle and Malá Strana waterfront from the Old Town side; the Rudolfinum embankment.',[14],[150,334],[[8807,8812]]],
- ['newtown','NEW TOWN · WENCESLAS SQUARE · TRAMS','Pink and cream Art Nouveau facades, red trams, the glass bank building.',[15],[1100,-500],[[8618,8633],[8946,8949]]],
+ ['newtown','NEW TOWN · WENCESLAS SQUARE · TRAMS','Pink and cream Art Nouveau facades, red trams, the glass bank building.',[15],[1100,-500],[[8618,8633]]],
  ['letna','LETNÁ · THE BRIDGES · ŠTEFÁNIK BRIDGE · LAWNS','<b>All the bridges in one frame.</b> Late light on the river, big lawn trees, the Old Town skyline through leaves.',[16],[330,1000],[[9245,9314],[9325,9373],[9451,9500]]],
  ['holesovice','HOLEŠOVICE · ST ANTHONY · TRAMS','Outside the drone\'s scope, but the best tram frames: red Tatra trams under cumulus, cobbles, church spires.',[15,16],[1300,1400],[[9385,9450],[9513,9513]]],
  ['evening','EVENING EMBANKMENTS · PASTEL LIGHT','<b>The overcast pastel evening.</b> Reflections on still water, pigeons on the cobbles, the Dancing House and Jiráskův bridge at dusk.',[17],[100,-1400],[[8039,8065],[8952,9026]]],
- ['bluehour','BLUE HOUR · NIGHT','<b>The end of the route.</b> Charles Bridge and the Castle lit, penguins on the embankment, the Dancing House at night, the mill wheel.',[18],[-80,-500],[[8655,8680],[9059,9062],[9527,9608]]],
- ['garden','WALLENSTEIN GARDEN · LEAVES · FRUIT · WATER LILIES','<b>Early summer detail.</b> Mock orange, wet leaves, green plums and cherries, water lilies, the peacock. Not for the drone, for the palette of greens.',[6,8],[-600,400],[[9074,9178],[9223,9241],[9369,9369]]],
+ ['bluehour','BLUE HOUR · NIGHT','<b>The end of the route.</b> Charles Bridge and the Castle lit, penguins on the embankment, the Dancing House at night, the mill wheel.',[18],[-80,-500],[[8655,8680],[9527,9608]]],
+ ['garden','WALLENSTEIN GARDEN · LEAVES · FRUIT · WATER LILIES','<b>Early summer detail.</b> Mock orange, wet leaves, green plums and cherries, water lilies, the peacock. Not for the drone, for the palette of greens.',[6,8],[-600,400],[[9074,9178],[9223,9241]]],
 ];
 function placeOf(id){ const n=+id; for(const p of PLACES){ for(const [a,b] of p[5]) if(n>=a&&n<=b) return p; } return null; }
 const PHOTOS = IDS.map(id=>{ const p=placeOf(id); return {id, place:p?p[0]:'other', stops:p?p[3]:[]}; });
@@ -135,10 +134,9 @@ const unplaced=PHOTOS.filter(p=>p.place==='other').map(p=>p.id);
 if(unplaced.length) PLACES.push(['other','UNSORTED','Frames the ranges did not catch.',[],[0,0],[]]);
 
 // hero proposal (starred by default)
-const HERO = `7917 7940 7944 8754 8371 8385 9194 9486 8704 8573 8607 8600 8801 8796 8158 8216 8812 8082 8002 8001 8822 8506 8495 8439 8725 8729 8722 9369 8694 8990 9519 9542`.split(' ').filter(i=>IDS.includes(i));
+const HERO = `7924 7940 7944 8753 9204 8372 8385 8683 8704 8849 8607 8608 8903 8942 8158 8809 8082 8777 8884 8825 8490 8440 8725 8722 9369 9486 8694 8988 9547 9542`.split(' ').filter(i=>IDS.includes(i));
 // closest substitutes for proposal frames not in the curated folder
-const SUBS = {'7917':'7924','8754':'8753','9194':'9204','8573':'8683','8600':'8608','8002':'8777','8001':'8884','8822':'8825','8506':'8849','8495':'8490','8439':'8440','8990':'8988'};
-for(const k in SUBS) if(!IDS.includes(k) && IDS.includes(SUBS[k]) && !HERO.includes(SUBS[k])) HERO.push(SUBS[k]);
+// Hero list matches data/hero.json (30 frames, all in the curated set).
 
 // ---------- route ----------
 const STOPS = [
@@ -180,8 +178,8 @@ s+=`<text x="12" y="20" font-size="10" fill="#9aa3ab" letter-spacing=".2em">N �
 svg.innerHTML=s;
 
 // ---------- state ----------
-let star=new Set(JSON.parse(localStorage.getItem('praha.star2')||'null') || HERO);
-function save(){ localStorage.setItem('praha.star2',JSON.stringify([...star])); render(); }
+let star=new Set(JSON.parse(localStorage.getItem('praha.star3')||'null') || HERO);
+function save(){ localStorage.setItem('praha.star3',JSON.stringify([...star])); render(); }
 function toggle(id){ star.has(id)?star.delete(id):star.add(id); save(); }
 
 // ---------- stats ----------
