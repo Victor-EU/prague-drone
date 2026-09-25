@@ -7,7 +7,7 @@
 //   horizon.bin   100 m height grid out to 16 km, detail grid inside the world rectangle
 //   surface.bin   10 m grid of the highest thing at each place (ground, water, roofs, decks)
 //   landuse.bin   2.5 m ground classes (src/core/landuse.ts)
-//   water.bin     the water surface as a triangle mesh
+//   water.bin     the water surface as a triangle mesh, with the flow direction and the weirs' foam
 //   streets.bin   tram rails and lamp posts
 //   landmarks.bin the hand-built landmarks (tools/landmarks/) as finished meshes
 //   tiles/*.bin   per 1 km tile: buildings, bridge decks and landmark boxes as footprints
@@ -37,11 +37,13 @@ import { District, districtMaps, districtAt, LANDMARK_COLOURS, BRIDGE, hexRgb, t
 import { Style, BFlag, EFlag } from '../src/core/buildings.ts';
 import { buildLandmarks, packLandmarks, raiseSurface, MODELS, type Site, type Built } from './landmarks/index.ts';
 import { rampartLines, carveRamparts } from './landmarks/vysehrad.ts';
+import { Kit } from './landmarks/kit.ts';
+import { Flow, flowLines, weirs, inWeirBand, weirStrip, embankments } from './lib/river.ts';
 
 const OUT = join('public', 'world');
 /** --partial: build with whatever layers are cached, for testing while a fetch is still running. */
 const PARTIAL = process.argv.includes('--partial');
-/** --landmarks: rebuild landmarks.bin only (the rest of public/world/ stays as it is), for modelling. */
+/** --landmarks: rebuild landmarks.bin and water.bin only (the rest of public/world/ stays as it is), for modelling. */
 const ONLY_LANDMARKS = process.argv.includes('--landmarks');
 function layer(name: string) {
   if (PARTIAL && !layerExists(name)) {
@@ -94,7 +96,8 @@ log(`terrain ${NX}×${NZ} at ${CELL} m`);
 const underground = (t: Tags) =>
   t.location === 'underground' || t.tunnel === 'yes' || t.covered === 'yes' || (parseNumber(t.layer) ?? 0) < 0;
 
-const waterFeatures = features(layer('water'), (t) =>
+const waterEls = layer('water');
+const waterFeatures = features(waterEls, (t) =>
   (t.natural === 'water' || t.waterway === 'riverbank') && !underground(t) && t.water !== 'wastewater',
 );
 log(`water: ${waterFeatures.length} areas`);
@@ -279,6 +282,12 @@ const level = new Float32Array(NX * NZ).fill(NaN);
   log('river level and bed');
 }
 
+// Which way the water flows, and the weirs: the level each side of a weir is made even up to its
+// crest, so the step falls under the foam (design.md §8.5, tools/lib/river.ts).
+const flow = new Flow(flowLines(waterEls));
+const weirList = weirs(waterEls, { water, level, bare }, flow, (x, z) => x > WORLD.xMin && x < WORLD.xMax && z > WORLD.zMin && z < WORLD.zMax);
+log(`weirs: ${weirList.map((w) => `${w.key} ${w.length.toFixed(0)} m, ${w.upper.toFixed(1)} to ${w.lower.toFixed(1)}`).join('; ')}`);
+
 // Vyšehrad's ramparts (tools/landmarks/vysehrad.ts): the ground at their feet and under their walks.
 const wallLines = (PARTIAL && !layerExists('walls') ? [] : layer('walls'))
   .filter((el) => el.type === 'way')
@@ -295,7 +304,9 @@ function levelAt(x: number, z: number): number {
   return level[j * NX + i];
 }
 
-// The water mesh: 10 m cells over the water, dilated by one cell so its edges hide under the banks.
+// The water mesh: 10 m cells over the water, dilated by one cell so its edges hide under the banks,
+// and at each weir a finer strip in place of the cells round its crest. Per vertex: the downstream
+// direction, and the foam.
 let waterPack: Uint8Array;
 {
   const WC = 10, r = WC / CELL;
@@ -312,7 +323,7 @@ let waterPack: Uint8Array;
         }
     }
   const index = new Int32Array(wnx * wnz).fill(-1);
-  const pos: number[] = [];
+  const pos: number[] = [], fl: number[] = [], foam: number[] = [];
   const idx: number[] = [];
   const vert = (I: number, J: number) => {
     const k = J * wnx + I;
@@ -320,20 +331,29 @@ let waterPack: Uint8Array;
       const x = WORLD.xMin + I * WC, z = WORLD.zMin + J * WC;
       index[k] = pos.length / 3;
       pos.push(x, levelAt(x, z), z);
+      const [fx, fz] = flow.at(x, z);
+      fl.push(Math.round(fx * 127), Math.round(fz * 127));
+      foam.push(0);
     }
     return index[k];
   };
+  // Cells near a weir: tested only within reach of one.
+  const nearWeir = (x: number, z: number) => weirList.some((w) => w.pts.some(([px, pz]) => Math.abs(px - x) < 40 && Math.abs(pz - z) < 40));
+  let holed = 0;
   for (let J = 0; J + 1 < wnz; J++)
     for (let I = 0; I + 1 < wnx; I++) {
       if (!(near[J * wnx + I] && near[J * wnx + I + 1] && near[(J + 1) * wnx + I] && near[(J + 1) * wnx + I + 1])) continue;
       const hs = [levelAt(WORLD.xMin + I * WC, WORLD.zMin + J * WC), levelAt(WORLD.xMin + (I + 1) * WC, WORLD.zMin + J * WC),
         levelAt(WORLD.xMin + I * WC, WORLD.zMin + (J + 1) * WC), levelAt(WORLD.xMin + (I + 1) * WC, WORLD.zMin + (J + 1) * WC)];
       if (hs.some(Number.isNaN)) continue;
+      const cx = WORLD.xMin + (I + 0.5) * WC, cz = WORLD.zMin + (J + 0.5) * WC;
+      if (nearWeir(cx, cz) && inWeirBand(weirList, cx, cz)) { holed++; continue; }
       const a = vert(I, J), b = vert(I + 1, J), c = vert(I, J + 1), d = vert(I + 1, J + 1);
       idx.push(a, c, b, b, c, d);
     }
-  waterPack = encodePack({ cell: WC }, { position: new Float32Array(pos), index: new Uint32Array(idx) });
-  log(`water mesh: ${pos.length / 3} vertices, ${idx.length / 3} triangles`);
+  for (const w of weirList) weirStrip(w, pos, fl, foam, idx);
+  waterPack = encodePack({ cell: WC }, { position: new Float32Array(pos), flow: new Int8Array(fl), foam: new Uint8Array(foam), index: new Uint32Array(idx) });
+  log(`water mesh: ${pos.length / 3} vertices, ${idx.length / 3} triangles (${holed} cells left to ${weirList.length} weir strips)`);
 }
 
 // ---- Landmarks --------------------------------------------------------------------------------
@@ -551,10 +571,24 @@ let landmarkMeshes: Built[];
     },
   };
   landmarkMeshes = await buildLandmarks(site, log);
+  // The embankment walls along the river and its channels, in the same pack (tools/lib/river.ts).
+  {
+    const k = new Kit(), d = new Kit();
+    const core = (p: Polygon) => { const [x, z] = centroid(p.outer); return Math.abs(x) < 2000 && Math.abs(z) < 2000; };
+    // Walls only where the drone sees them: Vyšehrad to Letná and the banks either side.
+    const seen = (x: number, z: number) => x > -2500 && x < 2800 && z > -2200 && z < 3600;
+    const river = waterFeatures
+      .filter((f) => /^(river|canal|lock|harbour)$/.test(f.tags.water ?? '') || f.tags.waterway === 'riverbank' || f.tags.water === 'stream')
+      .flatMap((f) => f.tags.water === 'stream' ? f.polygons.filter(core) : f.polygons);
+    const metres = embankments(river, { water, level, bare }, k, seen);
+    landmarkMeshes.push({ id: 'embankments', main: k.finish(), detail: d.finish() });
+    log(`embankments: ${(metres / 1000).toFixed(1)} km of wall, ${k.triangles} triangles`);
+  }
   if (ONLY_LANDMARKS) {
     const bytes = gzipSync(packLandmarks(landmarkMeshes), { level: 9 });
     writeFileSync(join(OUT, 'landmarks.bin'), bytes);
-    log(`wrote ${join(OUT, 'landmarks.bin')}: ${(bytes.length / 1e6).toFixed(2)} MB (landmarks only)`);
+    writeFileSync(join(OUT, 'water.bin'), gzipSync(waterPack, { level: 9 }));
+    log(`wrote ${join(OUT, 'landmarks.bin')}: ${(bytes.length / 1e6).toFixed(2)} MB, and water.bin (landmarks and water only)`);
     process.exit(0);
   }
   const before = kept.length;
@@ -793,13 +827,37 @@ const surface = new Grid(WORLD.xMin, WORLD.zMin, SC, SNX, SNZ, new Float32Array(
 
 let streetsPack: Uint8Array;
 {
-  // Tram tracks: each OSM way is one track; points every 3 m on the ground. Tracks on bridges
-  // and in tunnels wait for the bridges (M4).
+  // Tram tracks: each OSM way is one track; points every 3 m on the ground, and on a bridge on its
+  // road deck: the level faces of the modelled bridges, or the top of an OSM deck.
+  const DC = 2, deckTop = new Map<number, number>();
+  const dkey = (x: number, z: number) => Math.round(x / DC) * 100000 + Math.round(z / DC);
+  for (const b of landmarkMeshes) {
+    const p = b.main.position, idx = b.main.index;
+    for (let t = 0; t < idx.length; t += 3) {
+      const a = idx[t] * 3, c = idx[t + 1] * 3, d = idx[t + 2] * 3;
+      const ux = p[c] - p[a], uy = p[c + 1] - p[a + 1], uz = p[c + 2] - p[a + 2], vx = p[d] - p[a], vy = p[d + 1] - p[a + 1], vz = p[d + 2] - p[a + 2];
+      const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, nl = Math.hypot(nx, ny, nz);
+      if (nl < 1e-6 || Math.abs(ny / nl) < 0.97) continue;
+      const y = (p[a + 1] + p[c + 1] + p[d + 1]) / 3;
+      for (let gx = Math.ceil(Math.min(p[a], p[c], p[d]) / DC); gx <= Math.floor(Math.max(p[a], p[c], p[d]) / DC); gx++)
+        for (let gz = Math.ceil(Math.min(p[a + 2], p[c + 2], p[d + 2]) / DC); gz <= Math.floor(Math.max(p[a + 2], p[c + 2], p[d + 2]) / DC); gz++) {
+          const k = gx * 100000 + gz;
+          deckTop.set(k, Math.max(deckTop.get(k) ?? -Infinity, y));
+        }
+    }
+  }
+  const deckAt = (x: number, z: number) => {
+    const y = deckTop.get(dkey(x, z));
+    if (y !== undefined) return y;
+    for (const d of decks) if (pointInPolygon(x, z, d.poly)) return d.top;
+    return NaN;
+  };
   const rs: number[] = [0], rp: number[] = [];
   let km = 0;
   for (const el of layer('railways')) {
     const t = el.tags ?? {};
-    if (el.type !== 'way' || t.railway !== 'tram' || underground(t) || (t.bridge && t.bridge !== 'no')) continue;
+    if (el.type !== 'way' || t.railway !== 'tram' || underground(t)) continue;
+    const onBridge = !!t.bridge && t.bridge !== 'no';
     const line = lineOf(el);
     const pts: number[] = [];
     for (let k = 0; k + 2 < line.length; k += 2) {
@@ -813,11 +871,13 @@ let streetsPack: Uint8Array;
     let open = false;
     for (let k = 0; k < pts.length; k += 2) {
       const x = pts[k], z = pts[k + 1];
-      if (!inside(x, z) || water[Math.round((z - ground.z0) / CELL) * NX + Math.round((x - ground.x0) / CELL)]) {
+      const wet = inside(x, z) && water[Math.round((z - ground.z0) / CELL) * NX + Math.round((x - ground.x0) / CELL)];
+      const y = !inside(x, z) ? NaN : onBridge || wet ? deckAt(x, z) : ground.sample(x, z);
+      if (Number.isNaN(y)) {
         if (open) { rs.push(rp.length / 3); open = false; }
         continue;
       }
-      rp.push(x, ground.sample(x, z), z);
+      rp.push(x, y, z);
       open = true;
     }
     if (open) rs.push(rp.length / 3);

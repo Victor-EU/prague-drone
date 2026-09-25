@@ -80,6 +80,7 @@ function tower(k: Kit, d: Kit, s: number) {
 
 export const tyn: Model = {
   id: 'tyn',
+  floodlit: true,
   build(site: Site, k: Kit, d: Kit) {
     k.seed = d.seed = 53;
     const nr = orientedRect(site.feature('way/455314032')!.polygons[0].outer);

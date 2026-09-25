@@ -35,6 +35,10 @@ float praStep(float e, float x, float w) { return clamp((x - e) / max(w, 1e-4) +
 
 const GLSL_MAIN = /* glsl */ `
 float praGlass = 0.0, praMetal = 0.0, praRough = -1.0;
+// Night (design.md §8.7): light of its own (scaled by uCityLights), and the height above the ground
+// the street lamps' pools are judged at (negative: not lit by them).
+vec3 praEmit = vec3(0.0);
+float praAbove = -1.0;
 {
   int kind = int(vInfo.x + 0.5);
   int style = int(vInfo.y + 0.5);
@@ -87,9 +91,15 @@ float praGlass = 0.0, praMetal = 0.0, praRough = -1.0;
       float h = praHash(vec2(floor(cc) + seed * 3.7, floor(r) + seed * 1.3));
       vec3 glass = mix(vec3(0.03, 0.038, 0.046), vec3(0.12, 0.11, 0.1), h * h);
       c = mix(c, glass, win);
+      // At night a quarter of the windows are lit, and half the shopfronts: warm, some whiter.
+      float hl = praHash(vec2(floor(cc) * 1.7 + seed * 5.3, floor(r) * 2.3 + seed));
+      float lit = step(hl, r < 1.0 ? 0.4 : 0.18);
+      vec3 warm = mix(vec3(1.0, 0.52, 0.22), vec3(1.0, 0.76, 0.5), praHash(vec2(hl * 7.0, seed)));
+      praEmit += warm * win * lit * 0.07;
     }
     diffuseColor.rgb = c;
     praGlass = win;
+    praAbove = v;
   } else if (kind == ${Surface.Roof} || kind == ${Surface.DormerRoof}) {
     float u = vFacade.x, s = vFacade.y, smax = vFacade.z;
     float course = s / 0.34;
@@ -147,6 +157,7 @@ float praGlass = 0.0, praMetal = 0.0, praRough = -1.0;
     c = mix(c, c * vec3(0.4, 0.39, 0.38), black);
     c *= mix(0.82, 1.0, smoothstep(0.0, 2.5, v));
     diffuseColor.rgb = c;
+    praAbove = v;
   } else if (kind == ${Surface.Metal}) {
     float u = vFacade.x, s = vFacade.y, smax = vFacade.z;
     vec3 c = diffuseColor.rgb;
@@ -180,7 +191,13 @@ float praGlass = 0.0, praMetal = 0.0, praRough = -1.0;
     float x = vFacade.x, y = vFacade.y, W = max(vFacade.z, 0.1), H = max(vFacade.w, 0.1);
     vec3 g = vec3(0.03, 0.036, 0.044) * (0.75 + 0.6 * praHash(vec2(seed, floor(y / 2.0))));
     float stone = 0.0;
-    if (style == ${Glass.Tracery}) {
+    if (style == ${Glass.Curtain}) {
+      // A curtain wall: pale, half-mirrored glass in a light frame of mullions and floors.
+      g = vec3(0.3, 0.35, 0.38);
+      float k = x / 1.5, f = y / 3.1;
+      stone = max(praPulse(k, 0.0, 0.06, max(fwidth(k), 1e-4)), praPulse(f, 0.0, 0.08, max(fwidth(f), 1e-4)));
+      praMetal = 0.55 * (1.0 - stone);
+    } else if (style == ${Glass.Tracery}) {
       float n = max(2.0, floor(W / 0.85 + 0.5));
       float k = x / W * n;
       stone = praPulse(k + 0.06, 0.0, 0.12, max(fwidth(k), 1e-4)) * step(0.02, x / W) * step(x / W, 0.98);
@@ -197,7 +214,16 @@ float praGlass = 0.0, praMetal = 0.0, praRough = -1.0;
   } else if (kind == ${Surface.Opening}) {
     praRough = 1.0;
   }
+  // Floodlit landmarks: warm light from below on the walls, less on the roofs, fading upward.
+  if (mod(floor(vInfo.z / 2.0 + 0.01), 2.0) > 0.5) {
+    float facing = 1.0 - 0.6 * abs(normalize(vPraN).y);
+    float up = praAbove >= 0.0 ? praAbove : 20.0;
+    praEmit += diffuseColor.rgb * vec3(1.0, 0.5, 0.17) * 0.1 * facing * (0.45 + 0.55 * exp(-up / 22.0));
+  }
+  if (kind == ${Surface.Glass} && style != ${Glass.Curtain}) praEmit += vec3(1.0, 0.7, 0.4) * 0.02 * praGlass;
+  if (kind == ${Surface.Glass} && style == ${Glass.Curtain}) praEmit += vec3(1.0, 0.86, 0.66) * 0.07 * praGlass;
 }
+vec3 praPoolE = praAbove >= 0.0 ? diffuseColor.rgb * praLampPool(vPraWorld, praAbove) * 0.14 : vec3(0.0);
 `;
 
 export function buildingMaterial(): THREE.MeshStandardMaterial {
@@ -213,6 +239,7 @@ export function buildingMaterial(): THREE.MeshStandardMaterial {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${GLSL_PARS}`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\n${GLSL_MAIN}\nif (praRough >= 0.0) roughnessFactor = praRough;\nroughnessFactor = mix(roughnessFactor, 0.14, praGlass);`)
-      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = max(metalnessFactor, praMetal);');
+      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = max(metalnessFactor, praMetal);')
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += praEmit * uCityLights + praPoolE;');
   }, '-buildings');
 }

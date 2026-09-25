@@ -45,4 +45,10 @@ export const U = {
   tAO: tex(),
   uAOViewProj: { value: new THREE.Matrix4() },
   uAOOn: { value: 0 },
+  // Seconds since the app started, for what moves on its own: water, foam.
+  uTime: { value: 0 },
+  // The city's lights (design.md §8.7): 0 by day, 1 from sun elevation -6°; the lamp pools and their rectangle.
+  uCityLights: { value: 0 },
+  tLampMap: tex(),
+  uLampRect: { value: new THREE.Vector4(0, 0, 0, 0) },
 };

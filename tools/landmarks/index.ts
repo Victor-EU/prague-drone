@@ -7,6 +7,7 @@ import { Kit, type MeshBuffers } from './kit.ts';
 import type { Feature, Ring, Tags } from '../lib/osm.ts';
 import { encodePack, type Typed } from '../../src/core/pack.ts';
 import { initSkeleton } from '../lib/skeleton.ts';
+import { SFlag } from '../../src/core/buildings.ts';
 import { petrinTower } from './petrin-tower.ts';
 import { charlesBridge } from './charles-bridge.ts';
 import { oldTownBridgeTower, lesserTownBridgeTowers } from './bridge-towers.ts';
@@ -14,6 +15,11 @@ import { tyn } from './tyn.ts';
 import { stNicholas } from './st-nicholas.ts';
 import { castle } from './castle.ts';
 import { vysehrad } from './vysehrad.ts';
+import { smetanaMuseum } from './old-town-bank.ts';
+import { dancingHouse } from './dancing-house.ts';
+import { nationalTheatre, sitkovTower, stFrancis, klementinumTower, rudolfinum } from './riverside.ts';
+import { powderTower, oldTownHall, stNicholasOldTown, husMemorial } from './old-town.ts';
+import { legionBridge, manesBridge, cechBridge, jirasekBridge, palackyBridge, stefanikBridge, railwayBridge } from './bridges.ts';
 
 /** What a model may ask of the world it stands in. */
 export interface Site {
@@ -40,16 +46,25 @@ export interface Model {
   covers?: string[];
   /** Other OSM keys the model replaces (buildings, parts, bridge decks). */
   replaces?: string[];
+  /** Floodlit at night (design.md §8.7). */
+  floodlit?: boolean;
   /** Main geometry, and the small detail the app drops with distance. */
   build(site: Site, main: Kit, detail: Kit): void;
 }
 
-export const MODELS: Model[] = [charlesBridge, oldTownBridgeTower, lesserTownBridgeTowers, tyn, stNicholas, castle, petrinTower, vysehrad];
+export const MODELS: Model[] = [
+  charlesBridge, oldTownBridgeTower, lesserTownBridgeTowers, tyn, stNicholas, castle, petrinTower, vysehrad,
+  legionBridge, manesBridge, cechBridge, jirasekBridge, palackyBridge, stefanikBridge, railwayBridge,
+  smetanaMuseum, dancingHouse, nationalTheatre, sitkovTower, stFrancis, klementinumTower, rudolfinum,
+  powderTower, oldTownHall, stNicholasOldTown, husMemorial,
+];
 
 export interface Built {
   id: string;
   main: MeshBuffers;
   detail: MeshBuffers;
+  /** Lamps: x, y, z, kind per lamp. */
+  lights?: number[];
 }
 
 export async function buildLandmarks(site: Site, log: (...a: unknown[]) => void): Promise<Built[]> {
@@ -58,8 +73,9 @@ export async function buildLandmarks(site: Site, log: (...a: unknown[]) => void)
   for (const m of MODELS) {
     const t0 = Date.now();
     const main = new Kit(), detail = new Kit();
+    if (m.floodlit) main.flagsOr = detail.flagsOr = SFlag.Floodlit;
     m.build(site, main, detail);
-    out.push({ id: m.id, main: main.finish(), detail: detail.finish() });
+    out.push({ id: m.id, main: main.finish(), detail: detail.finish(), lights: [...main.lights, ...detail.lights] });
     log(`landmark ${m.id}: ${main.triangles} + ${detail.triangles} detail triangles (${Date.now() - t0} ms)`);
   }
   return out;
@@ -96,7 +112,8 @@ export function packLandmarks(built: Built[]): Uint8Array {
     items.push({ id: p.id, detail: p.detail, v0: v, nv: n, i0: i, ni: p.b.index.length, sphere: [...c.map((q) => Math.round(q * 100) / 100), Math.ceil(r)] });
     v += n; i += p.b.index.length;
   }
-  return encodePack({ items }, arrays as Record<string, Typed>);
+  const lights = built.flatMap((b) => b.lights ?? []).map((v) => Math.round(v * 100) / 100);
+  return encodePack({ items, lights }, arrays as Record<string, Typed>);
 }
 
 /**

@@ -240,6 +240,7 @@ function gateBlock(k: Kit, w: number, dep: number, y0: number, h: number, m: Mat
 
 export const vysehrad: Model = {
   id: 'vysehrad-basilica',
+  floodlit: true,
   covers: ['leopold-gate'],
   replaces: ['way/51700613', 'way/49811189', 'way/560209917'],
   build(site: Site, k: Kit, d: Kit) {

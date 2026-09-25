@@ -11,6 +11,8 @@ import type { Ground } from '../drone/drone.ts';
 import { patchLit } from '../sky/lit.ts';
 import { Streets } from './streets.ts';
 import { Landmarks } from './landmarks.ts';
+import { Water, reflects } from './water.ts';
+import { CityLights } from './lights.ts';
 import type { Pack } from '../core/pack.ts';
 
 export interface Manifest {
@@ -29,11 +31,13 @@ export class World implements Ground {
   readonly buildings: Buildings;
   readonly streets: Streets;
   readonly landmarks: Landmarks;
+  readonly water: Water;
+  readonly lights: CityLights;
   readonly bounds: Manifest['world'];
   readonly height: HeightGrid;
   private surf: HeightGrid;
 
-  private constructor(base: string, manifest: Manifest, height: HeightGrid, surf: HeightGrid, landuse: THREE.Texture, horizon: HeightGrid, water: THREE.BufferGeometry, streets: Pack, landmarks: Pack, renderer: THREE.WebGLRenderer) {
+  private constructor(base: string, manifest: Manifest, height: HeightGrid, surf: HeightGrid, landuse: THREE.Texture, horizon: HeightGrid, water: Pack, streets: Pack, landmarks: Pack, renderer: THREE.WebGLRenderer) {
     this.manifest = manifest;
     this.bounds = manifest.world;
     this.height = height;
@@ -44,13 +48,9 @@ export class World implements Ground {
     const horizonRing = horizonMesh(horizon, manifest.world);
     this.group.add(horizonRing);
 
-    // Until the river's own shader (M4): dark, and reflecting the sky less than a mirror would, as
-    // rippled water does.
-    const waterMat = new THREE.MeshStandardMaterial({ color: '#2d3c43', roughness: 0.3, metalness: 0, envMapIntensity: 0.32 });
-    const waterMesh = new THREE.Mesh(water, waterMat);
-    waterMesh.receiveShadow = true;
-    waterMesh.matrixAutoUpdate = false;
-    this.group.add(waterMesh);
+    // The river (src/world/water.ts), with its mirror of the terrain, the city and the landmarks.
+    this.water = new Water(water as Pack<{ cell: number }>, renderer.capabilities.getMaxAnisotropy());
+    this.group.add(this.water.group);
 
     this.buildings = new Buildings(base, manifest.tile, manifest.world);
     this.group.add(this.buildings.group);
@@ -58,8 +58,13 @@ export class World implements Ground {
     this.group.add(this.streets.group);
     this.landmarks = new Landmarks(landmarks, this.buildings.material);
     this.group.add(this.landmarks.group);
+    this.lights = new CityLights(renderer, streets.arrays.lamp as Float32Array, ((landmarks.meta as { lights?: number[] }).lights ?? []));
+    this.group.add(this.lights.points);
+    reflects(this.terrain.group);
+    reflects(horizonRing);
+    reflects(this.landmarks.group);
     // Every lit material takes the sky's haze and the terrain and cloud shadows.
-    for (const m of [horizonRing.material as THREE.Material, waterMat]) patchLit(m);
+    patchLit(horizonRing.material as THREE.Material);
   }
 
   static async load(base: string, renderer: THREE.WebGLRenderer): Promise<World> {
@@ -74,16 +79,11 @@ export class World implements Ground {
       fetchPack(`${base}/landmarks.bin`),
     ]);
     const lu = landuse.meta as { nx: number; nz: number };
-    const waterGeom = new THREE.BufferGeometry();
-    waterGeom.setAttribute('position', new THREE.BufferAttribute(water.arrays.position as Float32Array, 3));
-    waterGeom.setIndex(new THREE.BufferAttribute(water.arrays.index as Uint32Array, 1));
-    waterGeom.computeVertexNormals();
-    waterGeom.computeBoundingSphere();
     return new World(
       base, manifest,
       HeightGrid.fromPack(terrain), HeightGrid.fromPack(surface),
       landuseTexture(landuse.arrays.ground as Uint8Array, lu.nx, lu.nz),
-      HeightGrid.fromPack(horizon), waterGeom, streets, landmarks, renderer,
+      HeightGrid.fromPack(horizon), water, streets, landmarks, renderer,
     );
   }
 

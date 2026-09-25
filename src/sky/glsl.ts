@@ -138,6 +138,18 @@ uniform vec3 uOvercastSky;
 uniform sampler2D tAO;
 uniform mat4 uAOViewProj;
 uniform float uAOOn;
+uniform float uCityLights;
+uniform sampler2D tLampMap;
+uniform vec4 uLampRect;
+
+// The street lamps' light round a point at night (design.md §8.7), from the pools src/world/lights.ts
+// bakes: warm, strongest on the ground and the lowest storey, gone by the third.
+vec3 praLampPool(vec3 wp, float above) {
+  if (uCityLights <= 0.0) return vec3(0.0);
+  vec2 uv = (wp.xz - uLampRect.xy) * uLampRect.zw;
+  if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return vec3(0.0);
+  return vec3(1.0, 0.5, 0.17) * texture2D(tLampMap, uv).r * exp(-max(0.0, above - 4.0) / 7.0) * uCityLights;
+}
 
 // How much of the sky this point sees: the screen-space occlusion of the previous frame, found
 // again by reprojecting the point into it.

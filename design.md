@@ -112,8 +112,8 @@ Hero frames are the frames the renders are tested against (see §12). Confirmed 
 | 8607, 8608 | Old Town Square, south-west corner, below the astronomical clock | Týn, the square |
 | 8903 | Charles Bridge west end, overcast | Lesser Town towers |
 | 8942 | Malostranské náměstí | St Nicholas, tram |
-| 8158 | Rašín embankment | Dancing House, tram |
-| 8809 | Rudolfinum embankment looking west | Castle and Malá Strana waterfront across the water |
+| 8158 | Jiráskovo náměstí, the corner of the Rašín embankment | Dancing House, tram |
+| 8809 | Charles Bridge near the Old Town end, looking north-west (first listed as the Rudolfinum embankment; the solved viewpoint, §12.1, put it on the bridge) | Castle and Malá Strana waterfront across the water |
 | 8082, 8777, 8884 | Malá Strana streets and roofs | Plaster colours, dormers, chimneys |
 | 8825 | Kampa looking at the weir | Petřín as backdrop, foam |
 | 8490 | Legion Bridge looking north | Castle, island, cumulus |
@@ -245,6 +245,9 @@ From map reading, then verified against OpenStreetMap on 2026-09-25: rows more t
 | Old Town Bridge Tower | 50.0862 | 14.4137 | 164 | −33 |
 | Lesser Town Bridge Towers | 50.0873 | 14.4069 | −322 | 89 |
 | Týn Church | 50.0876 | 14.4227 | 808 | 122 |
+| St Nicholas, Old Town Square | 50.0879 | 14.4199 | 606 | 157 |
+| Jan Hus Memorial | 50.0877 | 14.4213 | 710 | 131 |
+| Marian Column | 50.0874 | 14.4213 | 710 | 96 |
 | Old Town Hall tower and clock | 50.0870 | 14.4208 | 672 | 56 |
 | St Nicholas, Malá Strana | 50.0880 | 14.4033 | −579 | 167 |
 | St Vitus Cathedral | 50.0909 | 14.4009 | −751 | 489 |
@@ -336,6 +339,8 @@ As built in M3, and a change from the first paragraph: the landmarks are modelle
 
 Built in M3: Charles Bridge (sixteen arches on fifteen piers, placed where OSM's outline of the bridge widens round the cutwaters; pointed cutwaters upstream with wooden ice guards, square buttresses downstream, pilasters carrying the thirty statue groups, lamps, the cobbled deck rising four metres to the middle of the river), the Old Town Bridge Tower, the Lesser Town towers with the Judith tower and the gate, Týn, St Nicholas with the city belfry, the Castle (St Vitus in full massing, and the palace wings with even rows of windows, grey roofs over the west wings and red over the Old Royal Palace), the Petřín tower, and Vyšehrad (the ramparts, the Leopold, Brick and Tábor gates, the rotunda of St Martin, the basilica). From 900 triangles (the Old Town Bridge Tower) to 25,000 (Charles Bridge), 47,000 in all: well under the budget of the first paragraph, because shape carries them and the shader the surface. The landmarks still to come in M4 stand as their OSM 3D parts with the roof shapes mapped there (the water tower's spire, St Francis's dome, the Klementinum's onion) instead of boxes.
 
+As built in M4, the rest of the table, in the same way. One generator (`tools/landmarks/bridges.ts`) makes the seven bridges from OSM's outline of each deck: the axis and width, the runs of water the axis crosses, and in them the number of spans each bridge has, its arch (segmental, flat elliptical, steel ribs), piers and cutwaters, parapet or railing and lamps. Legion Bridge has granite arches, candelabra on the piers and a land arch over Střelecký island's promenade; Mánes Bridge flat arches with open spandrels and lamp pylons; Čechův Bridge steel ribs between stone piers and the four columns with gilded figures; Jiráskův and Štefánik bridges pale concrete; Palacký Bridge red voussoirs among the grey; the railway bridge three trusses with a walkway outside each and its stone viaduct. The landmarks: Novotného lávka's water tower and the Smetana Museum (OSM's `way/30619188`, the building at the tip, not the one first listed); the Dancing House, Ginger lofted from pinched rings on her slanting legs, Fred's cylinder of staggered framed windows and the Medusa; the National Theatre, its dark vault over the auditorium with the gilded band and crown and the chariots on the front, the stage house from its OSM parts; the Šítkov water tower; St Francis's dome on its drum; the Klementinum's tower with Atlas; the Rudolfinum from its OSM parts with statues along the balustrade; the Powder Tower and the Old Town Hall tower as the bridge towers' Gothic type, the tower with the astronomical clock's two dials in their frame and the chapel's oriel; on Old Town Square St Nicholas with its two onion towers and dome, the Jan Hus memorial and the Marian column (new rows in §6.2). Every modelled landmark is marked floodlit for the night (§8.7). 117,000 triangles in all, 70,000 of them new, the bridges 58,000 of those. The Mánes gallery stays as its OSM parts, white blocks, and the facades round Old Town Square stay the generic ones of M2.
+
 Vyšehrad's ramparts are retaining walls 10 to 15 m high, which the 5 m terrain grid smears into slopes. Each wall on OSM's line (`barrier=city_wall`) is built as a solid rampart: a battered brick face, a parapet, and the grassed walk behind it, 14.5 m deep. The build lowers the terrain at the foot of the face and for 7 m behind it, under the walk, so no slope of the grid lies in front of the brick.
 
 ### 7.2 Tier 2: the photographed quarters
@@ -413,6 +418,14 @@ Greens are graded per §5.1: olive and teal, never lime. Trees cast shadows and 
 - Embankment walls with mooring rings; the water meets stone, not a beach.
 - Islands with their trees; Střelecký has the boat rental pontoon.
 
+As built in M4 (`src/world/water.ts`, `src/render/reflection.ts`, `tools/lib/river.ts`):
+
+- **Surface**: the 10 m water grid of M0, each vertex carrying the downstream direction from OSM's centrelines of the river, its arms and the canals. Ripples come from one tiling texture of slopes, sampled at two scales (9 m and 2.4 m) and carried along the flow in two phases so the pattern never stretches, with a smaller chop across them. Anisotropic filtering keeps them as lines across the river at a grazing angle.
+- **Reflection**: planar, as §11 has it. The city is rendered once more from the camera mirrored in the water, at 40% resolution, every other frame, and only within 2.2 km. Everything below the plane is clipped by a world clipping plane: three's oblique-projection trick assumes an ordinary depth range, and this renderer's is reversed. The sky and its cumulus are not in the mirror; the water shader computes them along the reflected ray, over a band of heights above it, as the ripples too small to see tilt the facets. The mirror is sampled where a facet tilted by δ sends the ray, 2δ up or down the screen, and smeared into columns. Its lookup leans toward the sky, since at a grazing angle the facets facing the eye show most. About a third of every reflection is sky whatever lies across the river, and the whole is scaled to three quarters, as rippled water seen edge on reflects less than a flat surface.
+- **Weirs**: from OSM's weir lines (Staroměstský, Šítkovský, Helmovský and the small ones). The level each side is made even up to the crest, the pieces of one weir sharing their levels, so the step of 1 to 1.3 m falls exactly there. The water grid leaves a band round each crest to a finer strip: level water above, glassy over the crest, the glacis, the white roller at its foot and streaks trailing downstream, moving at the water's speed.
+- **Embankments**: stone walls wherever the bank stands a metre or more above the water, between Vyšehrad and Letná and on the islands, 21 km of them. Each has a face 2 m out from OSM's edge (the 5 m terrain grid's slope stays behind it), a parapet, and a paved walk 3.5 m deep that covers the slope. The stone's grime band sits at the waterline. There is no beach.
+- Not yet: the islands' trees (M5), the pontoon and the boats (M6).
+
 ### 8.6 Sky, sun, clouds
 
 - Physically based sky from precomputed scattering tables (transmittance, multiple scattering and a sky view table, after Hillaire 2020), tuned per light family (aerosol amount, sky saturation), then graded. Not Hosek-Wilkie or Preetham as first written: both are fitted for the sun above the horizon only and have no twilight, and the flight ends in the blue hour, whose deep blue comes from ozone absorption with the sun below the horizon. The same tables give the sunlight's colour through the air and the haze colour, so sun, sky and haze agree at every hour.
@@ -425,6 +438,15 @@ Greens are graded per §5.1: olive and teal, never lime. Trees cast shadows and 
 ### 8.7 Night
 
 Lights fade in from sun elevation −2° and are fully on by −6°: warm sodium and LED window lights scattered across the core (not every window, about 25%), street lamps along embankments and bridges, floodlights on the Castle, St Vitus, Charles Bridge towers, Týn, National Theatre, Vyšehrad basilica, the Dancing House, the Rudolfinum, and the penguin sculptures on Kampa (9531). Water reflects the lights as broken vertical streaks. Sky keeps a deep blue until 22:30, then near black with a few stars. Stop 18 lands in the blue hour, not full night; during the hold the clock keeps advancing to 22:30 and then stops.
+
+As built in M4 (`src/world/lights.ts` and the building material):
+
+- **Windows**: a fifth of the upper windows and two fifths of the shopfronts, chosen per window, warm, from sodium orange to warm white.
+- **Street lamps**: the 5,700 lamps of OSM's register and the lanterns the models carry (Charles Bridge, Legion Bridge's candelabra, Mánes Bridge's pylons, Čechův Bridge's lamps, the railway bridge's walkways) as glowing points. They are drawn into the scene and into the river's mirror, where the ripples draw them out into broken streaks, longer at night. Their light on the ground and the lowest storeys comes from pools baked once at load into a 2048² texture over the photographed city: 4 km, 2 m a texel.
+- **Floodlights**: every modelled landmark, and the landmarks still standing as OSM massing, lit sodium-amber from below, strongest on the walls and near the ground.
+- **Exposure and colour**: after dark the photographs are exposed for the lights, so the meter's base puts the horizon at 7% instead of 24%, and the sky goes deep. The blue-hour white balance is cooled to the photographs' daylight setting, which turns twilight blue. The light-pollution glow of M1 is a third as strong.
+- **Fix**: shadow maps are rendered once even at night. The materials sample them, and a view opened after dark drew no city at all.
+- Not yet: the penguins on Kampa (9531).
 
 ### 8.8 City life
 
@@ -563,7 +585,7 @@ None. The app is silent. No audio assets, no speaker control.
 | Roofs | Straight skeletons at build time (CGAL through the `straight-skeleton` package, WebAssembly, a development dependency only); the tiles carry the finished roof faces and the props, and the tile workers make the meshes | §8.1; roofs from footprints at runtime would cost the loading budget |
 | Instancing | InstancedMesh for buildings (grouped by district and material), trees, props, people | Draw call budget under 600 |
 | Shadows | Cascaded shadow maps for buildings from three.js's `SunLight` (2 cascades of 2048 to 2.8 km), a heightfield shadow for the terrain computed on the GPU when the sun moves, and the cloud-shadow projection | Long morning shadows need reach. As built in M1: three r186 ships a two-cascade sun; 4096 cascades cost a millisecond more on an M2 for little visible gain. Hills shading the city (Petřín in the evening) come from the heightfield at any distance and softly; terrain in the cascades cost 3 ms a frame |
-| Reflections | Planar reflection for the river at half resolution | The evening frames depend on it |
+| Reflections | Planar reflection for the river. As built in M4: at 40% resolution, every other frame, within 2.2 km, the sky and clouds computed by the water shader (§8.5) | The evening frames depend on it |
 | Hosting | Static, any CDN | No backend |
 
 Performance targets: 60 fps at 2560 × 1600 on an M1 Pro or better in Chrome and Safari; 30 fps floor on an Intel MacBook with integrated graphics with a "lite" preset (no SSAO, half-res reflections, fewer clouds). Memory under 1.5 GB.
@@ -576,12 +598,13 @@ Photos/              the reference set (422) and _excluded/
 mockup/              index.html (3D sketch), plan.html (set + route), set/ thumbnails
 data/                hero.json (starred frames), viewpoints.json, route.json, palette.json, landmarks.json
 tools/               fetch-data.ts, build-world.ts, check-route.ts, find-landmarks.ts, make-lut.ts, lut-fit.ts, compare.ts;
-                     lib/ roofs.ts, skeleton.ts, props.ts, plan.ts (+ plan-worker.ts), districts.ts;
-                     landmarks/ kit.ts, index.ts, and one module per landmark (§7.1)
+                     lib/ roofs.ts, skeleton.ts, props.ts, plan.ts (+ plan-worker.ts), districts.ts, river.ts;
+                     landmarks/ kit.ts, index.ts, parts.ts, bridges.ts, and one module per landmark or group (§7.1)
 cache/               raw downloads from fetch-data.ts (generated, git-ignored)
 assets/              lut/classic-neg.cube
 src/                 app: core/ (incl. buildings.ts, shared with the build), world/ (terrain, tiles, buildings and their
-                     material, landmarks, streets), sky/ (atmosphere, families, clouds, shadows), render/ (post), drone/, ui/,
+                     material, landmarks, streets, water, lights), sky/ (atmosphere, families, clouds, shadows),
+                     render/ (post, the river's mirror), drone/, ui/,
                      dev/ (side-by-side, development only)
 public/world/        built tiles (generated, git-ignored)
 compare/             side-by-side sheets from tools/compare.ts (generated, git-ignored)
@@ -604,6 +627,8 @@ As built in M1: in development, `/?view=<id>` opens the app at a viewpoint (came
 Added in M2, for lining up and tuning: a viewpoint can be nudged from the URL (`/?view=8385&heading=10&agl=14`, or `npm run compare -- 8385@heading=10,agl=14`, written to its own file), a light family's values forced (`&light.haze=0.05&light.wb=0.98:1:1.05`), and the grade or the occlusion turned off (`&grade=0`, `&ao=0`; keys G and O).
 
 Added in M3: `/?view=look&x=…&north=…&agl=…&heading=…&tilt=…&focal35=…` is a free camera for inspecting the world, and `npm run compare -- look@x=…,north=…` writes the render alone; the weather can be nudged like the camera (`&coverage=0.9&overcast=0`); portrait frames take the 24 mm side of the frame as their width. The viewpoints of 8704, 8607, 8942 and 8753 were solved from the photographs: the bearings (and, for 8607, the heights) of spires and towers whose positions OSM gives. 8704 turned out to be taken from Mánes Bridge, 8607 from below the astronomical clock, 8942 from the mouth of Mostecká on the lower square, 8753 from the gardens below Strahov.
+
+Added in M4: a viewpoint may give the eye's height `y` instead of `agl`, for views from bridges and over the water. The new viewpoints were solved the same way: 9486 from the piers of Charles Bridge (to 0.03°), on the Letná slope above the Edvard Beneš embankment; 8490 and 9542, like 9547, from Legion Bridge; 8809 from the north parapet of Charles Bridge near the Old Town end (the four spires of St Vitus fix only the bearing; the height of the far bank's waterline fixed the rest); 8158 on Jiráskovo náměstí, placed so Ginger and Fred stand at their sizes in the frame. Overcast views are exposed with the deck as the sky, nearly white as in the photographs; M3's 8942 is brighter for it.
 
 ### 12.2 Motion tests
 
@@ -693,6 +718,27 @@ Known gaps after M2: trees wait for M5, so the forest in the foreground of the P
 The world grew by 0.8 MB to 14.9 MB; the full build takes about 35 s (`--landmarks` rebuilds `landmarks.bin` alone in 5 s, for modelling). Measured on the Apple M2 at 2048 × 1536 with the synced benchmark: 7.6 to 15.7 ms a frame across the 18 stops, 11.5 on average; the landmarks cost 0.1 ms of it.
 
 Known gaps after M3: trees are still missing (M5), and they frame 7924, 7940, 8372, 8385 and 8753 in the photographs; the river is a placeholder until M4, which matters in 8704; the houses of Old Town Square are the generic ones of M2, without the Týn school's Venetian gables, and stand a little taller than in 8607; the statues on the bridge are silhouettes; the Castle beyond St Vitus and the palace wings (the Old Royal Palace's roofs, St George's, Golden Lane) is OSM massing; the Brick Gate is a block; 8942's overcast is a little greyer and darker than the photograph's bright cloud.
+
+**M4, built 2026-09-25.** The rest of the landmarks and the bridges, the river, the night:
+
+- **Bridges**: Legion, Mánes, Čechův, Jiráskův, Palacký, Štefánik and the railway bridge, from one generator on OSM's decks (§7.1). From Letná (9486) Mánes Bridge's arches and pylons, Charles Bridge's piers and the far bridges fall where the photograph has them. Tram rails now cross the bridges on their decks.
+- **Landmarks**: Novotného lávka with the water tower and the Smetana Museum, the Dancing House, the National Theatre, the Šítkov tower, St Francis, the Klementinum tower, the Rudolfinum, the Powder Tower, the Old Town Hall tower with the astronomical clock, and on the square St Nicholas, the Hus memorial and the Marian column (§7.1).
+- **The river** (§8.5): flowing ripples, the mirror of the city with the sky and cumulus in it, the weirs' foam lines, stone embankments instead of beaches. The Castle across the water (8809) now stands over its own broken reflection.
+- **The night** (§8.7): lit windows, street lamps and their pools, floodlit landmarks, the lamps' streaks on the water. From Legion Bridge at 21:50 (9542, 9547) the Old Town waterfront glows over a dark river. Views that open after dark now draw the city (the shadow-map fix in §8.7).
+- **Overcast**: exposed with the deck as the sky, nearly white as in 8158 and 8942.
+
+The world grew to 16.7 MB: `landmarks.bin` from 0.8 to 2.6 MB, with the bridges and 21 km of embankments. Measured on the Apple M2 at 2048 × 1536 with the synced benchmark: 8.2 to 16.2 ms a frame across the 18 stops, 11.9 on average, against 11.5 in M3. The mirror costs about 2 ms on average, drawn every other frame; drawn every frame it cost 2.4 on average and 7 at the take-off, which it made 23 ms.
+
+Known gaps after M4:
+
+- **Trees (M5).** They frame 8490, 8809 and 9486 in the photographs, and the Letná slope in the foreground of 9486 is bare.
+- **City life (M6).** The pedal boats of 8490, the tour boat of 9486 and the tram of 8158 wait for it.
+- **Ginger's glass** reads pale grey, where the photograph has sky and blue in it. Fred's window frames are dark, not blue-grey.
+- **The blue-hour sky** keeps a pink band low down where 9547 is blue: three wavelengths of ozone leave twilight magenta, and the cooler white balance only partly turns it.
+- **The cumulus** of 8490 and 9486 are still the smooth blobs of M1.
+- **The hold at stop 18** looks steeply down on the dark rock. Its framing is M7's blue-hour hold.
+- **Not modelled.** Old Town Square's facade row (the Týn school's gables), the Mánes gallery (OSM's white blocks), the New Stage, and the penguins on Kampa.
+- **Frame pacing.** Because the mirror is drawn every other frame, frames at the busiest stops alternate by 3 to 4 ms.
 
 ---
 

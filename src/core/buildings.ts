@@ -17,8 +17,8 @@ export const Surface = {
 export const Stone = { Ashlar: 0, Brick: 1, Rubble: 2, Render: 3, Setts: 4 } as const;
 /** Styles of Surface.Metal: its facade is (along, up the slope, slope length, unused). */
 export const Metal = { Slate: 0, Copper: 1, Lead: 2, Gold: 3 } as const;
-/** Styles of Surface.Glass: its facade is (across, up, width, height) in metres. */
-export const Glass = { Plain: 0, Tracery: 1, Rose: 2 } as const;
+/** Styles of Surface.Glass: its facade is (across, up, width, height) in metres. Curtain: a modern glass wall that mirrors the sky. */
+export const Glass = { Plain: 0, Tracery: 1, Rose: 2, Curtain: 3 } as const;
 
 /** Small things on roofs, placed at build time and made into boxes by the app. */
 export const Prop = { Chimney: 0, DormerGabled: 1, DormerFlat: 2, RoofBox: 3 } as const;
@@ -27,6 +27,8 @@ export const Prop = { Chimney: 0, DormerGabled: 1, DormerFlat: 2, RoofBox: 3 } a
 export const BFlag = { Landmark: 1, Detail: 2 } as const;
 /** Per footprint edge: a party wall, shared with a neighbour (no windows, no cornice). */
 export const EFlag = { Party: 1 } as const;
+/** Per vertex of the building shader (the aInfo flags byte): a party wall, a floodlit landmark. */
+export const SFlag = { Party: 1, Floodlit: 2 } as const;
 
 /**
  * Facade styles (design.md §8.2). Metres: the window pitch along the wall, window width and

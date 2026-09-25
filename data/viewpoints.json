@@ -1,5 +1,5 @@
 {
-  "note": "Viewpoints of the hero frames (design.md §12.1): where the camera stood, where it looked, its 35 mm equivalent focal length from EXIF, and the local clock (CEST: EXIF time + 1 h, design.md §3.1). x and north in metres (§6.1); 'agl' is the eye height above the ground there. heading in degrees clockwise from north, tilt in degrees (negative looks down). 'weather' fixes the clouds: seed, peak coverage, overcast, cirrus, and 'cloudAt', a ground point the densest cumulus cell is moved over. Authored by lining the render up with the photograph (open /?view=<id> in development and call praha.sheet() in the console).",
+  "note": "Viewpoints of the hero frames (design.md §12.1): where the camera stood, where it looked, its 35 mm equivalent focal length from EXIF, and the local clock (CEST: EXIF time + 1 h, design.md §3.1). x and north in metres (§6.1); 'agl' is the eye height above the ground there, or 'y' the eye's height itself (above the river at Charles Bridge, design.md §6.1), for views from bridges and over water. heading in degrees clockwise from north, tilt in degrees (negative looks down). 'weather' fixes the clouds: seed, peak coverage, overcast, cirrus, and 'cloudAt', a ground point the densest cumulus cell is moved over. Authored by lining the render up with the photograph (open /?view=<id> in development and call praha.sheet() in the console).",
   "frames": [
     {"id": "7924", "x": -1155, "north": -334, "agl": 52, "heading": 73, "tilt": -7.5, "focal35": 70, "aspect": 1.5, "clock": "18:49",
       "weather": {"seed": 7924, "coverage": 0.05, "overcast": false, "cirrus": 0}},
@@ -24,6 +24,16 @@
     {"id": "8694", "x": 90, "north": 250, "agl": 7, "heading": 161, "tilt": 2, "focal35": 68, "aspect": 1.5, "clock": "20:02",
       "weather": {"seed": 8694, "coverage": 0.08, "overcast": false, "cirrus": 0}},
     {"id": "9547", "x": -40, "north": -560, "agl": 12, "heading": 4, "tilt": 2, "focal35": 24, "aspect": 1.5, "clock": "21:52",
-      "weather": {"seed": 9547, "coverage": 0.06, "overcast": false, "cirrus": 0}}
+      "weather": {"seed": 9547, "coverage": 0.06, "overcast": false, "cirrus": 0}},
+    {"id": "8158", "x": 176, "north": -1196.7, "agl": 1.6, "heading": 141, "tilt": 21, "focal35": 24, "aspect": 0.6667, "clock": "10:44",
+      "weather": {"seed": 8158, "coverage": 0.3, "overcast": true, "cirrus": 0}},
+    {"id": "8809", "x": 100, "north": -13, "agl": 0, "y": 12.6, "heading": 299.2, "tilt": 4.5, "focal35": 83, "aspect": 0.6667, "clock": "11:07",
+      "weather": {"seed": 8809, "coverage": 0.08, "overcast": false, "cirrus": 0.3}},
+    {"id": "8490", "x": 50, "north": -556, "agl": 0, "y": 8, "heading": 12, "tilt": -1, "focal35": 24, "aspect": 0.6667, "clock": "13:20",
+      "weather": {"seed": 8490, "coverage": 0.35, "overcast": false, "cirrus": 0}},
+    {"id": "9486", "x": 191, "north": 773, "agl": 24, "heading": 189.6, "tilt": -2.8, "focal35": 83, "aspect": 1.5, "clock": "18:51",
+      "weather": {"seed": 9486, "coverage": 0.05, "overcast": false, "cirrus": 0.2}},
+    {"id": "9542", "x": -40, "north": -562, "agl": 0, "y": 8, "heading": 33.3, "tilt": 1.7, "focal35": 51, "aspect": 1.5, "clock": "21:50",
+      "weather": {"seed": 9542, "coverage": 0.05, "overcast": false, "cirrus": 0}}
   ]
 }

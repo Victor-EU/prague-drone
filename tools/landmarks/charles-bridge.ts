@@ -163,6 +163,7 @@ function statue(d: Kit, o: V3, facing: V2, k: number) {
 
 export const charlesBridge: Model = {
   id: 'charles-bridge',
+  floodlit: true,
   build(site: Site, k: Kit, d: Kit) {
     const A = bridgeAxis(site);
     k.place(0, 0, 0); d.place(0, 0, 0);
@@ -322,6 +323,7 @@ export const charlesBridge: Model = {
         d.lathe(pc[0], pc[2], [[0.07, y + 0.4], [0.05, y + 2.6]], 6, IRON);
         d.lathe(pc[0], pc[2], [[0.12, y + 2.55], [0.22, y + 2.7], [0.26, y + 3.2], [0.12, y + 3.3]], 6, LANTERN, { flat: true });
         d.lathe(pc[0], pc[2], [[0.3, y + 3.28], [0.08, y + 3.55], [0, y + 3.7]], 6, IRON, { flat: true });
+        d.light([pc[0], y + 2.95, pc[2]]);
       }
     }
   },

@@ -14,7 +14,7 @@ const OPENING = mat('#15130f', Surface.Opening);
 const WINDOW = mat('#1c1f22', Surface.Glass, Glass.Plain);
 const IRON = mat('#2a2a2a', Surface.Plain);
 
-interface TowerSpec {
+export interface TowerSpec {
   /** Body along local x (the bridge) and z. */
   w: number; d: number;
   /** Heights above the ground: top of the body, of the gallery's parapet, of the roof. */
@@ -29,7 +29,7 @@ interface TowerSpec {
 }
 
 /** A Gothic bridge tower in the current frame (origin at the ground, centre of the body). */
-function gothicTower(k: Kit, d: Kit, t: TowerSpec) {
+export function gothicTower(k: Kit, d: Kit, t: TowerSpec) {
   const dark = { ...t.stone, c: t.stone.c.map((v) => v * 0.72) as [number, number, number], w: 1 };
   const band = { ...t.stone, c: t.stone.c.map((v) => Math.min(255, v * 1.12)) as [number, number, number], w: 0.5 };
   const body = rect(t.w, t.d);
@@ -92,7 +92,7 @@ function gothicTower(k: Kit, d: Kit, t: TowerSpec) {
   }
 }
 
-function placeOn(k: Kit, d: Kit, site: Site, key: string, bearingNear?: number) {
+export function placeOn(k: Kit, d: Kit, site: Site, key: string, bearingNear?: number) {
   const r = orientedRect(site.feature(key)!.polygons[0].outer);
   // Local x along the bridge: pick the rectangle axis nearest the wanted bearing.
   let b = r.bearing, w = r.w, dd = r.d;
@@ -108,6 +108,7 @@ function placeOn(k: Kit, d: Kit, site: Site, key: string, bearingNear?: number) 
 
 export const oldTownBridgeTower: Model = {
   id: 'old-town-bridge-tower',
+  floodlit: true,
   build(site, k, d) {
     k.seed = 31; d.seed = 31;
     const r = placeOn(k, d, site, 'way/93479848', 103);
@@ -121,6 +122,7 @@ export const oldTownBridgeTower: Model = {
 
 export const lesserTownBridgeTowers: Model = {
   id: 'lesser-town-bridge-towers',
+  floodlit: true,
   replaces: ['way/389652950', 'way/460016966', 'way/460016964', 'way/460016965', 'way/482310118', 'way/389652949'],
   build(site, k, d) {
     k.seed = 37; d.seed = 37;

@@ -168,6 +168,9 @@ uniform sampler2D tLum;
 uniform float uLod;
 uniform sampler2D tPrev;
 uniform sampler2D uSkyStats;
+uniform vec3 uOvercastSky;
+uniform float uOvercast;
+uniform float uCityLights;
 uniform float uDt;
 uniform float uBias;
 uniform float uReset;
@@ -177,10 +180,14 @@ void main() {
   // The sky near the horizon sets the base, as a camera exposed for the highlights would: there
   // it lands near a third of full scale. The meter, weighted toward the highlights, may move a
   // stop either way from there.
-  float evFrame = log2(0.24) - meterLog;
+  // Under overcast the deck is the sky, and the photographs let it go nearly white (8942, 8158).
+  // After dark the photographs are exposed for the city's lights: the sky goes deep (9542, 9547).
+  float target = mix(mix(0.24, 0.5, uOvercast), 0.07, uCityLights);
+  float evFrame = log2(target) - meterLog;
   vec3 hor = texture2D(uSkyStats, vec2(0.625, 0.5)).rgb;
+  hor = mix(hor, uOvercastSky * 0.85, uOvercast);
   // A camera stops brightening somewhere: 11.5 stops below the midday sky (9547 is 10 below).
-  float evSky = log2(0.24 / max(dot(hor, ${LUMA}), 0.003));
+  float evSky = log2(target / max(dot(hor, ${LUMA}), 0.003));
   float ev = evSky + clamp(evFrame - evSky, -1.0, 0.6) + uBias;
   float prev = texture2D(tPrev, vec2(0.5)).r;
   float next = uReset > 0.5 ? ev : prev + (ev - prev) * (1.0 - exp(-uDt / 0.7));
@@ -350,6 +357,9 @@ export class Pipeline {
       uLod: { value: 7 },
       tPrev: { value: null },
       uSkyStats: U.uSkyStats,
+      uOvercastSky: U.uOvercastSky,
+      uOvercast: U.uOvercast,
+      uCityLights: U.uCityLights,
       uDt: { value: 0 },
       uBias: { value: 0 },
       uReset: { value: 1 },

@@ -4,7 +4,7 @@
 // and roof boxes go into a separate detail mesh that is dropped with distance.
 
 import { ShapeUtils, Vector2 } from 'three';
-import { Face, Surface, Prop, BFlag, EFlag } from '../core/buildings.ts';
+import { Face, Surface, Prop, BFlag, EFlag, SFlag } from '../core/buildings.ts';
 
 export interface TileArrays {
   ring: Uint32Array; vert: Uint32Array; xy: Int16Array; edge: Uint8Array;
@@ -162,10 +162,12 @@ export function extrude(f: TileArrays, seed = 0): { main: MeshBuffers; detail: M
         const party = f.edge[s + i] & EFlag.Party;
         // Walls, with facade coordinates. Ground darkening stands in for occlusion at the foot.
         const L = party || landmark ? 0 : len;
-        const a0 = M.vert(ax, base, az, nx, 0, nz, wall, tone * 0.8, 0, L, base - gnd, eaveRel, wallKind, style, party, bseed);
-        const b0 = M.vert(bx, base, bz, nx, 0, nz, wall, tone * 0.8, len, L, base - gnd, eaveRel, wallKind, style, party, bseed);
-        const b1 = M.vert(bx, eave, bz, nx, 0, nz, wall, tone, len, L, eaveRel, eaveRel, wallKind, style, party, bseed);
-        const a1 = M.vert(ax, eave, az, nx, 0, nz, wall, tone, 0, L, eaveRel, eaveRel, wallKind, style, party, bseed);
+        // Landmarks the modelling has not reached yet are floodlit at night all the same.
+        const fl = party | (landmark ? SFlag.Floodlit : 0);
+        const a0 = M.vert(ax, base, az, nx, 0, nz, wall, tone * 0.8, 0, L, base - gnd, eaveRel, wallKind, style, fl, bseed);
+        const b0 = M.vert(bx, base, bz, nx, 0, nz, wall, tone * 0.8, len, L, base - gnd, eaveRel, wallKind, style, fl, bseed);
+        const b1 = M.vert(bx, eave, bz, nx, 0, nz, wall, tone, len, L, eaveRel, eaveRel, wallKind, style, fl, bseed);
+        const a1 = M.vert(ax, eave, az, nx, 0, nz, wall, tone, 0, L, eaveRel, eaveRel, wallKind, style, fl, bseed);
         if (outward > 0) M.tri(a0, a1, b1), M.tri(a0, b1, b0);
         else M.tri(a0, b1, a1), M.tri(a0, b0, b1);
       }

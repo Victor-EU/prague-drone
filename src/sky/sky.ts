@@ -56,7 +56,7 @@ void main() {
   // Night: the city's glow on the horizon and a few stars (design.md §8.7).
   if (uNight > 0.0) {
     // Light pollution: an orange glow low down, a few times brighter than the zenith.
-    sky += uNight * aSunE * (vec3(0.55, 0.36, 0.22) * 2e-7 * exp(-up * 7.0) + vec3(0.04, 0.06, 0.11) * 3e-7);
+    sky += uNight * aSunE * (vec3(0.5, 0.4, 0.32) * 6e-8 * exp(-up * 9.0) + vec3(0.03, 0.06, 0.12) * 3e-7);
     vec3 cell = floor(d * 260.0);
     float h = hash13(cell);
     if (h > 0.9965 && d.y > 0.05) {
@@ -126,6 +126,7 @@ export class Atmosphere {
   private renderer: THREE.WebGLRenderer;
   private sunAtCamera = new THREE.Color();
   private sunAtClouds = new THREE.Color();
+  private shadowsMade = false;
 
   constructor(renderer: THREE.WebGLRenderer, scene: THREE.Scene, session: CloudSession = rollSession(), overcast = Math.random() < 0.2) {
     this.renderer = renderer;
@@ -200,6 +201,8 @@ export class Atmosphere {
     U.aSkyHorizon.value = L.skyHorizon;
     U.uHaze.value.set(L.haze / 1000, L.hazeHeight, 17000, smooth(-4, 5, elevation));
     U.uNight.value = L.night;
+    // Lights come on from two degrees below the horizon and are all on by six (design.md §8.7).
+    U.uCityLights.value = 1 - THREE.MathUtils.smoothstep(elevation, -6, -2);
     U.uOvercast.value = this.overcast;
 
     // Sunlight at the camera and at the clouds, through the air.
@@ -209,8 +212,11 @@ export class Atmosphere {
     this.sun.intensity = SUN_E * L.sun;
     this.sun.position.copy(dir);
     this.sun.updateMatrixWorld();
-    // No shadow maps once the sun is down: nothing to shade.
+    // No shadow maps once the sun is down: nothing to shade. But they must exist once, as the
+    // materials sample them: a view opened after dark renders them a single time.
     this.renderer.shadowMap.autoUpdate = elevation > -1.5;
+    if (!this.shadowsMade) this.renderer.shadowMap.needsUpdate = true;
+    this.shadowsMade = true;
     this.scattering.sunIrradiance.value.copy(T).multiplyScalar(SUN_E * L.sun * Math.max(0, dir.y));
     const Tc = this.scattering.sunTransmittance((185 + 2000) / 1000, dir, this.sunAtClouds);
     this.clouds.sunColour.value.copy(Tc).multiplyScalar(SUN_E * L.sun);

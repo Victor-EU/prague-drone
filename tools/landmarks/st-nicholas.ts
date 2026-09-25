@@ -27,6 +27,7 @@ function chamfered(s: number, c: number): V2[] {
 
 export const stNicholas: Model = {
   id: 'st-nicholas',
+  floodlit: true,
   replaces: ['way/26426951'],
   build(site: Site, k: Kit, d: Kit) {
     k.seed = d.seed = 71;

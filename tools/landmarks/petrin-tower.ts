@@ -24,6 +24,7 @@ function radius(y: number): number {
 
 export const petrinTower: Model = {
   id: 'petrin-tower',
+  floodlit: true,
   build(site: Site, k: Kit, d: Kit) {
     const oct = site.feature('way/456174848')!.polygons[0].outer;
     let cx = 0, cz = 0;

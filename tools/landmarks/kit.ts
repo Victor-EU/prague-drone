@@ -150,6 +150,10 @@ export class Kit {
   seed = 0;
   /** World height facade heights are measured from. */
   ground = 0;
+  /** Flag bits added to every vertex (src/core/buildings.ts SFlag): floodlit at night. */
+  flagsOr = 0;
+  /** Lamps for the night (src/world/lights.ts): world x, y, z and kind, per lamp. */
+  lights: number[] = [];
   private f: Frame = { x: 0, y: 0, z: 0, a: 1, b: 0 };
   private stack: Frame[] = [];
 
@@ -197,10 +201,12 @@ export class Kit {
     this.nor.push(Math.round(n[0] * 127), Math.round(n[1] * 127), Math.round(n[2] * 127));
     this.col.push(LINEAR[Math.min(255, Math.round(m.c[0] * k))], LINEAR[Math.min(255, Math.round(m.c[1] * k))], LINEAR[Math.min(255, Math.round(m.c[2] * k))]);
     this.fac.push(f[0], f[1], f[2], f[3]);
-    this.inf.push(m.kind, m.style, m.flags, this.seed & 255);
+    this.inf.push(m.kind, m.style, m.flags | this.flagsOr, this.seed & 255);
     return v;
   }
   tri(a: number, b: number, c: number) { this.idx.push(a, b, c); }
+  /** A lamp at a local point, lit at night; `kind` 0 a street lantern, 1 a floodlight's glow. */
+  light(p: V3, kind = 0) { const w = this.world(p); this.lights.push(w[0], w[1], w[2], kind); }
 
   /** Facade coordinates from a surface's orientation: see Surface, Stone and Metal. */
   autoFac(m: Mat, w: V3, n: V3, ymin: number, ymax: number): F4 {

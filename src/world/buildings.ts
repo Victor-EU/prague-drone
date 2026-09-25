@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import type { MeshBuffers } from './extrude.ts';
 import { buildingMaterial } from './building-material.ts';
+import { REFLECT } from '../render/reflection.ts';
 
 export interface TileInfo { i: number; j: number; file: string; count: number }
 
@@ -67,7 +68,11 @@ export class Buildings {
     this.pending.delete(msg.id);
     if (msg.error) console.warn('tile', msg.id, msg.error);
     else {
-      if (msg.main.index.length) this.group.add(buildingMesh(msg.main, this.material, msg.meta.ox, msg.meta.oz));
+      if (msg.main.index.length) {
+        const m = buildingMesh(msg.main, this.material, msg.meta.ox, msg.meta.oz);
+        m.layers.enable(REFLECT);
+        this.group.add(m);
+      }
       if (msg.detail.index.length) {
         const d = buildingMesh(msg.detail, this.material, msg.meta.ox, msg.meta.oz);
         this.details.push(d);

@@ -6,6 +6,8 @@ import { Atmosphere } from './sky/sky.ts';
 import { rollSession } from './sky/clouds.ts';
 import { TerrainShadow } from './sky/terrain-shadow.ts';
 import { Pipeline } from './render/pipeline.ts';
+import { REFLECT } from './render/reflection.ts';
+import { U } from './sky/uniforms.ts';
 import { loadCube } from './render/lut.ts';
 import { Route, hfovFor, WIDE, LONG, type RouteData } from './drone/route.ts';
 import { Drone } from './drone/drone.ts';
@@ -22,7 +24,7 @@ const BASE = `${import.meta.env.BASE_URL}world`;
 // Development only: a hero frame's viewpoint (data/viewpoints.json), for judging the render
 // against the photograph (design.md §12.1). The shipped app never loads either.
 interface Viewpoint {
-  id: string; x: number; north: number; agl: number; heading: number; tilt: number; focal35: number; aspect: number; clock: string;
+  id: string; x: number; north: number; agl: number; y?: number; heading: number; tilt: number; focal35: number; aspect: number; clock: string;
   weather: { seed: number; coverage: number; overcast: boolean; cirrus: number; cloudAt?: [number, number] };
 }
 // `?view=look` is a free camera for inspecting the world (set it with the nudges below).
@@ -32,7 +34,9 @@ const view: Viewpoint | undefined = import.meta.env.DEV && params.has('view')
   : undefined;
 if (view) {
   // Nudging a viewpoint while lining it up: /?view=8385&heading=40&tilt=-9 (tools/compare.ts id@heading=40,tilt=-9).
-  for (const k of ['x', 'north', 'agl', 'heading', 'tilt', 'focal35', 'aspect'] as const) if (params.has(k)) view[k] = Number(params.get(k));
+  for (const k of ['x', 'north', 'agl', 'y', 'heading', 'tilt', 'focal35', 'aspect'] as const) if (params.has(k)) view[k] = Number(params.get(k));
+  // A height above ground is ambiguous over water and on bridges: `y` gives the eye's height instead.
+  if (params.has('agl')) delete view.y;
   if (params.has('vclock')) view.clock = params.get('vclock')!;
   params.set('clock', view.clock);
   // The viewpoint's weather, unless the URL nudges it too.
@@ -73,6 +77,7 @@ if (import.meta.env.DEV && params.get('ao') === '0') pipeline.ao = false;
 if (import.meta.env.DEV && params.get('grade') === '0') pipeline.grade = false;
 const terrainShadow = new TerrainShadow(world.height);
 scene.add(world.group);
+atmosphere.sun.layers.enable(REFLECT);
 
 function resize() {
   let w = window.innerWidth, h = window.innerHeight;
@@ -90,6 +95,7 @@ function resize() {
   const size = renderer.getDrawingBufferSize(new THREE.Vector2());
   pipeline.setSize(size.x, size.y);
   atmosphere.setSize(size.x, size.y);
+  world.water.setSize(size.x, size.y);
 }
 window.addEventListener('resize', resize);
 resize();
@@ -143,7 +149,7 @@ if (import.meta.env.DEV) {
 function placeCamera() {
   if (view) {
     const z = -view.north;
-    camera.position.set(view.x, world.ground(view.x, z) + view.agl, z);
+    camera.position.set(view.x, view.y ?? world.ground(view.x, z) + view.agl, z);
     camera.rotation.set(THREE.MathUtils.degToRad(view.tilt), THREE.MathUtils.degToRad(-view.heading), 0, 'YXZ');
   } else {
     camera.position.copy(drone.position);
@@ -165,6 +171,9 @@ function renderFrame(dt: number) {
   world.buildings.update(camera.position);
   world.streets.update(camera.position);
   world.landmarks.update(camera.position);
+  world.lights.update();
+  U.uTime.value += dt;
+  world.water.renderMirror(renderer, scene, camera);
   pipeline.render(scene, camera, {
     dt,
     light: atmosphere.light,
