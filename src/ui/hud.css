@@ -1,0 +1,45 @@
+/* The interface of design.md §10.1: nearly nothing, the render fills the window. */
+:root {
+  --ink: rgba(255, 255, 255, 0.9);
+  --dim: rgba(255, 255, 255, 0.58);
+  --chip: rgba(14, 18, 22, 0.42);
+  --gold: #f0c26a;
+  --shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
+}
+html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1016; }
+body { font-family: 'Helvetica Neue', Helvetica, Inter, Arial, sans-serif; color: var(--ink); }
+canvas#view { display: block; width: 100vw; height: 100vh; outline: none; }
+#hud { position: fixed; inset: 0; pointer-events: none; text-shadow: var(--shadow); user-select: none; }
+#hud .interactive { pointer-events: auto; }
+.tl { position: absolute; left: 22px; top: 18px; }
+.tl h1 { margin: 0; font-size: 15px; font-weight: 500; letter-spacing: 0.32em; }
+.tl .sub { margin-top: 5px; font-size: 10.5px; letter-spacing: 0.2em; color: var(--dim); }
+.chip { display: inline-block; margin-top: 11px; padding: 5px 11px; border-radius: 999px; background: var(--chip);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); font-size: 10.5px; letter-spacing: 0.18em; text-shadow: none; }
+.chip b { color: var(--gold); font-weight: 600; }
+.tr { position: absolute; right: 22px; top: 16px; text-align: right; font-size: 10.5px; letter-spacing: 0.16em; color: var(--dim); line-height: 1.75; font-variant-numeric: tabular-nums; }
+.tr .clock { font-size: 26px; letter-spacing: 0.08em; color: var(--ink); line-height: 1.2; }
+#landmark { position: absolute; left: 50%; bottom: 112px; transform: translateX(-50%); text-align: center; opacity: 0; transition: opacity 1.2s ease; white-space: nowrap; }
+#landmark .cz { font-size: 19px; letter-spacing: 0.3em; }
+#landmark .en { margin-top: 7px; font-size: 10px; letter-spacing: 0.24em; color: var(--dim); }
+.bottom { position: absolute; left: 22px; right: 22px; bottom: 20px; display: flex; align-items: flex-end; gap: 18px; }
+.keys { font-size: 10.5px; letter-spacing: 0.1em; color: var(--dim); line-height: 2; min-width: 220px; transition: opacity 1.5s ease; }
+.keys kbd { display: inline-block; min-width: 13px; text-align: center; padding: 0 5px; margin-right: 3px; border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 4px; color: var(--ink); font: inherit; font-size: 10px; }
+.panel { flex: 1; max-width: 760px; margin-left: auto; padding: 10px 14px; border-radius: 12px; background: var(--chip);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); text-shadow: none; }
+.row { display: flex; align-items: center; gap: 12px; }
+.row + .row { margin-top: 8px; }
+.lbl { font-size: 9.5px; letter-spacing: 0.2em; color: var(--dim); width: 86px; flex: none; }
+input[type='range'] { flex: 1; height: 2px; accent-color: var(--gold); }
+label.check { font-size: 9.5px; letter-spacing: 0.14em; color: var(--dim); display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.btns { display: flex; gap: 6px; }
+.btns button { font: inherit; font-size: 10px; letter-spacing: 0.16em; color: var(--ink); background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 8px; padding: 5px 11px; cursor: pointer; }
+.btns button.on { background: var(--gold); border-color: var(--gold); color: #1c1608; }
+.attribution { position: absolute; right: 22px; bottom: 4px; font-size: 8.5px; letter-spacing: 0.08em; color: rgba(255, 255, 255, 0.42); }
+#stats { position: absolute; left: 22px; top: 110px; font: 10px/1.6 ui-monospace, Menlo, monospace; color: #dfe; background: rgba(0, 0, 0, 0.45);
+  padding: 6px 9px; border-radius: 6px; white-space: pre; display: none; text-shadow: none; }
+#loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 10px;
+  background: #0b1016; color: var(--dim); font-size: 11px; letter-spacing: 0.3em; transition: opacity 1.2s ease; }
+#loading h2 { margin: 0; color: var(--ink); font-weight: 400; font-size: 22px; letter-spacing: 0.42em; }

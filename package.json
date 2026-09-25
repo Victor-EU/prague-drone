@@ -1,0 +1,29 @@
+{
+  "name": "praha",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A stylized 3D Prague in early summer, seen from a drone.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "fetch-data": "node tools/fetch-data.ts",
+    "build-world": "node --max-old-space-size=8192 tools/build-world.ts",
+    "world": "npm run fetch-data && npm run build-world"
+  },
+  "engines": {
+    "node": ">=23.6"
+  },
+  "dependencies": {
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "@types/three": "^0.186.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1"
+  }
+}

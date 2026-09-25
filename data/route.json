@@ -1,0 +1,28 @@
+{
+  "note": "The auto route of design.md §9.2. Positions and gaze are [x, north, alt] in the §6.1 frame, alt above the river (y). Lens 'long>wide' arrives long and opens to wide after the stop.",
+  "duration": 360,
+  "hold": 4,
+  "clockStart": "06:20",
+  "clockEnd": "21:45",
+  "holdClockEnd": "22:30",
+  "stops": [
+    { "n": 1, "name": "Vyšehrad, take-off", "t": 0, "clock": "06:20", "pos": [720, -2950, 340], "gaze": [458, -2446, 40], "lens": "wide" },
+    { "n": 2, "name": "Down the Vltava", "t": 20, "clock": "07:15", "pos": [300, -2300, 220], "gaze": [60, -1750, 10], "lens": "wide" },
+    { "n": 3, "name": "Dancing House", "t": 40, "clock": "08:05", "pos": [330, -1500, 130], "gaze": [215, -1215, 30], "lens": "long>wide" },
+    { "n": 4, "name": "National Theatre, Legion Bridge", "t": 58, "clock": "08:55", "pos": [260, -900, 115], "gaze": [157, -600, 20], "lens": "wide" },
+    { "n": 5, "name": "Petřín, the climb", "t": 74, "clock": "09:40", "pos": [-450, -720, 190], "gaze": [-1173, -334, 90], "lens": "wide" },
+    { "n": 6, "name": "Petřín, rose garden and tower", "t": 90, "clock": "10:20", "pos": [-1120, -640, 260], "gaze": [-1137, -445, 60], "lens": "wide" },
+    { "n": 7, "name": "The Castle ridge", "t": 108, "clock": "11:10", "pos": [-1360, 150, 330], "gaze": [-751, 489, 120], "lens": "long" },
+    { "n": 8, "name": "Malá Strana roofs", "t": 126, "clock": "12:00", "pos": [-640, 440, 210], "gaze": [-325, 89, 40], "lens": "wide" },
+    { "n": 9, "name": "Charles Bridge, low pass", "t": 144, "clock": "12:45", "pos": [-230, 63, 35], "gaze": [157, -40, 30], "lens": "wide" },
+    { "n": 10, "name": "Kampa, Čertovka", "t": 162, "clock": "13:35", "pos": [60, -250, 90], "gaze": [-243, -167, 10], "lens": "wide" },
+    { "n": 11, "name": "Old Town Square, orbit", "t": 178, "clock": "14:15", "pos": [560, -40, 150], "gaze": [808, 122, 60], "lens": "long" },
+    { "n": 12, "name": "Old Town Square, orbit", "t": 192, "clock": "14:55", "pos": [900, 240, 150], "gaze": [808, 122, 60], "lens": "long" },
+    { "n": 13, "name": "Old Town Square, orbit", "t": 204, "clock": "15:25", "pos": [700, 340, 140], "gaze": [808, 122, 60], "lens": "wide" },
+    { "n": 14, "name": "Josefov to Mánes Bridge", "t": 218, "clock": "16:05", "pos": [450, 520, 175], "gaze": [-500, 400, 60], "lens": "wide" },
+    { "n": 15, "name": "Wenceslas Square", "t": 240, "clock": "17:05", "pos": [1100, -640, 230], "gaze": [1344, -856, 40], "lens": "long" },
+    { "n": 16, "name": "The bridges from Letná", "t": 268, "clock": "18:20", "pos": [330, 960, 300], "gaze": [0, 0, 20], "lens": "long>wide" },
+    { "n": 17, "name": "Back up the river", "t": 302, "clock": "19:50", "pos": [240, -1250, 260], "gaze": [458, -2446, 60], "lens": "wide" },
+    { "n": 18, "name": "Vyšehrad, blue hour", "t": 345, "clock": "21:45", "pos": [760, -2850, 380], "gaze": [458, -2446, 40], "lens": "wide" }
+  ]
+}

@@ -219,7 +219,7 @@ Depth of field: none in flight. Slight far-field haze does the job.
 
 ### 6.1 Coordinate system
 
-Local metric frame. Origin is the centre of Charles Bridge. `x` east, `y` up, `z` south (so north is negative `z`), metres. Ground level at the river is `y = 0`; the Vltava surface is at 190 m above sea level in reality, so `y = altitude − 190`.
+Local metric frame. Origin is the centre of Charles Bridge. `x` east, `y` up, `z` south (so north is negative `z`), metres. `y = altitude − 185`: 185 m above sea level (Bpv) is the Vltava surface at Charles Bridge in DMR 5G, so the river there is at `y = 0`. Above the weirs the river stands a little higher: about `y = 1.5` at Legion Bridge and `y = 2.5` from Jiráskův Bridge up to Vyšehrad. Altitudes in the route table (§9.2) are `y`. (The first draft put the river at 190 m; the terrain data measured it 5 m lower, 2026-09-25.)
 
 Conversion from WGS84 near Prague:
 
@@ -231,40 +231,40 @@ z     = −north
 
 ### 6.2 Landmark coordinates
 
-Approximate, from map reading. The implementer verifies each against OpenStreetMap before modelling. `x` and `north` in metres.
+From map reading, then verified against OpenStreetMap on 2026-09-25: rows more than 25 m from the OSM footprint were moved onto it (the Lesser Town Bridge Towers by 78 m, the Šítkov tower and the Leopold Gate by 120 m, the metronome by 87 m, the National Museum by 51 m, Strahov, the National Theatre and St Francis by about 30 m; bridge rows moved to the centre of the OSM deck, Palacký Bridge by 262 m, the railway bridge by 151 m, the others by 50 to 100 m). The origin stays where it is: it is 60 m east of the centre of the OSM deck of Charles Bridge, over the main channel. `data/landmarks.json` carries the same positions and the OSM ids; `tools/build-world.ts` reports the remaining offsets. `x` and `north` in metres.
 
 | Landmark | Lat | Lon | x | north |
 |---|---|---|---|---|
 | Charles Bridge, centre (origin) | 50.0865 | 14.4114 | 0 | 0 |
 | Old Town Bridge Tower | 50.0862 | 14.4137 | 164 | −33 |
-| Lesser Town Bridge Towers | 50.0866 | 14.4067 | −336 | 11 |
+| Lesser Town Bridge Towers | 50.0873 | 14.4069 | −322 | 89 |
 | Týn Church | 50.0876 | 14.4227 | 808 | 122 |
 | Old Town Hall tower and clock | 50.0870 | 14.4208 | 672 | 56 |
 | St Nicholas, Malá Strana | 50.0880 | 14.4033 | −579 | 167 |
 | St Vitus Cathedral | 50.0909 | 14.4009 | −751 | 489 |
 | Petřín lookout tower | 50.0835 | 14.3950 | −1173 | −334 |
 | Petřín rose garden | 50.0825 | 14.3955 | −1137 | −445 |
-| Strahov Monastery | 50.0862 | 14.3892 | −1587 | −33 |
+| Strahov Monastery | 50.0865 | 14.3894 | −1573 | 0 |
 | Vyšehrad, Sts Peter and Paul | 50.0645 | 14.4178 | 458 | −2446 |
-| Vyšehrad, Leopold Gate | 50.0630 | 14.4200 | 615 | −2613 |
+| Vyšehrad, Leopold Gate | 50.0632 | 14.4217 | 736 | −2591 |
 | Dancing House | 50.0755 | 14.4142 | 200 | −1223 |
-| National Theatre | 50.0811 | 14.4136 | 157 | −600 |
-| Šítkov water tower | 50.0783 | 14.4133 | 136 | −912 |
+| National Theatre | 50.0808 | 14.4136 | 157 | −634 |
+| Šítkov water tower | 50.0772 | 14.4137 | 164 | −1034 |
 | Smetana Museum | 50.0857 | 14.4132 | 129 | −89 |
-| St Francis of Assisi (dome) | 50.0862 | 14.4145 | 222 | −33 |
+| St Francis of Assisi (dome) | 50.0864 | 14.4143 | 207 | −11 |
 | Klementinum tower | 50.0868 | 14.4165 | 365 | 33 |
 | Rudolfinum | 50.0899 | 14.4155 | 293 | 378 |
 | Powder Tower | 50.0873 | 14.4278 | 1173 | 89 |
-| Wenceslas Square, museum end | 50.0788 | 14.4302 | 1344 | −856 |
-| Letná, metronome | 50.0955 | 14.4160 | 329 | 1001 |
+| Wenceslas Square, museum end | 50.0789 | 14.4309 | 1394 | −845 |
+| Letná, metronome | 50.0947 | 14.4160 | 329 | 912 |
 | Wallenstein Garden | 50.0905 | 14.4060 | −386 | 445 |
 | Žižkov TV tower (horizon marker) | 50.0810 | 14.4510 | 2831 | −612 |
-| Legion Bridge | 50.0805 | 14.4105 | −64 | −667 |
-| Mánes Bridge | 50.0895 | 14.4135 | 150 | 334 |
-| Čechův Bridge | 50.0935 | 14.4165 | 365 | 778 |
-| Jiráskův Bridge | 50.0755 | 14.4128 | 100 | −1223 |
-| Palacký Bridge | 50.0705 | 14.4125 | 79 | −1779 |
-| Railway bridge (Výtoň) | 50.0665 | 14.4115 | 7 | −2224 |
+| Legion Bridge | 50.0813 | 14.4106 | −57 | −578 |
+| Mánes Bridge | 50.0895 | 14.4127 | 93 | 334 |
+| Čechův Bridge | 50.0931 | 14.4170 | 400 | 734 |
+| Jiráskův Bridge | 50.0756 | 14.4114 | 0 | −1212 |
+| Palacký Bridge | 50.0728 | 14.4120 | 43 | −1523 |
+| Railway bridge (Výtoň) | 50.0669 | 14.4135 | 150 | −2180 |
 | Štefánik Bridge | 50.0945 | 14.4270 | 1115 | 890 |
 | Střelecký island, centre | 50.0810 | 14.4100 | −100 | −612 |
 | Slovanský island (Žofín) | 50.0790 | 14.4120 | 43 | −834 |
@@ -275,19 +275,23 @@ Approximate, from map reading. The implementer verifies each against OpenStreetM
 
 | Data | Source | Use |
 |---|---|---|
-| Building footprints, heights, levels, roof shape and colour where tagged | OpenStreetMap via Overpass, bbox 14.34 to 14.49 E, 50.04 to 50.13 N (about 5 km around Charles Bridge, the outer ring of §2) | Tier 2 and 3 buildings |
-| Terrain | ČÚZK DMR 5G (5 m grid, open) for the core and middle rings; Copernicus DEM 30 m for the outer ring and horizon | Height field |
+| Building footprints, heights, levels, roof shape and colour where tagged | OpenStreetMap, bbox 14.34 to 14.49 E, 50.04 to 50.13 N (about 5 km around Charles Bridge, the outer ring of §2), from the BBBike Prague extract (one PBF file, refreshed weekly) filtered locally, or from Overpass with the same queries | Tier 2 and 3 buildings |
+| Terrain | ČÚZK DMR 5G through the ČÚZK image service (`ags.cuzk.gov.cz`, open data, CC BY 4.0), resampled to a 5 m grid over the world and a 100 m grid out to 16 km for the horizon | Height field |
 | Water | OSM `natural=water`, `waterway=river`, weirs (`waterway=weir`), islands | River mesh and weirs |
 | Land use | OSM `leisure=park`, `landuse=forest`, `natural=wood`, `landuse=orchard`, `leisure=garden`, `landuse=grass` | Vegetation placement |
 | Tram network | OSM `railway=tram`, tram routes 9, 12, 17, 20, 22, 23 | Tram paths and overhead wire poles |
 | Streets | OSM highways with `surface=cobblestone` where tagged | Road textures, tram streets |
 | Bridges | OSM with `bridge=yes`, `man_made=bridge` | Span geometry and piers |
 
-A build script (`tools/fetch-data.ts`) downloads and caches raw data; a second script (`tools/build-world.ts`) turns it into binary tiles under `public/world/`. The app never calls Overpass at runtime.
+A build script (`tools/fetch-data.ts`) downloads and caches raw data in `cache/` (git-ignored). OSM comes from the extract by default: on 2026-09-25 the public Overpass servers timed out on most requests and then refused connections, while the extract is a single 73 MB download that the script filters in seconds; `--overpass` switches back. Buildings use OSM's `building:part` elements where mappers drew them (an outline with parts is drawn as its parts), which gives the churches and towers their real massing even as blocks. Then a second script (`tools/build-world.ts`) turns it into binary files under `public/world/` (8.5 MB gzipped for M0) and writes `cache/preview.png`, a top-down map with the route, for checking a build by eye. The app never calls a map service at runtime.
+
+The horizon uses DMR 5G too, not the Copernicus DEM of the first draft: Copernicus is a surface model that includes buildings and trees, and the whole 16 km horizon lies inside Czechia, where DMR 5G is bare earth throughout. The built world is the rectangle x −5000 to 5000, north −5000 to 4000 (1 km tiles), inside the OSM box above; beyond it only the horizon terrain.
+
+The app shows the attribution the data licences require: OpenStreetMap contributors (ODbL) and ČÚZK (CC BY 4.0).
 
 ### 6.4 Terrain notes
 
-Relative heights above the river (190 m): Petřín summit +137 m, Strahov +130, Castle courtyard +65, Letná +50, Vyšehrad rock +45 with a near-vertical face to the river on its west side, Vítkov +80, Vinohrady +60. The Vltava valley walls are steep on the Petřín and Letná sides and gentle on the Old Town side. Old Town is nearly flat, 5 to 10 m above the river.
+Heights above the river at Charles Bridge (185 m), measured in DMR 5G: Petřín summit +142 m, Strahov monastery +110, Castle courtyard +73, Letná +50, Vyšehrad rock +44 with a near-vertical face to the river on its west side, Vítkov +82, Vinohrady +64, Old Town Square +8. The Vltava valley walls are steep on the Petřín and Letná sides and gentle on the Old Town side. Old Town is nearly flat, 5 to 10 m above the river.
 
 ---
 
@@ -470,8 +474,8 @@ Total 360 s (fast mode: identical path and gaze at 2× speed, 180 s). Time of da
 | 5 | Petřín, the climb | 74 | 09:40 | −450, −720, 190 | −1173, −334, 90 | wide | Rise over orchards and meadows |
 | 6 | Petřín, rose garden and tower | 90 | 10:20 | −1120, −640, 260 | −1137, −445, 60 | wide | Circle the tower; on the north side the panorama viewpoint of 7924 to 7944 |
 | 7 | The Castle ridge | 108 | 11:10 | −1360, 150, 330 | −751, 489, 120 | long | Sweep along the ridge with St Vitus filling the long lens |
-| 8 | Malá Strana roofs | 126 | 12:00 | −640, 440, 210 | −336, 11, 40 | wide | Drop over dormers and chimneys to the dome and the bridge towers |
-| 9 | Charles Bridge, low pass | 144 | 12:45 | −430, −40, 35 | 164, −33, 30 | wide | One slow pass along the bridge just above the statues, boats and swans below |
+| 8 | Malá Strana roofs | 126 | 12:00 | −640, 440, 210 | −325, 89, 40 | wide | Drop over dormers and chimneys to the dome and the bridge towers |
+| 9 | Charles Bridge, low pass | 144 | 12:45 | −230, 63, 35 | 157, −40, 30 | wide | One slow pass along the bridge just above the statues, boats and swans below |
 | 10 | Kampa, Čertovka | 162 | 13:35 | 60, −250, 90 | −243, −167, 10 | wide | Turn back over Kampa, the mill channel, the weir |
 | 11 | Old Town Square, orbit | 178 | 14:15 | 560, −40, 150 | 808, 122, 60 | long | Rise to the Týn towers, begin an orbit |
 | 12 | Old Town Square, orbit | 192 | 14:55 | 900, 240, 150 | 808, 122, 60 | long | Continue, clock tower in view |
@@ -483,6 +487,8 @@ Total 360 s (fast mode: identical path and gaze at 2× speed, 180 s). Time of da
 | 18 | Vyšehrad, blue hour | 345 | 21:45 | 760, −2850, 380 | 458, −2446, 40 | wide | Arrive above the rock as the lights come on and hold |
 
 Leg speeds run from about 20 m/s in the Old Town orbit to about 65 m/s on the long sweeps from Wenceslas Square to Letná and from Letná back up the river; the sweeps are high and wide, so the ground speed reads as a glide. The last leg has 43 s so that the arrival slows down.
+
+The spline is timed: each stop is a knot at its time `t`, knot velocities are the three-point derivative (zero at the first and last stop), and altitude uses monotone tangents so the drone never sinks below a low stop between two higher ones. Where the route doubles back (stops 12, 14, 15) the drone nearly stops and the next leg peaks near 90 m/s at 200 to 300 m up; `tools/check-route.ts` prints the timeline. Stops 8 and 9 were moved on 2026-09-25 when the Lesser Town Bridge Towers turned out to stand 78 m north of their first coordinate (§6.2): stop 8 now looks at the towers, and stop 9 sits above the bridge deck 100 m east of them, over Kampa, so the descent passes north of the towers rather than through them, looking down the bridge to the Old Town tower.
 
 The route does not loop. At stop 18 the drone holds above Vyšehrad in the blue hour, drifting very slowly, clouds and river still moving, until the user presses a key. Arrows hand over manual control there; Enter restarts the flight from stop 1 at dawn. Fast mode uses the same table with `t / 2`.
 
@@ -499,6 +505,7 @@ Nearly nothing. The render fills the window. Elements:
 - Bottom centre: the landmark name in Czech with a one-line English subtitle, fading in as the drone approaches and out as it leaves.
 - Bottom: a thin time-of-day slider with a checkbox "day advances with flight", mode buttons, and a key hint that hides after 20 s.
 - Intro overlay on load: PRAHA, EARLY SUMMER, "click to fly". Auto mode starts under the overlay so the city is already moving when it lifts.
+- Bottom right, very small: the data attribution (OpenStreetMap contributors, ČÚZK), which the licences require.
 
 Typography: a neutral grotesk (Helvetica Neue or Inter), letter-spaced small caps for labels, white at 90% with a soft shadow. Accent colour is a warm gold `#f0c26a`, used only for the mode chip and the slider thumb.
 
@@ -535,7 +542,8 @@ design.md            this document
 Photos/              the reference set (422) and _excluded/
 mockup/              index.html (3D sketch), plan.html (set + route), set/ thumbnails
 data/                hero.json (starred frames), viewpoints.json, route.json, palette.json, landmarks.json
-tools/               fetch-data.ts, build-world.ts, lut-fit.ts, compare.ts
+tools/               fetch-data.ts, build-world.ts, check-route.ts, find-landmarks.ts, lut-fit.ts, compare.ts
+cache/               raw downloads from fetch-data.ts (generated, git-ignored)
 assets/              landmarks/*.glb, lut/classic-neg.cube, textures/
 src/                 app
 public/world/        built tiles (generated, git-ignored)
@@ -594,6 +602,12 @@ Each milestone ends with a build the user can fly. Effort is the implementer's; 
 | M6 | City life: trams, boats, swans, pigeons, crowds, cars | The read-back checklist "is anything moving" passes on every leg |
 | M7 | Interface, loading, fast mode, the blue-hour hold, polish, lite preset | Motion tests pass; loading under 8 s; 30 fps floor on integrated graphics |
 | M8 | LUT refinement against all hero frames, final side-by-side sheet | Every hero pair passes all three questions |
+
+### Progress
+
+**M0, built 2026-09-25.** The pipeline (`npm run world`) turns the OSM extract and DMR 5G into `public/world/` in about 15 s. The app draws the 5 m terrain in 1 km chunks with four levels of detail, the horizon to 16 km, and the river, whose surface is measured from the terrain and whose bed is carved under it. Ground colour comes from land use at 2.5 m: parks, woods, gardens, streets, squares and rail. On top stand 51,000 buildings and 4,100 building parts as grey blocks, and 210 bridge decks. Landmarks are sandstone-coloured blocks on their OSM footprints, with plain boxes for the metronome and the Žižkov tower. The sun of §5.4 lights a gradient sky with haze and casts one 4096 shadow map that follows the view. The auto route runs with its lens changes and the blue-hour hold; manual flight keeps its clearance; the interface is the minimal set of §10.1 plus the attribution.
+
+Measured in Chrome on an Apple M2 at 2360 × 1404: 3.5 to 9.9 ms a frame across the 18 stops, 6 ms on average. The route stays at least 12 m above every roof. Not yet in M0, and planned for M1: cascaded shadows (the terrain casts none yet), the analytic sky, clouds, the grade and TAA.
 
 ---
 
