@@ -6,7 +6,7 @@ It is a 3D reconstruction, not a photo app. The photographs are the reference th
 
 - `CLAUDE.md` — the intent, in one page. Read first.
 - `design.md` — the full design: scope, the data set, the look, geography and coordinates, fidelity tiers, world systems, the drone and the auto route, interface, technology, acceptance tests, milestones.
-- `data/hero.json` — the hero frames the renders are tested against.
+- `data/hero.json` — the hero frames the renders are tested against; `data/viewpoints.json` — where each was taken.
 - `mockup/plan.html` — the data set by place and by route stop, with the map. Serve the `mockup` folder statically and open it.
 - `mockup/index.html` — an early Three.js sketch of the concept.
 - `mockup/set/` — 800 px copies of the 422 reference frames.
@@ -22,9 +22,11 @@ npm run world      # fetch OSM (BBBike Prague extract) and terrain (ČÚZK) into
 npm run dev        # http://localhost:5173
 ```
 
-`npm run fetch-data` and `npm run build-world` run the two halves separately; the fetch only downloads what is not cached yet (`-- --overpass` takes OSM from Overpass instead of the extract). The build also writes `cache/preview.png`, a top-down map of the world with the flight path. `npm run build` makes the static site in `dist/`.
+`npm run fetch-data` and `npm run build-world` run the two halves separately; the fetch only downloads what is not cached yet (`-- --overpass` takes OSM from Overpass instead of the extract). The build also writes `cache/preview.png`, a top-down map of the world with the flight path. `npm run build` makes the static site in `dist/`. `npm run lut` rewrites the Classic Negative grade, `assets/lut/classic-neg.cube`, from the parameters in `tools/make-lut.ts`.
 
-In the app: arrows take over (yaw and altitude), Shift is fast cruise, Space hovers, W and S tilt, A and D strafe, Enter returns to the auto route. The backquote key shows frame statistics. URL parameters for development: `?t=144` starts the route at that second, `?clock=20:30` fixes the time of day, `?fast`, `?manual`, `?stats`.
+In the app: arrows take over (yaw and altitude), Shift is fast cruise, Space hovers, W and S tilt, A and D strafe, Enter returns to the auto route, C rolls new clouds. The WEATHER button switches the overcast on and off. The backquote key shows frame statistics; in development G turns the grade off. URL parameters: `?t=144` starts the route at that second, `?clock=20:30` fixes the time of day, `?fast`, `?manual`, `?stats`; for the weather `?seed=`, `?coverage=0.4`, `?overcast=1` or `0`, `?cirrus=0.5`.
+
+Judging renders against the photographs (design.md §12): in development `/?view=8372` opens the app at that hero frame's viewpoint, and `praha.sheet()` in the console writes `compare/8372.png`, the photograph and the render side by side. `npm run compare` does every viewpoint in headless Chrome (`npm run compare -- 8372 9369` for some).
 
 ## Photographs
 

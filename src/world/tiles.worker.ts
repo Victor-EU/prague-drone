@@ -9,7 +9,7 @@ self.onmessage = async (e: MessageEvent<Job>) => {
   const { url, id, kinds } = e.data;
   try {
     const pack = await fetchPack(url);
-    const b = extrude(pack.arrays as unknown as Footprints, kinds, pack.meta.i * 131 + pack.meta.j);
+    const b = extrude(pack.arrays as unknown as Footprints, kinds, pack.meta.i * 131 + pack.meta.j, pack.meta.ox, pack.meta.oz);
     (self as unknown as Worker).postMessage({ id, meta: pack.meta, ...b }, [b.position.buffer, b.normal.buffer, b.color.buffer, b.index.buffer]);
   } catch (err) {
     (self as unknown as Worker).postMessage({ id, error: String(err) });

@@ -31,6 +31,7 @@ canvas#view { display: block; width: 100vw; height: 100vh; outline: none; }
 .row { display: flex; align-items: center; gap: 12px; }
 .row + .row { margin-top: 8px; }
 .lbl { font-size: 9.5px; letter-spacing: 0.2em; color: var(--dim); width: 86px; flex: none; }
+.lbl.right { width: auto; margin-left: auto; }
 input[type='range'] { flex: 1; height: 2px; accent-color: var(--gold); }
 label.check { font-size: 9.5px; letter-spacing: 0.14em; color: var(--dim); display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .btns { display: flex; gap: 6px; }
@@ -43,3 +44,6 @@ label.check { font-size: 9.5px; letter-spacing: 0.14em; color: var(--dim); displ
 #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 10px;
   background: #0b1016; color: var(--dim); font-size: 11px; letter-spacing: 0.3em; transition: opacity 1.2s ease; }
 #loading h2 { margin: 0; color: var(--ink); font-weight: 400; font-size: 22px; letter-spacing: 0.42em; }
+/* Viewpoint renders for the side-by-side: the frame alone, centred, no interface. */
+body.viewpoint #hud, body.viewpoint #loading { display: none; }
+body.viewpoint canvas#view { margin: auto; position: absolute; inset: 0; }

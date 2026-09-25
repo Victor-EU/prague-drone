@@ -3,47 +3,87 @@
 import * as THREE from 'three';
 import { World } from './world/world.ts';
 import { Atmosphere } from './sky/sky.ts';
-import { Route, hfovFor, type RouteData } from './drone/route.ts';
+import { rollSession } from './sky/clouds.ts';
+import { TerrainShadow } from './sky/terrain-shadow.ts';
+import { Pipeline } from './render/pipeline.ts';
+import { loadCube } from './render/lut.ts';
+import { Route, hfovFor, WIDE, LONG, type RouteData } from './drone/route.ts';
 import { Drone } from './drone/drone.ts';
 import { Keys } from './drone/input.ts';
 import { Hud } from './ui/hud.ts';
 import { parseClock } from './core/sun.ts';
 import routeData from '../data/route.json';
 import landmarkData from '../data/landmarks.json';
+import lutUrl from '../assets/lut/classic-neg.cube?url';
 
 const params = new URLSearchParams(location.search);
 const BASE = `${import.meta.env.BASE_URL}world`;
 
+// Development only: a hero frame's viewpoint (data/viewpoints.json), for judging the render
+// against the photograph (design.md §12.1). The shipped app never loads either.
+interface Viewpoint {
+  id: string; x: number; north: number; agl: number; heading: number; tilt: number; focal35: number; aspect: number; clock: string;
+  weather: { seed: number; coverage: number; overcast: boolean; cirrus: number; cloudAt?: [number, number] };
+}
+const view: Viewpoint | undefined = import.meta.env.DEV && params.has('view')
+  ? ((await import('../data/viewpoints.json')).default.frames as Viewpoint[]).find((f) => f.id === params.get('view'))
+  : undefined;
+if (view) {
+  params.set('clock', view.clock);
+  params.set('seed', String(view.weather.seed));
+  params.set('coverage', String(view.weather.coverage));
+  params.set('overcast', view.weather.overcast ? '1' : '0');
+  params.set('cirrus', String(view.weather.cirrus));
+  document.body.classList.add('viewpoint');
+}
+
 const canvas = document.getElementById('view') as HTMLCanvasElement;
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance', reversedDepthBuffer: true });
-renderer.toneMapping = THREE.AgXToneMapping;
-renderer.toneMappingExposure = 1.0;
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', reversedDepthBuffer: true });
+renderer.toneMapping = THREE.NoToneMapping;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.info.autoReset = false;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(50, 1, 3, 60000);
-
-function resize() {
-  const w = window.innerWidth, h = window.innerHeight;
-  // Cap the drawing buffer near 2560 × 1600 so the frame rate target holds on large screens.
-  const ratio = Math.min(window.devicePixelRatio, Math.sqrt(4.2e6 / (w * h)));
-  renderer.setPixelRatio(Math.max(1, ratio));
-  renderer.setSize(w, h, false);
-  camera.aspect = w / h;
-}
-window.addEventListener('resize', resize);
-resize();
 
 const loading = document.createElement('div');
 loading.id = 'loading';
 loading.innerHTML = '<h2>PRAHA</h2><div>EARLY SUMMER · LOADING THE CITY</div>';
 document.body.appendChild(loading);
 
+// The weather of this session: clouds rolled per session (design.md §8.6), overcast on one in five.
+const session = rollSession(params.has('seed') ? Number(params.get('seed')) : undefined);
+if (params.has('coverage')) session.coverage = THREE.MathUtils.clamp(Number(params.get('coverage')), 0.05, 0.65);
+if (params.has('cirrus')) session.cirrus = Number(params.get('cirrus'));
+const overcast = params.has('overcast') ? params.get('overcast') !== '0' : Math.random() < 0.2;
+
 const route = new Route(routeData as unknown as RouteData);
-const atmosphere = new Atmosphere(renderer, scene);
-const world = await World.load(BASE, renderer);
+const [lut, world] = await Promise.all([loadCube(lutUrl), World.load(BASE, renderer)]);
+const atmosphere = new Atmosphere(renderer, scene, session, overcast);
+const pipeline = new Pipeline(renderer, lut);
+const terrainShadow = new TerrainShadow(world.height);
 scene.add(world.group);
+
+function resize() {
+  let w = window.innerWidth, h = window.innerHeight;
+  // A viewpoint renders at its photograph's aspect, the largest such frame in the window.
+  if (view) {
+    if (w / h > view.aspect) w = Math.round(h * view.aspect); else h = Math.round(w / view.aspect);
+    canvas.style.width = `${w}px`;
+    canvas.style.height = `${h}px`;
+  }
+  // Cap the drawing buffer near 2560 × 1600 so the frame rate target holds on large screens.
+  const ratio = Math.min(window.devicePixelRatio, Math.sqrt(4.2e6 / (w * h)));
+  renderer.setPixelRatio(Math.max(1, ratio));
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+  pipeline.setSize(size.x, size.y);
+  atmosphere.setSize(size.x, size.y);
+}
+window.addEventListener('resize', resize);
+resize();
 
 const drone = new Drone(route, world);
 const keys = new Keys(window);
@@ -67,15 +107,57 @@ const hud = new Hud(document.getElementById('hud')!, {
     drone.fast = m === 'fast';
     if (drone.mode === 'manual') drone.rejoin();
   },
+  setOvercast: (on) => { atmosphere.overcastTarget = on ? 1 : 0; },
 }, world.manifest.attribution.replace('Map data ', '').replace(/\. /g, ' · '));
 let statsOn = params.has('stats');
 hud.stats.style.display = statsOn ? 'block' : 'none';
 
 world.buildings.load(world.manifest.tiles, drone.position);
 const worldLoadedAt = performance.now();
+if (view?.weather.cloudAt) atmosphere.clouds.moveDensestOver(view.weather.cloudAt[0], -view.weather.cloudAt[1]);
 
 // Handles for poking at the running app from the console, in development only.
-if (import.meta.env.DEV) Object.assign(window, { praha: { renderer, scene, camera, world, atmosphere, drone, route, bench, worldLoadedAt } });
+if (import.meta.env.DEV) {
+  const dev = await import('./dev/compare.ts');
+  const once = () => { placeCamera(); renderFrame(1 / 60); };
+  Object.assign(window, {
+    praha: {
+      renderer, scene, camera, world, atmosphere, pipeline, drone, route, bench, worldLoadedAt,
+      setClock: (h: number) => { dayAdvances = false; fixedClock = clock = h; },
+      capture: (name = 'capture.png') => dev.capture(canvas, once, name),
+      sheet: (width = 0, suffix = '') => view && dev.sheet(canvas, once, view.id, width, suffix),
+    },
+  });
+}
+
+function placeCamera() {
+  if (view) {
+    const z = -view.north;
+    camera.position.set(view.x, world.ground(view.x, z) + view.agl, z);
+    camera.rotation.set(THREE.MathUtils.degToRad(view.tilt), THREE.MathUtils.degToRad(-view.heading), 0, 'YXZ');
+  } else {
+    camera.position.copy(drone.position);
+    camera.quaternion.copy(drone.quaternion);
+  }
+  const hfov = view ? 2 * Math.atan(18 / view.focal35) : hfovFor(drone.focal);
+  camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(hfov / 2) / camera.aspect));
+  camera.updateProjectionMatrix();
+  camera.updateMatrixWorld();
+}
+
+function renderFrame(dt: number) {
+  renderer.info.reset();
+  atmosphere.update(clock, camera, dt);
+  atmosphere.updateEnvironment();
+  terrainShadow.update(renderer, atmosphere.sunDir);
+  world.terrain.update(camera.position);
+  pipeline.render(scene, camera, {
+    dt,
+    light: atmosphere.light,
+    lens: THREE.MathUtils.clamp(((view ? view.focal35 : drone.focal) - WIDE) / (LONG - WIDE), 0, 1),
+    beforeScene: (cam) => atmosphere.renderClouds(cam),
+  });
+}
 
 /**
  * Development only: GPU-synchronised frame time at each stop, independent of requestAnimationFrame
@@ -90,15 +172,14 @@ function bench(frames = 12): Record<string, number> {
   for (const s of route.stops) {
     drone.setAuto(s.t);
     for (let k = 0; k < 40; k++) world.terrain.update(drone.position, 8);
+    placeCamera();
+    renderFrame(1 / 60);
+    sync();
     const t0 = performance.now();
     for (let k = 0; k < frames; k++) {
       drone.update(1 / 60, keys);
-      camera.position.copy(drone.position);
-      camera.quaternion.copy(drone.quaternion);
-      camera.updateMatrixWorld();
-      atmosphere.update(route.clock(drone.t), camera, drone.position);
-      world.terrain.update(camera.position);
-      renderer.render(scene, camera);
+      placeCamera();
+      renderFrame(1 / 60);
     }
     sync();
     out[`${s.n} ${s.name}`] = +((performance.now() - t0) / frames).toFixed(1);
@@ -130,7 +211,6 @@ function pickLandmark(now: number) {
   }
 }
 
-const focus = new THREE.Vector3();
 const timer = new THREE.Timer();
 let hudClock = 0, frames = 0, fpsTime = 0, fps = 0;
 
@@ -147,10 +227,11 @@ function frame(time: number) {
     } else if (k === 'Backquote') {
       statsOn = !statsOn;
       hud.stats.style.display = statsOn ? 'block' : 'none';
-    }
+    } else if (k === 'KeyC') atmosphere.reseed(rollSession());
+    else if (k === 'KeyG' && import.meta.env.DEV) pipeline.grade = !pipeline.grade;
   }
 
-  drone.update(dt, keys);
+  if (!view) drone.update(dt, keys);
 
   // The clock follows the flight; in the hold it keeps going to 22:30 at a minute a second.
   if (dayAdvances && drone.mode === 'auto') {
@@ -160,26 +241,8 @@ function frame(time: number) {
     clock += (target - clock) * (1 - Math.exp(-dt / 0.6));
   } else if (!dayAdvances) clock = fixedClock;
 
-  camera.position.copy(drone.position);
-  camera.quaternion.copy(drone.quaternion);
-  const hfov = hfovFor(drone.focal);
-  camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(hfov / 2) / camera.aspect));
-  camera.updateProjectionMatrix();
-  camera.updateMatrixWorld();
-
-  // The shadow covers the ground the camera is looking at.
-  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-  fwd.y = 0;
-  if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1);
-  fwd.normalize();
-  const agl = drone.position.y - world.ground(drone.position.x, drone.position.z);
-  focus.copy(drone.position).addScaledVector(fwd, THREE.MathUtils.clamp(agl * 1.5, 150, 550));
-  focus.y = world.ground(focus.x, focus.z);
-  atmosphere.update(clock, camera, focus);
-  atmosphere.updateEnvironment();
-  world.terrain.update(camera.position);
-
-  renderer.render(scene, camera);
+  placeCamera();
+  renderFrame(dt);
 
   frames++;
   fpsTime += dt;
@@ -187,18 +250,22 @@ function frame(time: number) {
   hudClock += dt;
   if (hudClock > 0.2) {
     hudClock = 0;
+    const agl = drone.position.y - world.ground(drone.position.x, drone.position.z);
     hud.update({
       mode: drone.mode === 'manual' ? 'manual' : drone.fast ? 'fast' : 'auto',
       clock, sun: atmosphere.elevation, altitude: agl, dayAdvances,
+      clouds: atmosphere.overcast > 0.5 ? 1 : atmosphere.clouds.coverage, overcast: atmosphere.overcastTarget > 0.5,
     });
     pickLandmark(time / 1000);
     if (statsOn) {
       const info = renderer.info.render;
+      const s = atmosphere.clouds.session;
       hud.stats.textContent =
         `${fps.toFixed(0)} fps  ${info.calls} calls  ${(info.triangles / 1e6).toFixed(2)} M tris\n` +
         `t ${drone.t.toFixed(1)} s  stop ${route.stopAt(drone.t).n}  ${drone.focal.toFixed(0)} mm\n` +
         `x ${drone.position.x.toFixed(0)}  north ${(-drone.position.z).toFixed(0)}  y ${drone.position.y.toFixed(0)}\n` +
-        `tiles ${world.buildings.loaded}/${world.buildings.total}`;
+        `clouds seed ${s.seed}  peak ${(s.coverage * 100).toFixed(0)}%  base ${s.base.toFixed(0)} m  wind ${s.wind.toFixed(1)} m/s  cirrus ${s.cirrus.toFixed(2)}\n` +
+        `tiles ${world.buildings.loaded}/${world.buildings.total}  grade ${pipeline.grade ? 'on' : 'off'}`;
     }
   }
   if (loading.style.opacity !== '0') {

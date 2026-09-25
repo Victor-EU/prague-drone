@@ -1,0 +1,13 @@
+{
+  "note": "Viewpoints of the hero frames (design.md §12.1): where the camera stood, where it looked, its 35 mm equivalent focal length from EXIF, and the local clock (CEST: EXIF time + 1 h, design.md §3.1). x and north in metres (§6.1); 'agl' is the eye height above the ground there. heading in degrees clockwise from north, tilt in degrees (negative looks down). 'weather' fixes the clouds: seed, peak coverage, overcast, cirrus, and 'cloudAt', a ground point the densest cumulus cell is moved over. Authored by lining the render up with the photograph (open /?view=<id> in development and call praha.sheet() in the console).",
+  "frames": [
+    {"id": "8372", "x": 545, "north": -2342, "agl": 12, "heading": -16, "tilt": -4.5, "focal35": 24, "aspect": 1.5, "clock": "12:08",
+      "weather": {"seed": 8372, "coverage": 0.5, "overcast": false, "cirrus": 0}},
+    {"id": "9369", "x": 900, "north": 1180, "agl": 1.6, "heading": 20, "tilt": 18, "focal35": 53, "aspect": 1.5, "clock": "16:54",
+      "weather": {"seed": 9369, "coverage": 0.3, "overcast": false, "cirrus": 0.4, "cloudAt": [3000, 6800]}},
+    {"id": "8694", "x": 90, "north": 250, "agl": 7, "heading": 161, "tilt": 2, "focal35": 68, "aspect": 1.5, "clock": "20:02",
+      "weather": {"seed": 8694, "coverage": 0.08, "overcast": false, "cirrus": 0}},
+    {"id": "9547", "x": -40, "north": -560, "agl": 12, "heading": 4, "tilt": 2, "focal35": 24, "aspect": 1.5, "clock": "21:52",
+      "weather": {"seed": 9547, "coverage": 0.06, "overcast": false, "cirrus": 0}}
+  ]
+}

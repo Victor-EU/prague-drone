@@ -67,13 +67,15 @@ Camera: Fujifilm X-S10, 16 to 55 mm f/2.8, JPEG straight from camera. Film simul
 
 Focal lengths in the set: about a third at 16 mm (24 mm equivalent, wide), about a third at 55 mm (83 mm equivalent, compressed), the rest in between. This matters for §5.5 (the drone camera has two focal lengths).
 
+**The camera clock ran on CET, not summer time.** EXIF times are one hour behind local time (CEST); add an hour. The sun proves it: 9547 is stamped 20:52 on 1 June, eleven minutes before sunset, yet shows the deep blue hour, which comes at 21:52. In CEST the set runs from 09:35 to 22:39, so **no frame shows dawn or early morning**. The Petřín panoramas (7913 to 7958) were shot from 18:50 to 19:01 with the sun 17° up in the west-north-west, behind the camera. 8645 to 8680 are the backlit golden hour at 19:40 to 20:00, and the blue hour and night are 9530 to 9608, 21:33 to 22:39. All times in this document are CEST. (Found on 2026-09-25 while fitting the light families of §5.3.)
+
 ### 3.2 The set by place
 
 Each place group is a range of file numbers. Counts are frames. "Teaches" is what the group contributes to the build. Stops refer to the auto route in §9.
 
 | Place | Frames | Stops | Teaches |
 |---|---|---|---|
-| Petřín, morning panoramas (7913 to 7958, 7862) | 20 | 5, 6 | **The roofscape bible.** Malá Strana and Old Town from the drone's own angle in warm morning light. Also the default daylight grade. |
+| Petřín, early-evening panoramas (7913 to 7958, 7862) | 20 | 5, 6 | **The roofscape bible.** Malá Strana and Old Town from the drone's own angle in warm light from a low sun behind the camera (18:50). Also the default daylight grade. |
 | Petřín and Strahov, the Castle view (7964 to 7981, 8749 to 8759) | 17 | 7 | St Vitus and the Castle across Malá Strana roofs; the ridge silhouette. |
 | Petřín, rose garden, orchards, meadows (7885 to 7900, 8721 to 8748, 8760 to 8764) | 13 | 5, 6 | **The season.** Roses, peonies, orchard paths, meadow grass, cumulus over the hill. |
 | Vyšehrad, roofs, gates, panoramas with clouds (8284 to 8403) | 57 | 1 | **Cumulus over red roofs.** Tile colour under midday sun; brick gates and walls; clay courts as a colour note. |
@@ -90,7 +92,7 @@ Each place group is a range of file numbers. Counts are frames. "Teaches" is wha
 | Letná, the bridges, Štefánik bridge, lawns (9245 to 9314, 9325 to 9373, 9451 to 9500) | 47 | 16 | **All the bridges in one frame.** Late light on the river, big lawn trees, the Old Town skyline through leaves. |
 | Holešovice, St Anthony, trams (9385 to 9450, 9513) | 10 | 15, 16 | Outside the drone's area, but the best tram frames: red Tatra trams under cumulus. |
 | Evening embankments, pastel light (8039 to 8065, 8952 to 9026) | 29 | 17 | **The overcast pastel evening.** Reflections on still water, pigeons on cobbles, the Dancing House at dusk. |
-| Blue hour, night (8655 to 8680, 9527 to 9608) | 32 | 18 | **The end of the route.** Charles Bridge and the Castle lit, the penguins, the Dancing House at night. |
+| Backlit golden hour (8655 to 8680) and blue hour, night (9527 to 9608) | 32 | 18 | **The end of the route.** Charles Bridge and the Castle lit, the penguins, the Dancing House at night. 8655 to 8680 are against the low sun at 19:50, not night. |
 | Wallenstein garden, leaves, fruit, water lilies (9074 to 9178, 9223 to 9241) | 18 | palette only | Early summer detail: mock orange, wet leaves, green plums, water lilies, the peacock. |
 
 Every one of the 422 frames falls in exactly one group, except 8709 (Kampa and Charles Bridge). The ranges are file-number ranges and skip the numbers that were not kept. The mockup page `mockup/plan.html` renders this table with every frame, the route, and the star markers. Use it as the browsable version of this section.
@@ -101,7 +103,7 @@ Hero frames are the frames the renders are tested against (see §12). Confirmed 
 
 | Frame | Viewpoint | Tests |
 |---|---|---|
-| 7924, 7940, 7944 | Petřín slope below the tower, looking east and north-east | Roofscape, river, morning grade |
+| 7924, 7940, 7944 | Petřín slope below the tower, looking east and north-east | Roofscape, river, early-evening grade (18:50) |
 | 8753 | Petřín / Strahov looking north to the Castle | Castle massing and ridge |
 | 9204 | Kampa, the Čertovka channel, soft light | Overcast grade in daylight, the mill channel |
 | 8372, 8385 | Vyšehrad ramparts looking north | Red roofs, cumulus, cloud shadows, Castle on the horizon |
@@ -181,6 +183,8 @@ Render physically based in linear light. Post chain, in order:
 4. **Colour grade as a 3D LUT** (32³ or 64³), authored to the table above. The LUT is authored once by hand against the hero frames, then refined by a script that compares Lab histograms of renders and photographs at the same viewpoints (see §12.3). The LUT is a project asset, `assets/lut/classic-neg.cube`, and is versioned.
 5. Vignette, grain, tiny chromatic aberration at 16 mm only.
 
+As built in M1: the tonemap is a per-channel filmic curve with separate toe and shoulder (the Uchimura form), chosen over AgX because the two ends of the Classic Negative curve are tuned independently, and per-channel compression is what turns bright sky grey-cyan and sunlit plaster cream. The meter weights bright pixels more than dark ones and may move at most one stop either side of each light family's base exposure, so the key of a light stays put while the drone turns. The LUT is written by `tools/make-lut.ts` from the §5.1 table (hue-selective chroma and hue moves in OKLCh, split toning, a slight lift of the blacks); its parameters are the hand authoring, and `lut-fit.ts` refines them later. Each family adds a trim on top: white balance, saturation, contrast.
+
 Provide a runtime toggle (key G, developer builds only) that bypasses steps 4 and 5 so the grade can be judged. Comparison against photographs happens only in the offline tool `tools/compare.ts` (§12.1); the app itself never loads a photograph.
 
 ### 5.3 The four light families
@@ -189,10 +193,10 @@ The time-of-day slider blends between these anchors. Each anchor has a sun eleva
 
 | Family | Clock (CEST, late May) | Reference frames | Notes |
 |---|---|---|---|
-| Dawn and warm morning | 05:00 to 09:30 | Petřín morning set (7924 to 7958) | Long shadows to the west, warm light on east faces, cool shadows, clear sky with light haze at the horizon. The default and the most important. |
-| Cumulus midday | 10:00 to 16:00 | Vyšehrad (8371 to 8394), Legion Bridge (8480 to 8540), Letná lawn (9369) | High sun, hard shadows, scattered cumulus with sharp cloud shadows moving over roofs. |
-| Late afternoon and golden hour | 16:00 to 21:00 | Letná bridges (9486, 9492), Charles Bridge evening (8683 to 8715) | Lower, warmer sun from the west. Stone glows. Sky still cyan-grey. |
-| Blue hour and night | 21:00 to 23:00 | 8655 to 8680, 9527 to 9562, 9567 to 9608 | Deep blue sky, city lights warm, floodlit landmarks, water reflecting lights. |
+| Dawn and warm morning | 05:00 to 09:30 | None in the set, which starts at 09:35 (§3.1). Built from the low warm sun of the Petřín panoramas (7924 to 7958, 18:50) with the sun moved to the east-north-east, plus morning haze | Long shadows to the west, warm light on east faces, cool shadows, clear sky with light haze at the horizon. The default and the most important. |
+| Cumulus midday | 10:00 to 16:00 | Vyšehrad (8371 to 8394, 12:05), Legion Bridge (8480 to 8540, 13:15 to 14:00), Letná lawn (9369, 16:54) | High sun, hard shadows, scattered cumulus with sharp cloud shadows moving over roofs. |
+| Late afternoon and golden hour | 16:00 to 21:00 | Petřín panoramas (7924 to 7958, 18:50), Letná bridges (9486, 9492, 18:51), Charles Bridge evening (8683 to 8715, 20:00) | Lower, warmer sun from the west. Stone glows. Sky still cyan-grey. |
+| Blue hour and night | 21:00 to 23:00 | 9530 to 9608 (21:33 to 22:39) | Deep blue sky, city lights warm, floodlit landmarks, water reflecting lights. |
 
 Weather variant, independent of time: **overcast pastel** (8952 to 9026, 8881 to 8918, 9203 to 9204). Flat light, no shadows, colours go pastel, sky is a bright grey with texture. Rolled with 20% probability at session start, or forced from the UI.
 
@@ -385,12 +389,12 @@ Greens are graded per §5.1: olive and teal, never lime. Trees cast shadows and 
 
 ### 8.6 Sky, sun, clouds
 
-- Analytic sky model (Hosek-Wilkie or Preetham) tuned per light family, then graded.
+- Physically based sky from precomputed scattering tables (transmittance, multiple scattering and a sky view table, after Hillaire 2020), tuned per light family (aerosol amount, sky saturation), then graded. Not Hosek-Wilkie or Preetham as first written: both are fitted for the sun above the horizon only and have no twilight, and the flight ends in the blue hour, whose deep blue comes from ozone absorption with the sun below the horizon. The same tables give the sunlight's colour through the air and the haze colour, so sun, sky and haze agree at every hour.
 - Sun disc with a soft glare, no lens flare streaks.
-- **Clouds**: cumulus as raymarched impostors or layered billboards with proper lighting (lit tops, shaded bases), base 1200 to 1800 m above the river, drifting with a wind of 3 to 8 m/s from the west-south-west. Coverage rolled per session between 5% and 65%. Clouds cast shadows on the city through the shadow map or a projected cloud-shadow texture; the shadow movement is essential.
+- **Clouds**: cumulus as raymarched impostors or layered billboards with proper lighting (lit tops, shaded bases), base 1200 to 1800 m above the river, drifting with a wind of 3 to 8 m/s from the west-south-west. Coverage rolled per session between 5% and 65%. Clouds cast shadows on the city through the shadow map or a projected cloud-shadow texture; the shadow movement is essential. As built: a raymarched layer at half resolution over a 2D coverage map and two tiling 3D noises; shadows come from the same coverage map projected along the sun, so they move with the clouds. The rolled coverage is the afternoon peak: cumulus build through the late morning and thin out after 18:00, so the dawn of §5.3 is clear; the coverage shown never leaves 5 to 65%.
 - A thin cirrus layer at 50% probability.
 - Overcast preset: a continuous stratus layer with visible texture, sun disc hidden, ambient light from a bright grey dome.
-- Haze: aerial perspective that desaturates and cools toward the horizon; strength varies by family (strongest in the warm morning, weakest at midday).
+- Haze: aerial perspective that desaturates and cools toward the horizon; strength varies by family (strongest in the warm morning, weakest at midday). As built: height fog whose colour is the sky's own colour just above the horizon in that direction (from the sky view table), so distant roofs fade into the sky they stand under, warm toward the sun and cool away from it.
 
 ### 8.7 Night
 
@@ -525,11 +529,11 @@ None. The app is silent. No audio assets, no speaker control.
 |---|---|---|
 | Language and build | TypeScript, Vite | Fast iteration, static output |
 | Renderer | Three.js, WebGL2, with the WebGPU renderer as a later option | Mature, well-understood, instancing and post pipeline available |
-| Post | EffectComposer: render, SSAO (light), TAA, filmic tonemap, LUT grade, vignette and grain | §5.2 |
+| Post | Own full-screen passes: render, TAA, meter, filmic tonemap, LUT grade, vignette and grain. SSAO waits for M2; until then block walls darken toward the ground | §5.2 |
 | World data | Prebuilt binary tiles under `public/world/`, gzip | No runtime API calls |
 | Landmarks | glTF with Draco, authored in Blender, in `assets/landmarks/` | Hand modelled per §7.1 |
 | Instancing | InstancedMesh for buildings (grouped by district and material), trees, props, people | Draw call budget under 600 |
-| Shadows | Cascaded shadow maps, 3 cascades, 2048 each, plus a cloud-shadow projection | Long morning shadows need reach |
+| Shadows | Cascaded shadow maps for buildings from three.js's `SunLight` (2 cascades of 2048 to 2.8 km), a heightfield shadow for the terrain computed on the GPU when the sun moves, and the cloud-shadow projection | Long morning shadows need reach. As built in M1: three r186 ships a two-cascade sun; 4096 cascades cost a millisecond more on an M2 for little visible gain. Hills shading the city (Petřín in the evening) come from the heightfield at any distance and softly; terrain in the cascades cost 3 ms a frame |
 | Reflections | Planar reflection for the river at half resolution | The evening frames depend on it |
 | Hosting | Static, any CDN | No backend |
 
@@ -542,10 +546,10 @@ design.md            this document
 Photos/              the reference set (422) and _excluded/
 mockup/              index.html (3D sketch), plan.html (set + route), set/ thumbnails
 data/                hero.json (starred frames), viewpoints.json, route.json, palette.json, landmarks.json
-tools/               fetch-data.ts, build-world.ts, check-route.ts, find-landmarks.ts, lut-fit.ts, compare.ts
+tools/               fetch-data.ts, build-world.ts, check-route.ts, find-landmarks.ts, make-lut.ts, lut-fit.ts, compare.ts
 cache/               raw downloads from fetch-data.ts (generated, git-ignored)
 assets/              landmarks/*.glb, lut/classic-neg.cube, textures/
-src/                 app
+src/                 app: core/, world/ (terrain, tiles), sky/ (atmosphere, families, clouds, shadows), render/ (post), drone/, ui/, dev/ (side-by-side, development only)
 public/world/        built tiles (generated, git-ignored)
 compare/             side-by-side sheets from tools/compare.ts (generated, git-ignored)
 ```
@@ -561,6 +565,8 @@ For each hero frame in `data/hero.json`:
 1. A viewpoint record: camera position, heading, tilt, focal length in 35 mm equivalent read from the frame's EXIF (any value between 24 and 83, not the flight's two lenses), clock time, weather preset. Authored once by hand in the offline tool by lining the render up with the photograph, then saved to `data/viewpoints.json`.
 2. `tools/compare.ts` renders the viewpoint headless and writes `compare/<frame>.png` with the photograph on the left, the render on the right, and a 50% blend below.
 3. The user judges each pair on three questions: same silhouette, same colours, same light mood. Each is pass or fail. A build is accepted when every hero frame passes all three.
+
+As built in M1: in development, `/?view=<id>` opens the app at a viewpoint (camera, lens, clock and a fixed cloud seed, at the photograph's 3:2 aspect, without the interface), and `praha.sheet()` in the console writes the sheet through the dev server. `npm run compare [ids]` does the same for every viewpoint in headless Chrome on the GPU, about 10 s a frame. Clock times are EXIF plus one hour (§3.1). Neither path reaches the production build.
 
 ### 12.2 Motion tests
 
@@ -608,6 +614,21 @@ Each milestone ends with a build the user can fly. Effort is the implementer's; 
 **M0, built 2026-09-25.** The pipeline (`npm run world`) turns the OSM extract and DMR 5G into `public/world/` in about 15 s. The app draws the 5 m terrain in 1 km chunks with four levels of detail, the horizon to 16 km, and the river, whose surface is measured from the terrain and whose bed is carved under it. Ground colour comes from land use at 2.5 m: parks, woods, gardens, streets, squares and rail. On top stand 51,000 buildings and 4,100 building parts as grey blocks, and 210 bridge decks. Landmarks are sandstone-coloured blocks on their OSM footprints, with plain boxes for the metronome and the Žižkov tower. The sun of §5.4 lights a gradient sky with haze and casts one 4096 shadow map that follows the view. The auto route runs with its lens changes and the blue-hour hold; manual flight keeps its clearance; the interface is the minimal set of §10.1 plus the attribution.
 
 Measured in Chrome on an Apple M2 at 2360 × 1404: 3.5 to 9.9 ms a frame across the 18 stops, 6 ms on average. The route stays at least 12 m above every roof. Not yet in M0, and planned for M1: cascaded shadows (the terrain casts none yet), the analytic sky, clouds, the grade and TAA.
+
+**M1, built 2026-09-25.** The look, in `src/sky/` and `src/render/`:
+
+- **Sky and sunlight** from precomputed scattering tables (§8.6). The same tables colour the sunlight through the air and the haze, so the low sun is orange because the air made it so. Knobs per family: aerosol, sky saturation, and a lift of the dark band opposite the sun, because the photographs' skies are flatter than the physical one. Stars and an orange light-pollution glow come in after dark; cirrus appears on half the sessions; the overcast deck on one in five (or from the WEATHER button).
+- **Light families** (§5.3) as keyframes on the clock, with the overcast variant blended in over a second. Each sets aerosol, haze density and height, exposure bias, white balance, saturation, contrast, black lift, and how much of the session's cumulus has built up: clear at dawn, full from late morning, thinning after 18:00.
+- **Cumulus** raymarched at half resolution (base 1200 to 1800 m, peak coverage 5 to 65%, wind 3 to 8 m/s from the west-south-west, all rolled per session; C rolls again). Their shadows on the city come from the same coverage map and travel with them. Lighting adds a diffuse multiple-scattering term to single scattering; without it cumulus render grey.
+- **Shadows**: two cascades from three.js's `SunLight` for the buildings, and the terrain's own shadow from a heightfield march on the GPU, so Petřín shades Malá Strana in the evening.
+- **Haze**: height fog coloured by the sky just above the horizon (two thirds of it), and by the sky's mean light once the sun has set, when the low air is in the earth's shadow.
+- **Grade**: TAA in linear light, a meter weighted toward the highlights within a stop of the sky's brightness (and never more than 11.5 stops above midday), the Uchimura curve, the Classic Negative LUT v1 from `tools/make-lut.ts` (`npm run lut`), the family trims, vignette and grain, a trace of chromatic aberration at the wide end. G (development only) turns the grade off.
+- **Coloured blocks**: roofs from the §8.9 palette by district in the §8.1 proportions (terracotta 78%, slate 14%, copper 5%), plaster walls by district, flat grey roofs on large modern blocks, stand-in colours for the landmarks.
+- **Side-by-side** (§12.1): viewpoints for 8372 and 9369 (the M1 test) and 8694 and 9547 (the evening families), `npm run compare`.
+
+Measured on an Apple M2 at 2400 × 1600 with the synced benchmark (CPU and GPU in series, which the frame loop overlaps): 11.7 to 19.3 ms a frame across the 18 stops, 16.2 on average. Of that the shadow cascades take about 2.5 ms, the clouds 1.4, the sky patch on every material 1.7. Frame rate has to be judged in a visible Chrome window: this machine's embedded browser throttles, and headless Chrome runs M0 itself at 30 to 40 fps. The target machine of §11 (M1 Pro) has half again the M2's GPU; the lite preset (M7) and the render scale are the levers if needed.
+
+Known gaps after M1: cumulus are smoother than the photographs' cauliflower; the blue-hour horizon band is pinker than 9547; the river is a placeholder until M4; with no city lights until M4, the city is black after about 22:00.
 
 ---
 

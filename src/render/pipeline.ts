@@ -1,0 +1,356 @@
+// The frame after the scene (design.md §5.2): the scene renders into a half-float target with a
+// jittered camera; TAA resolves it in linear light; a meter weighted toward the highlights sets
+// the exposure, held within a stop of the sky's own brightness; then the filmic curve, the
+// Classic Negative LUT, the family's trims, vignette, grain and, at the wide end, a trace of
+// chromatic aberration.
+
+import * as THREE from 'three';
+import { FullScreen } from './fullscreen.ts';
+import { U } from '../sky/uniforms.ts';
+import type { Light } from '../sky/families.ts';
+
+const LUMA = 'vec3(0.2126, 0.7152, 0.0722)';
+
+const TAA_FRAG = /* glsl */ `
+uniform sampler2D tColor;
+uniform sampler2D tDepth;
+uniform sampler2D tHistory;
+uniform sampler2D tExposure;
+uniform mat4 uInvViewProj;
+uniform mat4 uPrevViewProj;
+uniform vec2 uTexel;
+uniform float uReset;
+varying vec2 vUv;
+float E;
+vec3 comp(vec3 c) { c *= E; return c / (1.0 + max(c.r, max(c.g, c.b))); }
+vec3 decomp(vec3 c) { return c / max(1e-6, 1.0 - max(c.r, max(c.g, c.b))) / E; }
+vec3 ycocg(vec3 c) { return vec3(0.25 * c.r + 0.5 * c.g + 0.25 * c.b, 0.5 * c.r - 0.5 * c.b, -0.25 * c.r + 0.5 * c.g - 0.25 * c.b); }
+vec3 rgb(vec3 c) { return vec3(c.x + c.y - c.z, c.x + c.z, c.x - c.y - c.z); }
+vec3 fetch(vec2 uv) { return ycocg(comp(texture2D(tColor, uv).rgb)); }
+// Catmull-Rom history sample in nine bilinear taps, for a sharper resolve.
+vec3 history(vec2 uv) {
+  vec2 size = 1.0 / uTexel;
+  vec2 pos = uv * size, c = floor(pos - 0.5) + 0.5, f = pos - c;
+  vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
+  vec2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
+  vec2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));
+  vec2 w3 = f * f * (-0.5 + 0.5 * f);
+  vec2 w12 = w1 + w2, o12 = w2 / w12;
+  vec2 t0 = (c - 1.0) * uTexel, t3 = (c + 2.0) * uTexel, t12 = (c + o12) * uTexel;
+  vec3 r = vec3(0.0);
+  r += texture2D(tHistory, vec2(t12.x, t0.y)).rgb * w12.x * w0.y;
+  r += texture2D(tHistory, vec2(t0.x, t12.y)).rgb * w0.x * w12.y;
+  r += texture2D(tHistory, vec2(t12.x, t12.y)).rgb * w12.x * w12.y;
+  r += texture2D(tHistory, vec2(t3.x, t12.y)).rgb * w3.x * w12.y;
+  r += texture2D(tHistory, vec2(t12.x, t3.y)).rgb * w12.x * w3.y;
+  float w = w12.x * w0.y + w0.x * w12.y + w12.x * w12.y + w3.x * w12.y + w12.x * w3.y;
+  return max(r / w, 0.0);
+}
+void main() {
+  E = exp2(texture2D(tExposure, vec2(0.5)).r);
+  float d = texture2D(tDepth, vUv).r;
+  vec4 wp = uInvViewProj * vec4(vUv * 2.0 - 1.0, d, 1.0);
+  wp /= wp.w;
+  vec4 pc = uPrevViewProj * wp;
+  vec2 puv = pc.xy / pc.w * 0.5 + 0.5;
+  vec3 m1 = vec3(0.0), m2 = vec3(0.0), cur = vec3(0.0);
+  for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+    vec3 s = fetch(vUv + vec2(float(x), float(y)) * uTexel);
+    if (x == 0 && y == 0) cur = s;
+    m1 += s; m2 += s * s;
+  }
+  vec3 mu = m1 / 9.0, sigma = sqrt(abs(m2 / 9.0 - mu * mu));
+  vec3 lo = mu - 1.25 * sigma, hi = mu + 1.25 * sigma;
+  vec3 h = ycocg(comp(history(puv)));
+  // Clip the history toward the neighbourhood mean.
+  vec3 centre = 0.5 * (hi + lo), ext = 0.5 * (hi - lo) + 1e-5;
+  vec3 v = h - centre, a = abs(v / ext);
+  float m = max(a.x, max(a.y, a.z));
+  if (m > 1.0) h = centre + v / m;
+  float motion = length((puv - vUv) / uTexel);
+  // The sky reprojects exactly under rotation and its clouds are noisy: keep a longer history there.
+  float alpha = mix(d <= 0.0 ? 0.04 : 0.08, 0.25, clamp(motion / 24.0, 0.0, 1.0));
+  if (uReset > 0.5 || puv.x < 0.0 || puv.y < 0.0 || puv.x > 1.0 || puv.y > 1.0) alpha = 1.0;
+  gl_FragColor = vec4(decomp(rgb(mix(h, cur, alpha))), 1.0);
+}`;
+
+// Each texel of the small meter image averages a patch of the frame; mipmaps average the rest.
+const LUM_FRAG = /* glsl */ `
+uniform sampler2D tColor;
+uniform sampler2D tExposure;
+uniform vec2 uTexel;
+varying vec2 vUv;
+void main() {
+  float E = exp2(texture2D(tExposure, vec2(0.5)).r);
+  float s = 0.0, w = 0.0;
+  for (int y = 0; y < 3; y++) for (int x = 0; x < 3; x++) {
+    vec3 c = texture2D(tColor, vUv + (vec2(float(x), float(y)) - 1.0) * uTexel * 0.33).rgb;
+    float L = max(dot(c, ${LUMA}), 1e-7);
+    // Highlight priority: bright pixels weigh more.
+    float k = pow(clamp(L * E, 0.02, 16.0), 0.7);
+    s += k * log2(L);
+    w += k;
+  }
+  gl_FragColor = vec4(s / 9.0, w / 9.0, 0.0, 1.0);
+}`;
+
+const ADAPT_FRAG = /* glsl */ `
+uniform sampler2D tLum;
+uniform float uLod;
+uniform sampler2D tPrev;
+uniform sampler2D uSkyStats;
+uniform float uDt;
+uniform float uBias;
+uniform float uReset;
+void main() {
+  vec2 s = textureLod(tLum, vec2(0.5), uLod).rg;
+  float meterLog = s.x / max(s.y, 1e-6);
+  // The sky near the horizon sets the base, as a camera exposed for the highlights would: there
+  // it lands near a third of full scale. The meter, weighted toward the highlights, may move a
+  // stop either way from there.
+  float evFrame = log2(0.24) - meterLog;
+  vec3 hor = texture2D(uSkyStats, vec2(0.625, 0.5)).rgb;
+  // A camera stops brightening somewhere: 11.5 stops below the midday sky (9547 is 10 below).
+  float evSky = log2(0.24 / max(dot(hor, ${LUMA}), 0.003));
+  float ev = evSky + clamp(evFrame - evSky, -1.0, 0.6) + uBias;
+  float prev = texture2D(tPrev, vec2(0.5)).r;
+  float next = uReset > 0.5 ? ev : prev + (ev - prev) * (1.0 - exp(-uDt / 0.7));
+  gl_FragColor = vec4(next, ev, evFrame, evSky);
+}`;
+
+const FINAL_FRAG = /* glsl */ `
+uniform sampler2D tColor;
+uniform sampler2D tExposure;
+uniform highp sampler3D tLut;
+uniform float uLutSize;
+uniform float uGrade;
+uniform vec3 uWB;
+uniform float uSat;
+uniform float uContrast;
+uniform float uLift;
+uniform float uVignette;
+uniform float uGrain;
+uniform float uCA;
+uniform float uTime;
+uniform vec2 uResolution;
+varying vec2 vUv;
+
+// Uchimura's filmic curve (Gran Turismo): toe, linear middle, shoulder, each its own knob.
+const float P = 1.0, A = 1.2, M = 0.2, LL = 0.34, C = 1.55, B = 0.0;
+float curve(float x) {
+  float l0 = ((P - M) * LL) / A;
+  float S0 = M + l0, S1 = M + A * l0;
+  float C2 = (A * P) / (P - S1), CP = -C2 / P;
+  float w0 = 1.0 - smoothstep(0.0, M, x);
+  float w2 = step(M + l0, x);
+  float w1 = 1.0 - w0 - w2;
+  float T = M * pow(max(x, 0.0) / M, C) + B;
+  float S = P - (P - S1) * exp(CP * (x - S0));
+  float Lin = M + A * (x - M);
+  return T * w0 + Lin * w1 + S * w2;
+}
+vec3 srgb(vec3 c) { return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
+float hash(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
+
+void main() {
+  vec2 cc = vUv - 0.5;
+  vec3 c;
+  if (uCA > 0.0 && uGrade > 0.5) {
+    vec2 o = cc * uCA;
+    c = vec3(texture2D(tColor, vUv - o).r, texture2D(tColor, vUv).g, texture2D(tColor, vUv + o).b);
+  } else c = texture2D(tColor, vUv).rgb;
+  c *= exp2(texture2D(tExposure, vec2(0.5)).r);
+  if (uGrade > 0.5) {
+    c *= uWB;
+    float l = dot(c, ${LUMA});
+    c = max(mix(vec3(l), c, uSat), 0.0);
+  }
+  c = vec3(curve(c.r), curve(c.g), curve(c.b));
+  vec3 s = srgb(clamp(c, 0.0, 1.0));
+  float n = hash(gl_FragCoord.xy + fract(uTime * 7.31) * 517.0) + hash(gl_FragCoord.yx * 1.37 + fract(uTime * 3.17) * 911.0) - 1.0;
+  if (uGrade > 0.5) {
+    s = texture(tLut, s * ((uLutSize - 1.0) / uLutSize) + 0.5 / uLutSize).rgb;
+    s = clamp((s - 0.5) * uContrast + 0.5, 0.0, 1.0);
+    s = uLift + s * (1.0 - uLift);
+    float aspect = uResolution.x / uResolution.y;
+    float r = length(cc * vec2(aspect, 1.0)) / length(vec2(aspect, 1.0) * 0.5);
+    s *= 1.0 - uVignette * pow(r, 2.4);
+    float lum = dot(s, vec3(0.299, 0.587, 0.114));
+    s += n * uGrain * (0.5 + 0.5 * (1.0 - abs(lum * 2.0 - 1.0)));
+  } else {
+    s += n / 255.0;
+  }
+  gl_FragColor = vec4(s, 1.0);
+}`;
+
+function halfTarget(w: number, h: number, opts: THREE.RenderTargetOptions = {}) {
+  const t = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, depthBuffer: false, ...opts });
+  t.texture.minFilter = t.texture.magFilter = THREE.LinearFilter;
+  t.texture.generateMipmaps = false;
+  return t;
+}
+
+// Halton (2, 3), 16 samples, centred.
+const JITTER = Array.from({ length: 16 }, (_, i) => {
+  const h = (b: number, n: number) => { let f = 1, r = 0; while (n > 0) { f /= b; r += f * (n % b); n = Math.floor(n / b); } return r; };
+  return [h(2, i + 1) - 0.5, h(3, i + 1) - 0.5];
+});
+
+export interface FrameOptions {
+  dt: number;
+  light: Light;
+  /** 0 at the wide lens, 1 at the long one. */
+  lens: number;
+  /** Called after the camera is jittered and before the scene renders. */
+  beforeScene?: (camera: THREE.PerspectiveCamera) => void;
+}
+
+export class Pipeline {
+  /** Grade, vignette and grain on; key G in development turns them off (design.md §5.2). */
+  grade = true;
+  readonly renderer: THREE.WebGLRenderer;
+  private hdr: THREE.WebGLRenderTarget;
+  private hist: THREE.WebGLRenderTarget[];
+  private lum: THREE.WebGLRenderTarget;
+  private expo: THREE.WebGLRenderTarget[];
+  private taa: FullScreen;
+  private lumPass: FullScreen;
+  private adapt: FullScreen;
+  private final: FullScreen;
+  private frame = 0;
+  private time = 0;
+  private reset = true;
+  private prevViewProj = new THREE.Matrix4();
+  private prevPos = new THREE.Vector3();
+  private width = 1;
+  private height = 1;
+
+  constructor(renderer: THREE.WebGLRenderer, lut: THREE.Data3DTexture) {
+    this.renderer = renderer;
+    this.hdr = halfTarget(1, 1, { depthBuffer: true, depthTexture: new THREE.DepthTexture(1, 1, THREE.FloatType) });
+    this.hdr.texture.minFilter = this.hdr.texture.magFilter = THREE.NearestFilter;
+    this.hist = [halfTarget(1, 1), halfTarget(1, 1)];
+    this.lum = halfTarget(128, 64);
+    this.lum.texture.generateMipmaps = true;
+    this.lum.texture.minFilter = THREE.LinearMipmapLinearFilter;
+    this.expo = [0, 1].map(() => {
+      const t = new THREE.WebGLRenderTarget(1, 1, { type: THREE.FloatType, depthBuffer: false });
+      t.texture.minFilter = t.texture.magFilter = THREE.NearestFilter;
+      return t;
+    });
+    this.taa = new FullScreen(TAA_FRAG, {
+      tColor: { value: this.hdr.texture },
+      tDepth: { value: this.hdr.depthTexture },
+      tHistory: { value: null },
+      tExposure: { value: null },
+      uInvViewProj: { value: new THREE.Matrix4() },
+      uPrevViewProj: { value: new THREE.Matrix4() },
+      uTexel: { value: new THREE.Vector2() },
+      uReset: { value: 1 },
+    });
+    this.lumPass = new FullScreen(LUM_FRAG, {
+      tColor: { value: null },
+      tExposure: { value: null },
+      uTexel: { value: new THREE.Vector2(1 / 128, 1 / 64) },
+    });
+    this.adapt = new FullScreen(ADAPT_FRAG, {
+      tLum: { value: this.lum.texture },
+      uLod: { value: 7 },
+      tPrev: { value: null },
+      uSkyStats: U.uSkyStats,
+      uDt: { value: 0 },
+      uBias: { value: 0 },
+      uReset: { value: 1 },
+    });
+    this.final = new FullScreen(FINAL_FRAG, {
+      tColor: { value: null },
+      tExposure: { value: null },
+      tLut: { value: lut },
+      uLutSize: { value: lut.image.width },
+      uGrade: { value: 1 },
+      uWB: { value: new THREE.Vector3(1, 1, 1) },
+      uSat: { value: 1 },
+      uContrast: { value: 1 },
+      uLift: { value: 0 },
+      uVignette: { value: 0.2 },
+      uGrain: { value: 0.012 },
+      uCA: { value: 0 },
+      uTime: { value: 0 },
+      uResolution: { value: new THREE.Vector2() },
+    });
+  }
+
+  setSize(w: number, h: number) {
+    this.width = w;
+    this.height = h;
+    this.hdr.setSize(w, h);
+    for (const t of this.hist) t.setSize(w, h);
+    (this.taa.uniforms.uTexel.value as THREE.Vector2).set(1 / w, 1 / h);
+    (this.final.uniforms.uResolution.value as THREE.Vector2).set(w, h);
+    this.reset = true;
+  }
+
+  /** Throws the history away, for jumps of the camera. */
+  invalidate() { this.reset = true; }
+
+  render(scene: THREE.Scene, camera: THREE.PerspectiveCamera, o: FrameOptions) {
+    const r = this.renderer;
+    this.time += o.dt;
+    if (camera.position.distanceTo(this.prevPos) > 150) this.reset = true;
+    this.prevPos.copy(camera.position);
+
+    // Jitter the projection by a sub-pixel offset.
+    const [jx, jy] = JITTER[this.frame % JITTER.length];
+    const unjittered = camera.projectionMatrix.clone();
+    camera.projectionMatrix.elements[8] += (2 * jx) / this.width;
+    camera.projectionMatrix.elements[9] += (2 * jy) / this.height;
+    camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+
+    o.beforeScene?.(camera);
+    r.setRenderTarget(this.hdr);
+    r.render(scene, camera);
+
+    const [histIn, histOut] = this.frame % 2 ? [this.hist[1], this.hist[0]] : [this.hist[0], this.hist[1]];
+    const [expoIn, expoOut] = this.frame % 2 ? [this.expo[1], this.expo[0]] : [this.expo[0], this.expo[1]];
+
+    const tu = this.taa.uniforms;
+    tu.tHistory.value = histIn.texture;
+    tu.tExposure.value = expoIn.texture;
+    (tu.uInvViewProj.value as THREE.Matrix4).multiplyMatrices(camera.matrixWorld, camera.projectionMatrixInverse);
+    (tu.uPrevViewProj.value as THREE.Matrix4).copy(this.prevViewProj);
+    tu.uReset.value = this.reset ? 1 : 0;
+    this.taa.render(r, histOut);
+
+    this.lumPass.uniforms.tColor.value = histOut.texture;
+    this.lumPass.uniforms.tExposure.value = expoIn.texture;
+    this.lumPass.render(r, this.lum);
+    // Mipmaps for the meter image (the renderer makes them after rendering into a target).
+    const au = this.adapt.uniforms;
+    au.tPrev.value = expoIn.texture;
+    au.uDt.value = o.dt;
+    au.uBias.value = o.light.ev;
+    au.uReset.value = this.reset ? 1 : 0;
+    this.adapt.render(r, expoOut);
+
+    const fu = this.final.uniforms;
+    fu.tColor.value = histOut.texture;
+    fu.tExposure.value = expoOut.texture;
+    fu.uGrade.value = this.grade ? 1 : 0;
+    (fu.uWB.value as THREE.Vector3).set(...o.light.wb);
+    fu.uSat.value = o.light.sat;
+    fu.uContrast.value = o.light.contrast;
+    fu.uLift.value = o.light.lift;
+    // Vignette and aberration belong to the wide end of the zoom (design.md §5.1, §5.2).
+    fu.uVignette.value = THREE.MathUtils.lerp(0.26, 0.12, o.lens);
+    fu.uCA.value = THREE.MathUtils.lerp(0.0016, 0, Math.min(1, o.lens * 3));
+    fu.uTime.value = this.time;
+    this.final.render(r, null);
+
+    // Unjittered matrices for the next frame's reprojection.
+    camera.projectionMatrix.copy(unjittered);
+    camera.projectionMatrixInverse.copy(unjittered).invert();
+    this.prevViewProj.multiplyMatrices(unjittered, camera.matrixWorldInverse);
+    this.reset = false;
+    this.frame++;
+  }
+}

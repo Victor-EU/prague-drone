@@ -7,6 +7,7 @@ import { HeightGrid } from './heightgrid.ts';
 import { Terrain, landuseTexture, horizonMesh } from './terrain.ts';
 import { Buildings, type TileInfo } from './buildings.ts';
 import type { Ground } from '../drone/drone.ts';
+import { patchLit } from '../sky/lit.ts';
 
 export interface Manifest {
   datum: number;
@@ -23,7 +24,7 @@ export class World implements Ground {
   readonly terrain: Terrain;
   readonly buildings: Buildings;
   readonly bounds: Manifest['world'];
-  private height: HeightGrid;
+  readonly height: HeightGrid;
   private surf: HeightGrid;
 
   private constructor(base: string, manifest: Manifest, height: HeightGrid, surf: HeightGrid, landuse: THREE.Texture, horizon: HeightGrid, water: THREE.BufferGeometry, renderer: THREE.WebGLRenderer) {
@@ -34,9 +35,12 @@ export class World implements Ground {
     landuse.anisotropy = renderer.capabilities.getMaxAnisotropy();
     this.terrain = new Terrain(height, landuse, manifest.world);
     this.group.add(this.terrain.group);
-    this.group.add(horizonMesh(horizon, manifest.world));
+    const horizonRing = horizonMesh(horizon, manifest.world);
+    this.group.add(horizonRing);
 
-    const waterMat = new THREE.MeshStandardMaterial({ color: '#50646f', roughness: 0.16, metalness: 0, envMapIntensity: 1.1 });
+    // Until the river's own shader (M4): dark, and reflecting the sky less than a mirror would, as
+    // rippled water does.
+    const waterMat = new THREE.MeshStandardMaterial({ color: '#34495a', roughness: 0.28, metalness: 0, envMapIntensity: 0.55 });
     const waterMesh = new THREE.Mesh(water, waterMat);
     waterMesh.receiveShadow = true;
     waterMesh.matrixAutoUpdate = false;
@@ -44,6 +48,8 @@ export class World implements Ground {
 
     this.buildings = new Buildings(base, manifest.kinds, manifest.tile, manifest.world);
     this.group.add(this.buildings.group);
+    // Every lit material takes the sky's haze and the terrain and cloud shadows.
+    for (const m of [this.terrain.material, horizonRing.material as THREE.Material, waterMat, this.buildings.material]) patchLit(m);
   }
 
   static async load(base: string, renderer: THREE.WebGLRenderer): Promise<World> {

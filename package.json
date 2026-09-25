@@ -12,7 +12,9 @@
     "typecheck": "tsc --noEmit",
     "fetch-data": "node tools/fetch-data.ts",
     "build-world": "node --max-old-space-size=8192 tools/build-world.ts",
-    "world": "npm run fetch-data && npm run build-world"
+    "world": "npm run fetch-data && npm run build-world",
+    "lut": "node tools/make-lut.ts",
+    "compare": "node tools/compare.ts"
   },
   "engines": {
     "node": ">=23.6"

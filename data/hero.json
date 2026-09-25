@@ -2,9 +2,9 @@
   "confirmed": "2026-09-25",
   "note": "Hero frames: the photographs the renders are tested against side by side. File numbers refer to Photos/DSCF<n>.JPG (800 px copies in mockup/set/). Never shipped with the app. Seven ids from the superseded raw export were replaced or dropped on 2026-09-25; see design.md §14.",
   "frames": [
-    { "id": "7924", "viewpoint": "Petřín slope below the tower, looking east", "tests": "roofscape, river, morning grade" },
-    { "id": "7940", "viewpoint": "Petřín slope, looking east to St Nicholas dome and Old Town", "tests": "roofscape, dome, morning grade" },
-    { "id": "7944", "viewpoint": "Petřín slope, looking north-east over the river bends", "tests": "river, bridges, morning haze" },
+    { "id": "7924", "viewpoint": "Petřín slope below the tower, looking east", "tests": "roofscape, river, early-evening grade (18:50 CEST)" },
+    { "id": "7940", "viewpoint": "Petřín slope, looking east to St Nicholas dome and Old Town", "tests": "roofscape, dome, early-evening grade" },
+    { "id": "7944", "viewpoint": "Petřín slope, looking north-east over the river bends", "tests": "river, bridges, evening haze" },
     { "id": "8753", "viewpoint": "Petřín / Strahov looking north to the Castle", "tests": "Castle massing, ridge silhouette" },
     { "id": "9204", "viewpoint": "Kampa, the Čertovka channel, soft light", "tests": "overcast grade in daylight, the mill channel" },
     { "id": "8372", "viewpoint": "Vyšehrad ramparts looking north", "tests": "red roofs, cumulus, cloud shadows, Castle on the horizon" },

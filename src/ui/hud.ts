@@ -9,12 +9,16 @@ export interface HudState {
   sun: number;
   altitude: number;
   dayAdvances: boolean;
+  /** Cloud coverage now, 0 to 1. */
+  clouds: number;
+  overcast: boolean;
 }
 
 export interface HudActions {
   setClock(hours: number): void;
   setDayAdvances(on: boolean): void;
   setMode(mode: 'auto' | 'fast' | 'manual'): void;
+  setOvercast(on: boolean): void;
 }
 
 const MIN_CLOCK = 4.5, MAX_CLOCK = 23;
@@ -25,6 +29,8 @@ export class Hud {
   private clock!: HTMLElement;
   private sun!: HTMLElement;
   private alt!: HTMLElement;
+  private clouds!: HTMLElement;
+  private weather!: HTMLButtonElement;
   private slider!: HTMLInputElement;
   private check!: HTMLInputElement;
   private buttons!: Record<string, HTMLButtonElement>;
@@ -44,7 +50,7 @@ export class Hud {
       </div>
       <div class="tr">
         <div class="clock" data-clock>06:20</div>
-        <div>SUN <span data-sun>0°</span> · CLOUDS —</div>
+        <div>SUN <span data-sun>0°</span> · CLOUDS <span data-clouds>—</span></div>
         <div>ALT <span data-alt>0 m</span></div>
       </div>
       <div id="landmark"><div class="cz"></div><div class="en"></div></div>
@@ -53,7 +59,7 @@ export class Hud {
         <div class="keys" data-keys>
           <div><kbd>←</kbd><kbd>→</kbd> turn &nbsp; <kbd>↑</kbd><kbd>↓</kbd> altitude</div>
           <div><kbd>⇧</kbd> faster &nbsp; <kbd>␣</kbd> hover &nbsp; <kbd>W</kbd><kbd>S</kbd> tilt</div>
-          <div><kbd>A</kbd><kbd>D</kbd> strafe &nbsp; <kbd>⏎</kbd> back to auto</div>
+          <div><kbd>A</kbd><kbd>D</kbd> strafe &nbsp; <kbd>⏎</kbd> back to auto &nbsp; <kbd>C</kbd> new clouds</div>
         </div>
         <div class="panel interactive">
           <div class="row">
@@ -68,6 +74,8 @@ export class Hud {
               <button data-mode="fast">FAST 3:00</button>
               <button data-mode="manual">MANUAL</button>
             </div>
+            <div class="lbl right">WEATHER</div>
+            <div class="btns"><button data-weather>OVERCAST</button></div>
           </div>
         </div>
       </div>
@@ -77,6 +85,8 @@ export class Hud {
     this.clock = q('[data-clock]');
     this.sun = q('[data-sun]');
     this.alt = q('[data-alt]');
+    this.clouds = q('[data-clouds]');
+    this.weather = q('[data-weather]');
     this.slider = q('[data-slider]');
     this.check = q('[data-check]');
     this.landmark = q('#landmark');
@@ -92,6 +102,10 @@ export class Hud {
     });
     this.slider.addEventListener('change', () => { this.dragging = false; this.slider.blur(); });
     this.check.addEventListener('change', () => { actions.setDayAdvances(this.check.checked); this.check.blur(); });
+    this.weather.addEventListener('click', () => {
+      actions.setOvercast(!this.weather.classList.contains('on'));
+      this.weather.blur();
+    });
     for (const [mode, b] of Object.entries(this.buttons))
       b.addEventListener('click', () => { actions.setMode(mode as HudState['mode']); b.blur(); });
 
@@ -104,6 +118,8 @@ export class Hud {
     this.clock.textContent = formatClock(s.clock);
     this.sun.textContent = `${Math.round(s.sun)}°`;
     this.alt.textContent = `${Math.round(s.altitude)} m`;
+    this.clouds.textContent = `${Math.round(s.clouds * 100)}%`;
+    this.weather.classList.toggle('on', s.overcast);
     if (!this.dragging) this.slider.value = String(Math.min(MAX_CLOCK, Math.max(MIN_CLOCK, s.clock)));
     if (this.check.checked !== s.dayAdvances) this.check.checked = s.dayAdvances;
   }
