@@ -5,13 +5,17 @@
 
 import type { OsmElement } from './osm.ts';
 import { lineOf, parseLength } from './osm.ts';
-import { Kit, mat, type V3, type Mat } from '../landmarks/kit.ts';
-import { Surface, Stone } from '../../src/core/buildings.ts';
+import { Kit, mat, arch, type V3, type Mat } from '../landmarks/kit.ts';
+import { Surface, Stone, Glass } from '../../src/core/buildings.ts';
 
 const PLASTER = [mat('#ddd3c0', Surface.Stone, Stone.Render, 0.35), mat('#e3dccd', Surface.Stone, Stone.Render, 0.3), mat('#d2c6ae', Surface.Stone, Stone.Render, 0.4)];
 const STONE = mat('#8a8174', Surface.Stone, Stone.Rubble, 0.5);
 const BRICK = mat('#8e5a45', Surface.Stone, Stone.Brick, 0.4);
 const COPING = mat('#a39b8d', Surface.Stone, Stone.Ashlar, 0.2);
+// The Náplavka's vaults (M13): the retaining wall of the Rašín embankment opens in round arches
+// every ten metres or so, the old ice cellars glazed as cafés; dark openings at the drone's distance.
+const VAULT = mat('#2b2e31', Surface.Glass, Glass.Plain);
+const NAPLAVKA = { x0: 95, x1: 235, z0: 1040, z1: 1560 };
 
 export function gardenWalls(els: OsmElement[], ground: (x: number, z: number) => number, k: Kit, seen: (x: number, z: number) => boolean, wet: (x: number, z: number) => boolean): { metres: number; count: number } {
   let metres = 0, count = 0;
@@ -59,6 +63,18 @@ export function gardenWalls(els: OsmElement[], ground: (x: number, z: number) =>
         k.poly([P(ax, az, s, ga - 0.6), P(bx, bz, s, gb - 0.6), P(bx, bz, s, gb + h), P(ax, az, s, ga + h)], m, { normal: n });
       }
       k.poly([P(ax, az, 1, ga + h), P(bx, bz, 1, gb + h), P(bx, bz, -1, gb + h), P(ax, az, -1, ga + h)], COPING, { normal: [0, 1, 0] });
+      if (retaining && h > 3.5 && mx > NAPLAVKA.x0 && mx < NAPLAVKA.x1 && mz > NAPLAVKA.z0 && mz < NAPLAVKA.z1) {
+        // On the face toward the river (west).
+        const s = nx < 0 ? 1 : -1, n: V3 = [(nx * s) / (w / 2), 0, (nz * s) / (w / 2)];
+        if (n[0] < -0.5) {
+          let u: V3 = [(bx - ax) / len, 0, (bz - az) / len];
+          if (-u[2] * n[0] + u[0] * n[2] < 0) u = [-u[0], 0, -u[2]];
+          for (let q = 5; q + 2.5 < len; q += 10.5) {
+            const x = ax + (bx - ax) * (q / len), z = az + (bz - az) * (q / len), g = ground(x, z);
+            k.plate([x + nx * s, g + 0.35, z + nz * s], u, [0, 1, 0], arch(2.8, Math.min(3.1, h - 0.8), 'round'), VAULT, 0.05);
+          }
+        }
+      }
       metres += len;
       any = true;
     }

@@ -39,7 +39,7 @@ import { Style, BFlag, EFlag } from '../src/core/buildings.ts';
 import { buildLandmarks, packLandmarks, raiseSurface, MODELS, type Site, type Built } from './landmarks/index.ts';
 import { rampartLines, carveRamparts } from './landmarks/vysehrad.ts';
 import { Kit } from './landmarks/kit.ts';
-import { Flow, flowLines, weirs, inWeirBand, weirStrip, embankments } from './lib/river.ts';
+import { Flow, flowLines, weirs, inWeirBand, weirStrip, embankments, bankDistance, weirWalk } from './lib/river.ts';
 import { loadCanopy, findTrees, tally, hash as treeHash } from './lib/trees.ts';
 import { gardenWalls } from './lib/walls.ts';
 import { buildLife } from './lib/life.ts';
@@ -344,8 +344,19 @@ let waterPack: Uint8Array;
         }
     }
   const index = new Int32Array(wnx * wnz).fill(-1);
-  const pos: number[] = [], fl: number[] = [], foam: number[] = [];
+  const pos: number[] = [], fl: number[] = [], foam: number[] = [], bank: number[] = [];
   const idx: number[] = [];
+  // Metres to the bank, per vertex: the wind's fetch (design.md §8.5, M13).
+  const bankD = bankDistance(water, NX, NZ, CELL);
+  const bankAt = (x: number, z: number) => {
+    const i = Math.round((x - WORLD.xMin) / CELL), j = Math.round((z - WORLD.zMin) / CELL);
+    let b = 0;
+    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+      const ii = i + di, jj = j + dj;
+      if (ii >= 0 && jj >= 0 && ii < NX && jj < NZ) b = Math.max(b, bankD[jj * NX + ii]);
+    }
+    return Math.min(255, Math.round(b));
+  };
   const vert = (I: number, J: number) => {
     const k = J * wnx + I;
     if (index[k] < 0) {
@@ -355,6 +366,7 @@ let waterPack: Uint8Array;
       const [fx, fz] = flow.at(x, z);
       fl.push(Math.round(fx * 127), Math.round(fz * 127));
       foam.push(0);
+      bank.push(bankAt(x, z));
     }
     return index[k];
   };
@@ -372,8 +384,8 @@ let waterPack: Uint8Array;
       const a = vert(I, J), b = vert(I + 1, J), c = vert(I, J + 1), d = vert(I + 1, J + 1);
       idx.push(a, c, b, b, c, d);
     }
-  for (const w of weirList) weirStrip(w, pos, fl, foam, idx);
-  waterPack = encodePack({ cell: WC }, { position: new Float32Array(pos), flow: new Int8Array(fl), foam: new Uint8Array(foam), index: new Uint32Array(idx) });
+  for (const w of weirList) weirStrip(w, pos, fl, foam, bank, idx);
+  waterPack = encodePack({ cell: WC }, { position: new Float32Array(pos), flow: new Int8Array(fl), foam: new Uint8Array(foam), bank: new Uint8Array(bank), index: new Uint32Array(idx) });
   log(`water mesh: ${pos.length / 3} vertices, ${idx.length / 3} triangles (${holed} cells left to ${weirList.length} weir strips)`);
 }
 
@@ -605,8 +617,11 @@ let landmarkMeshes: Built[];
     const claims = landmarkMeshes.flatMap((m) => m.claims ?? []).map((r) => ({ outer: r, holes: [] }));
     const open = (x: number, z: number) => seen(x, z) && !claims.some((p) => pointInPolygon(x, z, p));
     const metres = embankments(river, { water, level, bare }, k, open, (x, z) => certovkaDist(x, z) < 16);
+    // The timber walkways along the weirs' crests (8825, M13).
+    let walks = 0;
+    for (const w of weirList) if (w.length > 60 && seen(w.pts[0][0], w.pts[0][1])) { weirWalk(w, k, d, (x, z) => Number.isNaN(site.water(x, z))); walks++; }
     landmarkMeshes.push({ id: 'embankments', main: k.finish(), detail: d.finish() });
-    log(`embankments: ${(metres / 1000).toFixed(1)} km of wall, ${k.triangles} triangles`);
+    log(`embankments: ${(metres / 1000).toFixed(1)} km of wall, ${walks} weir walkways, ${k.triangles} + ${d.triangles} triangles`);
   }
   // Garden walls in the photographed city (tools/lib/walls.ts).
   {
@@ -1184,6 +1199,8 @@ let treesPack: Uint8Array | null = null;
     for (const b of buildings) fill(b.poly);
     for (const d of decks) fill(d.poly);
     for (const f of waterFeatures) for (const p of f.polygons) fill(p);
+    // What a landmark model claims (the Dancing House's pavement, 7940: no tree stands before it).
+    for (const r of landmarkMeshes.flatMap((m) => m.claims ?? [])) fill({ outer: r, holes: [] });
     // Rail lines: trains and their wires stand as high as young trees.
     for (const el of layer('railways')) {
       const t = el.tags ?? {};

@@ -26,8 +26,12 @@ uniform float uRipple;
 uniform float uTime;
 varying vec2 vFlow;
 varying float vFoam;
+varying float vBank;
 vec3 praRipN;
 float praFoamK;
+float praDist;
+// The wind over the river, from the west-south-west, as the prevailing wind: its ripples run across it.
+const vec2 WIND = vec2(0.9206, -0.3906);
 
 // Slopes (d height / d x, d z) of the tiling ripple texture, carried along the flow in two phases.
 vec2 praSlope(vec2 p, vec2 flow, float scale, float speed, float period) {
@@ -39,15 +43,49 @@ vec2 praSlope(vec2 p, vec2 flow, float scale, float speed, float period) {
   float wa = 1.0 - abs(2.0 * a - 1.0);
   return (sa * wa + sb * (1.0 - wa)) / scale;
 }
+
+// A long, low swell along the wind (M13): three sines, each moving at a deep-water wave's own
+// speed, that sway the reflections slowly (8988, 8490) without a pattern to see.
+vec2 praSwell(vec2 p, float t) {
+  vec2 s = vec2(0.0);
+  vec2 w1 = WIND, w2 = vec2(WIND.x * 0.94 - WIND.y * 0.34, WIND.x * 0.34 + WIND.y * 0.94), w3 = vec2(WIND.x * 0.94 + WIND.y * 0.34, -WIND.x * 0.34 + WIND.y * 0.94);
+  float k1 = 6.2832 / 6.5, k2 = 6.2832 / 11.0, k3 = 6.2832 / 19.0;
+  // Each train swells and fades along a slow envelope of its own, so no bands run across the river.
+  float e1 = 0.55 + 0.45 * sin(dot(p, vec2(0.031, 0.047)) + t * 0.11);
+  float e2 = 0.55 + 0.45 * sin(dot(p, vec2(-0.052, 0.024)) + 2.0 - t * 0.09);
+  float e3 = 0.55 + 0.45 * sin(dot(p, vec2(0.018, -0.061)) + 4.0 + t * 0.07);
+  s += w1 * (0.014 * e1 * cos(k1 * dot(p, w1) - sqrt(9.81 * k1) * t));
+  s += w2 * (0.018 * e2 * cos(k2 * dot(p, w2) - sqrt(9.81 * k2) * t + 1.7));
+  s += w3 * (0.014 * e3 * cos(k3 * dot(p, w3) - sqrt(9.81 * k3) * t + 4.1));
+  return s;
+}
 `;
 
 const MAIN = /* glsl */ `
 {
   vec2 p = vPraWorld.xz;
   vec2 f = length(vFlow) > 0.01 ? normalize(vFlow) : vec2(0.0, -1.0);
-  // Current ripples at two scales, and the wind's small chop across them.
-  vec2 s = praSlope(p, f, 9.0, 0.55, 3.1) * 0.55 + praSlope(p, f, 2.4, 0.55, 1.7) * 0.8;
-  s += praSlope(p.yx * vec2(1.0, -1.0), vec2(0.7, 0.7), 1.1, 0.3, 1.3) * 0.4;
+  praDist = length(vPraWorld - cameraPosition);
+  // The wind's fetch: glassy within a few metres of a wall or a bank, rough out in the stream.
+  float bank = vBank * 255.0;
+  float fetch = smoothstep(1.5, 14.0, bank), swellK = smoothstep(4.0, 40.0, bank);
+  // A slow, smooth warp of the sampling point, so the tiling never shows as a pattern (8988).
+  vec2 warp = 3.0 * vec2(sin(p.x * 0.083 + p.y * 0.047), cos(p.x * 0.039 - p.y * 0.091));
+  vec2 pw = p + warp;
+  // The current's ripples carried downstream, the wind's chop across them at two scales, the swell,
+  // and near the eye the capillary ripples that give the sun its sparkle.
+  // The small scales fade with distance, where many of their crests would share a pixel and
+  // alias into a grid at a grazing angle (8988); the swell and the long ripples carry the far water.
+  float midK = 1.0 - smoothstep(80.0, 500.0, praDist), smallK = 1.0 - smoothstep(30.0, 220.0, praDist);
+  vec2 s = praSlope(p, f, 9.0, 0.55, 3.1) * 0.3 + praSlope(pw, f, 2.4, 0.55, 1.7) * 0.35 * midK;
+  // Two tilings of the wind's chop at periods that share no multiple, one turned 31°, so that
+  // seen at a grazing angle neither repeats as a grid (8988).
+  vec2 pr = vec2(pw.x * 0.857 - pw.y * 0.515, pw.x * 0.515 + pw.y * 0.857);
+  vec2 wr = vec2(WIND.x * 0.857 - WIND.y * 0.515, WIND.x * 0.515 + WIND.y * 0.857);
+  s += (praSlope(pw, WIND, 3.2, 0.9, 2.3) * 0.5 + praSlope(pr, wr, 4.9, 1.0, 2.9) * 0.45 + praSlope(pw + 17.0, WIND, 0.95, 0.5, 0.9) * 0.45 * smallK) * fetch;
+  s += praSwell(p, uTime) * swellK;
+  float nearK = 1.0 - smoothstep(15.0, 80.0, praDist);
+  s += praSlope(pw, WIND, 0.42, 0.35, 0.45) * 0.22 * fetch * nearK;
   // Over the weirs: quick streaks down the glacis.
   float foam = vFoam;
   if (foam > 0.0) {
@@ -88,7 +126,8 @@ vec3 praWaterReflect(vec3 wp, vec3 N) {
     // Lit cumulus: a little brighter than the horizon sky under them.
     sky = mix(sky, texture2D(uSkyStats, vec2(0.625, 0.5)).rgb * 1.9, a);
   }
-  sky = mix(sky, uOvercastSky * 0.9, uOvercast * smoothstep(0.0, 0.06, R.y));
+  // Under overcast the water lies a shade darker than the sky it carries (8988).
+  sky = mix(sky, uOvercastSky * 0.72, uOvercast * smoothstep(0.0, 0.06, R.y));
   if (uReflectOn < 0.5) return sky;
   // The mirror, displaced by the ripples and drawn out into columns: ripples too small to see
   // still tilt the surface, by uRipple radians or so, and spread each reflection up and down the
@@ -103,21 +142,34 @@ vec3 praWaterReflect(vec3 wp, vec3 N) {
   // Seen at a grazing angle, the facets turned toward the eye show most, and they reflect higher:
   // the lookup leans toward the sky, keeping the far bank's reflection close under it.
   vec2 dist = vec2(tiltH * 0.3, tiltV * 1.1 - 2.5 * uRipple) * uReflectScale;
-  // At night the lamps' reflections run down the water in long broken columns (9542).
-  float spread = 2.0 * mix(uRipple, 0.03, uCityLights) * uReflectScale;
+  // Reflections are drawn out into columns, the more so at night, when the lamps' run down the
+  // water in long broken streaks (9542, 9547; M13: longer than before, as the photographs have them).
+  float spread = 2.0 * mix(0.03, 0.09, uCityLights) * uReflectScale;
   float j = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))) + fract(uTime * 7.31));
   vec4 acc = vec4(0.0);
   float wsum = 0.0;
   for (int i = 0; i < 8; i++) {
     float k = (float(i) + j) / 8.0 * 2.0 - 1.0;
-    float wt = exp(-2.5 * k * k);
+    float wt = exp(-1.8 * k * k);
     vec2 o = uv + dist + vec2(0.0, k * spread);
     acc += texture2D(tReflect, clamp(o, 0.001, 0.999)) * wt;
     wsum += wt;
   }
   vec4 m = acc / wsum;
-  // Some of the facets of rippled water tilt up to the sky whatever lies across the river.
-  return mix(sky, m.rgb / max(m.a, 1e-3), clamp(m.a, 0.0, 1.0) * 0.7);
+  // Some of the facets of rippled water tilt up to the sky whatever lies across the river; at
+  // night the sky is dark and the lights are all there is to see.
+  return mix(sky, m.rgb / max(m.a, 1e-3), clamp(m.a, 0.0, 1.0) * mix(0.78, 0.9, uCityLights));
+}
+
+// How much of the reflection the water returns (M13): little seen from above, where the water's
+// own colour shows (8490, 8849), most at a grazing angle, where the far river carries the sky and
+// the far bank almost whole (8683, 8988, 9542). Softer than Fresnel's curve, as the ripples' facets
+// spread the angles.
+float praWaterFresnel(vec3 wp) {
+  vec3 V = normalize(wp - cameraPosition);
+  float c = clamp(-V.y, 0.0, 1.0);
+  float f = pow(1.0 - c, 3.0);
+  return mix(0.42, 1.0, f) * 0.88;
 }
 `;
 
@@ -190,6 +242,8 @@ export class Water {
       position: new THREE.BufferAttribute(pos, 3),
       aFlow: new THREE.BufferAttribute(pack.arrays.flow as Int8Array, 2, true),
       aFoam: new THREE.BufferAttribute(pack.arrays.foam as Uint8Array, 1, true),
+      // Metres to the bank (M13); worlds built before it have none, and are all open water.
+      aBank: new THREE.BufferAttribute((pack.arrays.bank as Uint8Array | undefined) ?? new Uint8Array(pos.length / 3).fill(255), 1, true),
       normal: new THREE.BufferAttribute(new Int8Array(pos.length).map((_, i) => (i % 3 === 1 ? 127 : 0)), 3, true),
     };
     // Levels by grid cell, for the mirror's plane.
@@ -212,14 +266,15 @@ export class Water {
     patchLit(m, (shader) => {
       Object.assign(shader.uniforms, u);
       shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', '#include <common>\nattribute vec2 aFlow;\nattribute float aFoam;\nvarying vec2 vFlow;\nvarying float vFoam;')
-        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFlow = aFlow;\nvFoam = aFoam;');
+        .replace('#include <common>', '#include <common>\nattribute vec2 aFlow;\nattribute float aFoam;\nattribute float aBank;\nvarying vec2 vFlow;\nvarying float vFoam;\nvarying float vBank;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFlow = aFlow;\nvFoam = aFoam;\nvBank = aBank;');
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <clipping_planes_pars_fragment>', `#include <clipping_planes_pars_fragment>\n${PARS}\n${REFLECT_FN}`)
         .replace('#include <color_fragment>', `#include <color_fragment>\n${MAIN}`)
-        .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.85, praFoamK);')
+        // Far off, many facets share a pixel: the sun's glitter widens into a path (8683, 8490).
+        .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(mix(0.09, 0.3, smoothstep(40.0, 900.0, praDist)), 0.85, praFoamK);')
         .replace('#include <normal_fragment_maps>', 'normal = normalize((viewMatrix * vec4(praRipN, 0.0)).xyz);')
-        .replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>\n// Seen almost edge on, ripples reflect less than a flat surface would.\nradiance = praWaterReflect(vPraWorld, praRipN) * (1.0 - praFoamK) * 0.55;');
+        .replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>\nradiance = praWaterReflect(vPraWorld, praRipN) * (1.0 - praFoamK) * praWaterFresnel(vPraWorld);');
     }, '-water');
 
     // Triangles sorted into kilometre tiles, each its own mesh for culling, sharing the vertex arrays.

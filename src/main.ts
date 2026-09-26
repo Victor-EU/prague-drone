@@ -106,7 +106,8 @@ if (fixedScale) governor.scale = fixedScale;
 function applyQuality(q: Quality) {
   quality = q;
   pipeline.ao = q.ao && !(import.meta.env.DEV && params.get('ao') === '0');
-  world.water.mirror.scale = q.mirror;
+  // `?mirror=0.4` (development) sets the mirror's size, to measure it (design.md §11, M13).
+  world.water.mirror.scale = import.meta.env.DEV && params.get('mirror') ? Number(params.get('mirror')) : q.mirror;
   world.water.mirror.range = q.mirrorRange;
   atmosphere.clouds.divisor = q.clouds;
   atmosphere.clouds.maxCoverage = q.coverage;

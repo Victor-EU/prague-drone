@@ -35,7 +35,7 @@ export interface Quality {
 }
 
 export const PRESETS: Record<Preset, Quality> = {
-  full: { preset: 'full', pixels: 4.2e6, ao: true, mirror: 0.4, mirrorRange: 2200, clouds: 2, coverage: 0.65, shadow: 2048, shadowFar: 2800, spriteShadows: true, detail: 1600, fine: 300, target: 1 / 60, minScale: 0.72 },
+  full: { preset: 'full', pixels: 4.2e6, ao: true, mirror: 0.5, mirrorRange: 2200, clouds: 2, coverage: 0.65, shadow: 2048, shadowFar: 2800, spriteShadows: true, detail: 1600, fine: 300, target: 1 / 60, minScale: 0.72 },
   lite: { preset: 'lite', pixels: 1.7e6, ao: false, mirror: 0.2, mirrorRange: 1300, clouds: 3, coverage: 0.4, shadow: 1024, shadowFar: 1400, spriteShadows: false, detail: 900, fine: 0, target: 1 / 30, minScale: 0.6 },
 };
 

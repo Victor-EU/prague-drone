@@ -177,7 +177,7 @@ export class Kit {
   flagsOr = 0;
   /** Lamps for the night (src/world/lights.ts): world x, y, z and kind, per lamp. */
   lights: number[] = [];
-  /** World rings (flat x, z) the model stands on, kept clear of the bushes the world build plants. */
+  /** World rings (flat x, z) the model stands on, kept clear of the bushes and trees the world build plants. */
   claims: number[][] = [];
   private f: Frame = { x: 0, y: 0, z: 0, a: 1, b: 0 };
   private stack: Frame[] = [];

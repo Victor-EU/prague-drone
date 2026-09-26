@@ -13,56 +13,143 @@ import { RIVER_STEP, type LifeMeta } from '../core/life.ts';
 
 const PEDAL = ['#8fb8d8', '#e8b04a', '#d9674a', '#9cc79a', '#f0e6c8', '#6d8fc7'].map((h) => new THREE.Color(h));
 const WHITE = rgb('#eeeeea'), NAVY = rgb('#27344a'), GLASS = rgb('#1d2227'), OFF = rgb('#d9d8d2'), DARK = rgb('#2c2824');
+const KAYAK = ['#d9522f', '#e8c235', '#2f6fbd', '#4ea35a', '#e86a9a', '#f0f0ea'].map((h) => new THREE.Color(h));
 
 // ---- Models --------------------------------------------------------------------------------------
+// Rebuilt in M13 after the verdicts on 8849 ("the boat needs finetuning") and 9486 ("the boats are
+// simplistic"): flared hulls with a boot-top and a rubbing strake, window rows panel by panel,
+// railings of posts and rails, a canopy, the wheelhouse, the steamer's funnel, a flag; the pedal
+// boats with their striped bucket seats and a windscreen; and kayaks.
 
-/** A tour boat 30 m long (stretched to its length by the instance): 0 modern, 1 old steamer, 2 glass restaurant boat. */
+const SEAT = rgb('#d4602c'), SEAT2 = rgb('#f1e9d6'), RAIL = rgb('#e6e6e2'), STRAKE = rgb('#3a3d40');
+const FUNNEL = rgb('#1e1e1e'), REDBAND = rgb('#9b2a22'), BENCH = rgb('#35507a'), FLAG_W = rgb('#f4f4f2'), FLAG_R = rgb('#c8202a');
+
+/** Posts every 1.6 m or so round an outline, with a rail on top and one halfway. */
+function railing(s: Shape, o: Outline, y: number, h: number, col: RGB = RAIL) {
+  const n = o.length;
+  for (let i = 0; i < n; i++) {
+    const [ax, az] = o[i], [bx, bz] = o[(i + 1) % n];
+    const L = Math.hypot(bx - ax, bz - az);
+    s.beam([ax, y + h, az], [bx, y + h, bz], 0.05, col);
+    s.beam([ax, y + h * 0.5, az], [bx, y + h * 0.5, bz], 0.035, col);
+    const posts = Math.max(1, Math.round(L / 1.6));
+    for (let q = 0; q < posts; q++) {
+      const t = q / posts, x = ax + (bx - ax) * t, z = az + (bz - az) * t;
+      s.beam([x, y, z], [x, y + h, z], 0.045, col);
+    }
+  }
+}
+
+/** The Czech flag on a staff: white over red, the blue wedge at the hoist. */
+function flag(s: Shape, x: number, y: number, z: number, h: number) {
+  s.beam([x, y, z], [x, y + h, z], 0.06, RAIL);
+  s.box(x, y + h - 0.5, z - 0.02, x + 0.75, y + h - 0.25, z + 0.02, FLAG_W);
+  s.box(x, y + h - 0.75, z - 0.02, x + 0.75, y + h - 0.5, z + 0.02, FLAG_R);
+  s.box(x, y + h - 0.7, z - 0.025, x + 0.28, y + h - 0.3, z + 0.025, rgb('#1d3f8a'));
+}
+
+/** A row of window panels along both sides of a cabin outline between two heights, each a little proud of the wall. */
+function windows(s: Shape, cabin: Outline, y0: number, y1: number, step: number, w: number) {
+  let x0 = Infinity, x1 = -Infinity, hz = 0;
+  for (const [x, z] of cabin) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); hz = Math.max(hz, Math.abs(z)); }
+  s.glow = 1;
+  for (let x = x0 + 1.2; x + w < x1 - 0.8; x += step)
+    for (const side of [-1, 1]) {
+      const z = side * hz;
+      s.box(x, y0, Math.min(z, z + side * 0.04), x + w, y1, Math.max(z, z + side * 0.04), GLASS);
+    }
+  s.glow = 0;
+}
+
+/** A tour boat 30 m long (stretched to its length by the instance): 0 modern white cruiser, 1 old steamer, 2 glass restaurant boat. */
 function tourBoat(kind: number): THREE.BufferGeometry {
   const s = new Shape(), L = 30, B = kind === 2 ? 6.6 : 5.6;
-  const hull = capsulePlan(L, B, 5.5, 1.6);
-  const hullCol = kind === 1 ? DARK : WHITE;
-  s.prism(hull, -0.3, 0.35, () => (kind === 1 ? DARK : NAVY));
-  s.prism(hull, 0.35, 1.05, () => hullCol);
-  s.lid(hull, 1.05, OFF, 1);
-  const cabin = inset(hull, 3.2, 0.35);
-  const top = kind === 2 ? 2.7 : 2.8;
-  s.prism(cabin, 1.05, 1.35, () => WHITE);
-  s.glow = 1;
-  s.prism(cabin, 1.35, kind === 2 ? 2.5 : 2.35, () => GLASS);
-  s.glow = 0;
-  s.prism(cabin, kind === 2 ? 2.5 : 2.35, top, () => WHITE);
-  s.lid(cabin, top, OFF, 1);
-  if (kind !== 2) {
-    // The open top deck: a solid white rail round it, benches, the wheelhouse forward.
-    const rail = inset(cabin, 0.1, 0.05);
-    s.prism(rail, top, top + 0.55, () => WHITE);
-    for (let x = -9; x <= 6; x += 1.6) { s.box(x, top, -1.9, x + 0.55, top + 0.45, -0.3, rgb('#35507a')); s.box(x, top, 0.3, x + 0.55, top + 0.45, 1.9, rgb('#35507a')); }
-    s.box(8, top, -1.3, 10.2, top + 1.2, 1.3, WHITE);
-    s.glow = 1;
-    s.box(8.05, top + 0.45, -1.32, 10.25, top + 1.0, 1.32, GLASS);
-    s.glow = 0;
+  const dark = kind === 1;
+  const water = capsulePlan(L - 1.4, B - 1.0, 5.0, 1.4), hull = capsulePlan(L, B, 5.5, 1.6);
+  // Boot-top at the waterline, the hull's side flaring out to the deck, a dark rubbing strake under its edge.
+  s.prism(water, -0.35, 0.2, () => (dark ? DARK : NAVY));
+  s.band(water, 0.2, hull, 1.15, () => (dark ? DARK : WHITE));
+  s.prism(inset(hull, -0.05, -0.06), 0.98, 1.12, () => STRAKE);
+  s.lid(hull, 1.15, OFF, 1);
+  // A low bulwark round the deck, the walkway inside it.
+  s.prism(inset(hull, 0.1, 0.05), 1.15, 1.7, () => WHITE);
+  s.prism(inset(hull, 0.3, 0.2), 1.15, 1.7, () => WHITE);
+  s.lid(inset(hull, 0.1, 0.05), 1.7, OFF, 1);
+  const cabin = inset(hull, 3.4, 0.5), y0 = 1.15;
+  if (kind === 2) {
+    // The restaurant boat: a long glass saloon under a white roof, mullions along it, a small wheelhouse forward.
+    s.prism(cabin, y0, y0 + 0.5, () => WHITE);
+    s.glow = 1; s.prism(cabin, y0 + 0.5, y0 + 2.3, () => GLASS); s.glow = 0;
+    s.prism(cabin, y0 + 2.3, y0 + 2.75, () => WHITE);
+    s.lid(cabin, y0 + 2.75, OFF, 1);
+    let hz = 0; for (const [, z] of cabin) hz = Math.max(hz, Math.abs(z));
+    for (let x = -10.5; x < 9; x += 1.7) for (const side of [-1, 1]) s.beam([x, y0 + 0.5, side * (hz + 0.02)], [x, y0 + 2.3, side * (hz + 0.02)], 0.08, WHITE);
+    const top = y0 + 2.75;
+    s.box(6.0, top, -1.5, 9.0, top + 0.45, 1.5, WHITE);
+    s.glow = 1; s.box(6.0, top + 0.45, -1.52, 9.0, top + 1.2, 1.52, GLASS); s.glow = 0;
+    s.box(5.8, top + 1.2, -1.7, 9.2, top + 1.32, 1.7, WHITE);
+    flag(s, -13.2, 1.7, 0, 2.6);
+    return s.geometry();
   }
+  // The saloon: a white wall with a row of window panels, a coaming above; the open deck on top.
+  s.prism(cabin, y0, y0 + 1.5, () => WHITE);
+  windows(s, cabin, y0 + 0.55, y0 + 1.35, 1.7, 1.15);
+  s.prism(cabin, y0 + 1.5, y0 + 1.85, () => WHITE);
+  const top = y0 + 1.85;
+  s.lid(cabin, top, OFF, 1);
+  railing(s, inset(cabin, 0.12, 0.06), top, 1.0);
+  // Benches in two rows, a canopy on posts over the after half, the wheelhouse forward.
+  for (let x = -10; x <= 4; x += 1.6) { s.box(x, top, -1.9, x + 0.5, top + 0.45, -0.4, BENCH); s.box(x, top, 0.4, x + 0.5, top + 0.45, 1.9, BENCH); }
+  const cz = B / 2 - 1.0;
+  for (const x of [-10.8, -6, -1.2]) for (const side of [-1, 1]) s.beam([x, top, side * cz], [x, top + 2.25, side * cz], 0.08, RAIL);
+  s.box(-11.3, top + 2.25, -cz - 0.3, -0.7, top + 2.4, cz + 0.3, WHITE, true);
+  s.box(6.5, top, -1.4, 9.4, top + 0.5, 1.4, WHITE);
+  s.glow = 1; s.box(6.5, top + 0.5, -1.42, 9.4, top + 1.25, 1.42, GLASS); s.glow = 0;
+  s.box(6.3, top + 1.25, -1.6, 9.6, top + 1.4, 1.6, WHITE);
+  s.beam([9.8, top, 0], [9.8, top + 3.2, 0], 0.07, RAIL);
+  flag(s, -13.4, 1.7, 0, 2.4);
   if (kind === 1) {
-    s.box(-1, top, -0.5, 0.2, top + 2.3, 0.5, rgb('#1e1e1e'));
-    s.box(-1.02, top + 1.6, -0.52, 0.22, top + 1.9, 0.52, rgb('#9b2a22'));
+    // The steamer: a tall black funnel with a red band amidships, and a canvas awning aft.
+    s.box(-0.3, top, -0.6, 0.9, top + 3.4, 0.6, FUNNEL);
+    s.box(-0.32, top + 2.5, -0.62, 0.92, top + 2.95, 0.62, REDBAND);
   }
   return s.geometry();
 }
 
-/** A pedal boat, white, a coloured band (the instance's colour), two riders. */
+/** A pedal boat, white, a coloured band (the instance's colour), a windscreen, two striped bucket seats with their riders. */
 function pedalBoat(): THREE.BufferGeometry {
   const s = new Shape();
-  const hull = capsulePlan(3.5, 1.9, 1.1, 0.35);
-  s.prism(hull, -0.1, 0.32, () => WHITE);
+  const hull = capsulePlan(3.6, 1.9, 1.0, 0.4);
+  s.prism(hull, -0.12, 0.3, () => WHITE);
   s.tint = 1;
-  s.prism(hull, 0.32, 0.45, () => [1, 1, 1]);
+  s.prism(hull, 0.3, 0.48, () => [1, 1, 1]);
   s.tint = 0;
-  s.lid(hull, 0.45, OFF, 1);
+  s.lid(hull, 0.48, OFF, 1);
+  s.box(0.75, 0.48, -0.72, 0.8, 0.9, 0.72, rgb('#9fb4bf'));
   const shirts: RGB[] = [rgb('#e9e4da'), rgb('#3b4452')];
   [-0.45, 0.45].forEach((z, k) => {
-    s.box(-0.55, 0.45, z - 0.2, -0.2, 1.05, z + 0.2, shirts[k]);
-    s.ellipsoid([-0.38, 1.18, z], [0.11, 0.13, 0.11], rgb('#c9a58a'), 6, 3);
+    s.box(-0.55, 0.48, z - 0.32, -0.05, 0.72, z + 0.32, SEAT);
+    for (let q = 0; q < 5; q++) s.box(-0.62, 0.72 + q * 0.11, z - 0.32, -0.5, 0.83 + q * 0.11, z + 0.32, q % 2 ? SEAT2 : SEAT);
+    s.box(-0.5, 0.72, z - 0.19, -0.18, 1.12, z + 0.19, shirts[k]);
+    s.ellipsoid([-0.34, 1.25, z], [0.11, 0.13, 0.11], rgb('#c9a58a'), 6, 3);
   });
+  return s.geometry();
+}
+
+/** A kayak (the instance's colour), its paddler and the paddle across. */
+function kayak(): THREE.BufferGeometry {
+  const s = new Shape();
+  const hull = capsulePlan(4.3, 0.64, 1.9, 1.9);
+  s.tint = 1;
+  s.prism(hull, -0.1, 0.22, () => [1, 1, 1]);
+  s.lid(hull, 0.22, [0.92, 0.92, 0.92], 1);
+  s.tint = 0;
+  s.box(-0.5, 0.22, -0.22, 0.4, 0.26, 0.22, rgb('#1c1e20'));
+  s.box(-0.35, 0.22, -0.17, -0.02, 0.62, 0.17, rgb('#d9522f'));
+  s.ellipsoid([-0.18, 0.74, 0], [0.1, 0.12, 0.1], rgb('#c9a58a'), 6, 3);
+  s.beam([0.15, 0.62, -1.15], [0.15, 0.46, 1.15], 0.04, rgb('#e8e2c6'));
+  s.box(0.12, 0.6, -1.3, 0.18, 0.7, -1.0, rgb('#f0c030'));
+  s.box(0.12, 0.38, 1.0, 0.18, 0.5, 1.3, rgb('#f0c030'));
   return s.geometry();
 }
 
@@ -238,10 +325,12 @@ export class RiverLife {
   private tours: { c: Circuit; u0: number; v: number; kind: number; len: number }[] = [];
   private rowers: { c: Circuit; u0: number; v: number }[] = [];
   private pedal: Agent[] = [];
+  private kayaks: Agent[] = [];
   private pedalRange: [number, number];
   private swans: Agent[] = [];
   private boats: THREE.InstancedMesh[];
   private pedalMesh: THREE.InstancedMesh;
+  private kayakMesh: THREE.InstancedMesh;
   private eightMesh: THREE.InstancedMesh;
   private swanMesh: THREE.InstancedMesh;
   private wakeMesh: THREE.InstancedMesh;
@@ -296,6 +385,13 @@ export class RiverLife {
       const [x, z] = wet(p.x, p.z, 160, 12);
       this.pedal.push({ x, z, th: r() * Math.PI * 2, w: 0, wt: 0, v: 0, vt: 1.1, s, rest: r() * 20, flap: 0 });
     }
+    // Kayaks on the same water, quicker, in ones and twos.
+    for (let k = 0; k < 6; k++) {
+      const s = this.pedalRange[0] + r() * (this.pedalRange[1] - this.pedalRange[0]);
+      const p = this.st.at(s, 0, tmp);
+      const [x, z] = wet(p.x, p.z, 120, 10);
+      this.kayaks.push({ x, z, th: r() * Math.PI * 2, w: 0, wt: 0, v: 0, vt: 1.5, s, rest: r() * 20, flap: 0 });
+    }
     for (const [x, , z, n] of meta.swans)
       for (let k = 0; k < n; k++) {
         const [px, pz] = wet(x, z, 16, 3);
@@ -306,6 +402,8 @@ export class RiverLife {
     const add = <T extends THREE.InstancedMesh>(m: T) => { this.group.add(m); return m; };
     this.boats = [0, 1, 2].map((k) => add(lifeMesh(tourBoat(k), mat, 24, { shadow: true, reflect: true })));
     this.pedalMesh = add(lifeMesh(pedalBoat(), mat, 40, { shadow: true, reflect: true }));
+    this.kayakMesh = add(lifeMesh(kayak(), mat, 8, { reflect: true }));
+    this.kayakMesh.setColorAt(0, KAYAK[0]);
     this.eightMesh = add(lifeMesh(eight(), mat, 4, { reflect: true }));
     this.pontoonMesh = add(lifeMesh(pontoon(), mat, 1, { shadow: true, reflect: true }));
     const swanGeom = swan();
@@ -381,6 +479,11 @@ export class RiverLife {
       // Now and then the riders stop pedalling for a while.
       if (a.rest < 0) { const stop = r() < 0.25; a.vt = stop ? 0 : 0.8 + r() * 0.7; a.rest = stop ? 8 + r() * 20 : 20 + r() * 40; }
       this.steer(a, dt, r, this.pedalRange[0], this.pedalRange[1], 16, this.pedal);
+    }
+    for (const a of this.kayaks) {
+      a.rest -= dt;
+      if (a.rest < 0) { a.vt = r() < 0.2 ? 0.2 : 1.2 + r() * 0.8; a.rest = 15 + r() * 30; }
+      this.steer(a, dt, r, this.pedalRange[0], this.pedalRange[1], 10, this.kayaks);
     }
     for (const a of this.swans) {
       a.rest -= dt;
@@ -464,6 +567,16 @@ export class RiverLife {
         }
     }
     commit(this.pedalMesh);
+    this.kayakMesh.count = 0;
+    if (out)
+      this.kayaks.forEach((a, k) => {
+        if (!near(a.x, a.z)) return;
+        const dx = Math.cos(a.th), dz = Math.sin(a.th), y = this.waterAt(a.x, a.z, a.s);
+        this.kayakMesh.setColorAt(this.kayakMesh.count, KAYAK[k % KAYAK.length]);
+        setPose(this.kayakMesh, this.kayakMesh.count++, a.x, y, a.z, dx, dz);
+        if (a.v > 0.4) wake(a.x, y, a.z, dx, dz, 4.3, 3.0 * Math.min(1, a.v / 1.5));
+      });
+    commit(this.kayakMesh);
     // Swans, flapping now and then.
     this.swanMesh.count = 0;
     for (const a of this.swans) {

@@ -5,8 +5,8 @@
 import type { Ring, Polygon, OsmElement } from './osm.ts';
 import { lineOf } from './osm.ts';
 import type { Grid } from './raster.ts';
-import { Kit, mat, type V3 } from '../landmarks/kit.ts';
-import { Surface, Stone } from '../../src/core/buildings.ts';
+import { Kit, mat, arch, type V3, type V2 } from '../landmarks/kit.ts';
+import { Surface, Stone, Glass } from '../../src/core/buildings.ts';
 
 /** The 5 m node grids of the world build: water mask, water surface per node, the DEM before carving. */
 export interface RiverGrids {
@@ -219,7 +219,7 @@ export function inWeirBand(ws: Weir[], x: number, z: number): boolean {
  * lower level, the white roller at its foot and the foam trailing away. Appends to the water
  * mesh: position, downstream direction, foam (0–255).
  */
-export function weirStrip(w: Weir, pos: number[], flow: number[], foam: number[], idx: number[]) {
+export function weirStrip(w: Weir, pos: number[], flow: number[], foam: number[], bank: number[], idx: number[]) {
   const drop = w.upper - w.lower;
   const height = (v: number) =>
     v <= -2 ? w.upper : v <= 0 ? w.upper + 0.1 * smooth(-2, -1, v) : v <= 8 ? w.lower + drop * (1 - smooth(0, 8, v)) + 0.1 * (1 - smooth(0, 1, v)) : w.lower;
@@ -233,6 +233,7 @@ export function weirStrip(w: Weir, pos: number[], flow: number[], foam: number[]
       pos.push(x + nx * v, height(v) + 0.04, z + nz * v);
       flow.push(Math.round(nx * 127), Math.round(nz * 127));
       foam.push(Math.round(foamAt(v) * 255));
+      bank.push(30);
     }
   });
   for (let q = 0; q + 1 < w.pts.length; q++)
@@ -242,11 +243,43 @@ export function weirStrip(w: Weir, pos: number[], flow: number[], foam: number[]
     }
 }
 
+/**
+ * Metres from every water node to the nearest land node (a chamfer distance over the grid): the
+ * fetch the wind's ripples have, so the water lies glassy under the walls and roughens out in the
+ * stream (design.md §8.5, M13). Land nodes are 0.
+ */
+export function bankDistance(water: Uint8Array, nx: number, nz: number, cell: number): Float32Array {
+  const d = new Float32Array(nx * nz);
+  for (let k = 0; k < d.length; k++) d[k] = water[k] ? 1e9 : 0;
+  const o = cell, q = cell * Math.SQRT2;
+  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+    const k = j * nx + i;
+    if (i > 0) d[k] = Math.min(d[k], d[k - 1] + o);
+    if (j > 0) { d[k] = Math.min(d[k], d[k - nx] + o); if (i > 0) d[k] = Math.min(d[k], d[k - nx - 1] + q); if (i < nx - 1) d[k] = Math.min(d[k], d[k - nx + 1] + q); }
+  }
+  for (let j = nz - 1; j >= 0; j--) for (let i = nx - 1; i >= 0; i--) {
+    const k = j * nx + i;
+    if (i < nx - 1) d[k] = Math.min(d[k], d[k + 1] + o);
+    if (j < nz - 1) { d[k] = Math.min(d[k], d[k + nx] + o); if (i < nx - 1) d[k] = Math.min(d[k], d[k + nx + 1] + q); if (i > 0) d[k] = Math.min(d[k], d[k + nx - 1] + q); }
+  }
+  return d;
+}
+
 // ---- Embankment walls ------------------------------------------------------------------------
 
-const FACE = mat('#877f72', Surface.Stone, Stone.Ashlar, 0.5);
-const COPING = mat('#a39b8d', Surface.Stone, Stone.Ashlar, 0.2);
+// Changed in M13 (8683, 8825, 9486): the walls are the dark grey-brown of the photographs' quays,
+// not the pale sand they were.
+const FACE = mat('#585249', Surface.Stone, Stone.Ashlar, 0.7);
+const COPING = mat('#7d7669', Surface.Stone, Stone.Ashlar, 0.3);
 const WALK = mat('#7c776f', Surface.Stone, Stone.Setts, 0.1);
+const STEP = mat('#767069', Surface.Stone, Stone.Ashlar, 0.4);
+// The Náplavka's vaults (M13): along the Rašín embankment the wall opens in round arches every
+// ten metres or so, the old ice cellars glazed as cafés; dark openings at the drone's distance.
+const VAULT = mat('#2b2e31', Surface.Glass, Glass.Plain);
+const NAPLAVKA = { x0: 95, x1: 235, z0: 1040, z1: 1560 };
+/** The quays' stairs down to the water (M13): a flight every 150 m or so of wall in the core. */
+const STAIR_EVERY = 30;
+const CORE = (x: number, z: number) => Math.abs(x) < 700 && z > -900 && z < 1900;
 
 /** How far into the water the face stands (the terrain grid's slope stays behind it), and the walk behind the parapet. */
 const OUT = 2, BACK = 3.5, PARAPET = 0.9, THICK = 0.5;
@@ -309,8 +342,11 @@ export function embankments(polys: Polygon[], g: RiverGrids, k: Kit, seen: (x: n
           // The Čertovka's walls end in a slope down to the water, not a cut end standing as a
           // block in the bank (9204, M11).
           for (const i of [0, run.length - 1]) if (run[i].c) B[i] = Math.min(B[i], run[i].L + 0.3);
-          for (let i = 0; i + 1 < run.length; i++) (run[i].c && run[i + 1].c ? canalPiece : wallPiece)(k, run[i], run[i + 1], B[i], B[i + 1]);
+          for (let i = 0; i + 1 < run.length; i++) (run[i].c && run[i + 1].c ? canalPiece : wallPiece)(k, run[i], run[i + 1], B[i], B[i + 1], i);
           for (let i = 0; i + 1 < run.length; i++) metres += Math.hypot(run[i + 1].x - run[i].x, run[i + 1].z - run[i].z);
+          // Stairs down to the water, every so often along the photographed quays.
+          for (let i = STAIR_EVERY >> 1; i + 2 < run.length; i += STAIR_EVERY)
+            if (!run[i].c && CORE(run[i].x, run[i].z) && B[i] - run[i].L > 2 && B[i] - run[i].L < 6.5) stairPiece(k, run[i], run[i + 1], B[i]);
         }
         run = [];
       };
@@ -364,10 +400,18 @@ function canalPiece(k: Kit, a: Edge, b: Edge, Ba: number, Bb: number) {
   k.poly([P(a, -CANAL_OUT, Ba + 0.2), P(b, -CANAL_OUT, Bb + 0.2), P(b, BACK, Bb), P(a, BACK, Ba)], CANAL_TOP, { normal: [0, 1, 0] });
 }
 
-function wallPiece(k: Kit, a: Edge, b: Edge, Ba: number, Bb: number) {
+function wallPiece(k: Kit, a: Edge, b: Edge, Ba: number, Bb: number, i = 0) {
   const P = (e: Edge, d: number, y: number): V3 => [e.x + e.nx * d, y, e.z + e.nz * d];
   const out: V3 = [-(a.nx + b.nx) / 2, 0, -(a.nz + b.nz) / 2], land: V3 = [-out[0], 0, -out[2]];
   const lo = Math.min(a.L, b.L) - 1.2;
+  // The Náplavka's vaults, on the wall facing the river, every other piece.
+  const mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2;
+  if (i % 2 === 1 && out[0] < -0.5 && mx > NAPLAVKA.x0 && mx < NAPLAVKA.x1 && mz > NAPLAVKA.z0 && mz < NAPLAVKA.z1 && Math.min(Ba, Bb) - Math.max(a.L, b.L) > 4.2) {
+    const tx = b.x - a.x, tz = b.z - a.z, tl = Math.hypot(tx, tz) || 1;
+    let u: V3 = [tx / tl, 0, tz / tl];
+    if (-u[2] * out[0] + u[0] * out[2] < 0) u = [-u[0], 0, -u[2]];
+    k.plate([mx + out[0] * OUT, Math.max(a.L, b.L) + 0.45, mz + out[2] * OUT], u, [0, 1, 0], arch(3.0, 3.3, 'round'), VAULT, 0.05);
+  }
   // The stone's grime band sits at the waterline.
   k.ground = (a.L + b.L) / 2;
   k.poly([P(a, -OUT, lo), P(b, -OUT, lo), P(b, -OUT, Bb + PARAPET), P(a, -OUT, Ba + PARAPET)], FACE, { normal: out });
@@ -375,4 +419,63 @@ function wallPiece(k: Kit, a: Edge, b: Edge, Ba: number, Bb: number) {
   k.ground = (Ba + Bb) / 2;
   k.poly([P(a, -OUT + THICK, Ba), P(a, -OUT + THICK, Ba + PARAPET), P(b, -OUT + THICK, Bb + PARAPET), P(b, -OUT + THICK, Bb)], COPING, { normal: land });
   k.poly([P(a, -OUT + THICK, Ba), P(b, -OUT + THICK, Bb), P(b, BACK, Bb), P(a, BACK, Ba)], WALK, { normal: [0, 1, 0] });
+}
+
+/** A flight of stone steps down the wall's face to the water, running along the wall from `a` toward `b`. */
+function stairPiece(k: Kit, a: Edge, b: Edge, B: number) {
+  const tx = b.x - a.x, tz = b.z - a.z, tl = Math.hypot(tx, tz) || 1;
+  const t: V2 = [tx / tl, tz / tl], out: V2 = [-a.nx, -a.nz];
+  const drop = B - a.L + 0.35, n = Math.max(4, Math.round(drop / 0.17)), riser = drop / n, tread = 0.36, W = 1.7;
+  k.ground = a.L;
+  const at = (s: number, o: number): V2 => [a.x + t[0] * s + out[0] * (OUT + o), a.z + t[1] * s + out[1] * (OUT + o)];
+  for (let q = 0; q < n; q++) {
+    const s0 = q * tread, s1 = (n + 1) * tread + 0.6, top = B - q * riser;
+    k.prism([at(s0, 0), at(s1, 0), at(s1, W), at(s0, W)], a.L - 0.8, top, STEP, STEP);
+  }
+}
+
+// ---- The weirs' walkways --------------------------------------------------------------------
+
+const TIMBER = mat('#4a423a', Surface.Plain);
+const PLANK = mat('#5b5349', Surface.Plain);
+
+/**
+ * The timber walkway along a weir's crest (8825; M13): a row of piles on its downstream side and a
+ * lower row upstream, a plank deck between them a little above the upper water. Piles in the
+ * detail kit, the deck in the main one.
+ */
+export function weirWalk(w: { pts: [number, number][]; down: [number, number][]; upper: number; lower: number }, k: Kit, d: Kit, land: (x: number, z: number) => boolean = () => true) {
+  k.place(0, 0, 0); d.place(0, 0, 0);
+  k.ground = d.ground = w.upper;
+  // The walkway runs on past the crest's mapped ends to the banks (8825 stands at its start).
+  const pts = w.pts.slice(), down = w.down.slice();
+  for (const end of [0, 1]) {
+    const i = end ? pts.length - 1 : 0, j = end ? pts.length - 2 : 1;
+    const dx = pts[i][0] - pts[j][0], dz = pts[i][1] - pts[j][1], l = Math.hypot(dx, dz) || 1;
+    let [x, z] = pts[i];
+    for (let step = 0; step < 25; step++) {
+      x += (dx / l) * 2; z += (dz / l) * 2;
+      if (land(x, z)) break;
+      if (end) { pts.push([x, z]); down.push(down[down.length - 1]); } else { pts.unshift([x, z]); down.unshift(down[0]); }
+    }
+  }
+  const deck = w.upper + 0.95, n = pts.length;
+  const P = (q: number, v: number, y: number): V3 => [pts[q][0] + down[q][0] * v, y, pts[q][1] + down[q][1] * v];
+  for (let q = 0; q < n; q++) {
+    const [x, z] = pts[q], [nx, nz] = down[q];
+    const sh = 0.9 + 0.2 * (((q * 7919) % 13) / 13);
+    // Downstream piles, their heads above the deck; upstream piles, lower.
+    // Downstream, a pair of piles with their heads well above the deck; upstream, a lower row.
+    for (const v of [1.15, 1.7]) d.lathe(x + nx * v, z + nz * v, [[0.24, w.lower - 0.6], [0.24, deck + 1.05], [0.15, deck + 1.15], [0, deck + 1.15]], 6, TIMBER, { flat: true, shade: sh });
+    d.lathe(x - nx * 1.0, z - nz * 1.0, [[0.2, w.lower - 0.6], [0.2, deck + 0.15], [0, deck + 0.15]], 6, TIMBER, { flat: true, shade: sh * 0.95 });
+    if (q + 1 < n) {
+      // The deck between: top, and the two edges down to the bearers.
+      k.poly([P(q, -1.05, deck), P(q + 1, -1.05, deck), P(q + 1, 1.0, deck), P(q, 1.0, deck)], PLANK, { normal: [0, 1, 0], shade: sh });
+      k.poly([P(q, 1.0, deck), P(q + 1, 1.0, deck), P(q + 1, 1.0, deck - 0.18), P(q, 1.0, deck - 0.18)], TIMBER, { normal: [nx, 0, nz] });
+      k.poly([P(q, -1.05, deck), P(q, -1.05, deck - 0.18), P(q + 1, -1.05, deck - 0.18), P(q + 1, -1.05, deck)], TIMBER, { normal: [-nx, 0, -nz] });
+      // A bearer across under the deck, and a beam tying the pile heads along the downstream side.
+      d.beam(P(q, -1.05, deck - 0.25), P(q, 1.8, deck - 0.25), 0.16, TIMBER);
+      d.beam(P(q, 1.42, deck + 0.85), P(q + 1, 1.42, deck + 0.85), 0.14, TIMBER);
+    }
+  }
 }

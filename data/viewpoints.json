@@ -55,7 +55,7 @@
       "weather": {"seed": 8777, "coverage": 0, "overcast": false, "cirrus": 0}},
     {"id": "8884", "x": -190, "north": 50, "agl": 0, "y": 14.5, "heading": 200, "tilt": 0, "focal35": 83, "aspect": 1.5, "clock": "15:54",
       "weather": {"seed": 8884, "coverage": 0.6, "overcast": true, "cirrus": 0}},
-    {"id": "8825", "x": 135, "north": -185, "agl": 0, "y": 7, "heading": 315, "tilt": -2, "focal35": 24, "aspect": 0.6667, "clock": "11:12",
+    {"id": "8825", "x": 104, "north": -129, "agl": 0, "y": 4.2, "heading": 300, "tilt": -2, "focal35": 24, "aspect": 0.6667, "clock": "11:12",
       "weather": {"seed": 8825, "coverage": 0.08, "overcast": false, "cirrus": 0.5}},
     {"id": "8440", "x": 110, "north": -650, "agl": 0, "y": 8, "heading": 300, "tilt": 1, "focal35": 83, "aspect": 1.5, "clock": "13:11",
       "weather": {"seed": 8440, "coverage": 0.45, "overcast": false, "cirrus": 0}},

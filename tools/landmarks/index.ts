@@ -76,7 +76,7 @@ export interface Built {
   fine?: MeshBuffers;
   /** Lamps: x, y, z, kind per lamp. */
   lights?: number[];
-  /** Rings the model keeps clear of bushes (Kit.claims). */
+  /** Rings the model keeps clear of bushes and trees (Kit.claims). */
   claims?: number[][];
 }
 

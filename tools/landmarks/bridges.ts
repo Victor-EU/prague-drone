@@ -9,7 +9,8 @@
 // deck; the piers are spaced across the water the axis crosses (as the site's water says), in the
 // numbers the real bridges have; the deck rises from the street at each end to clear the river.
 
-import { Kit, mat, shade, ngon, type V3, type V2, type Mat } from './kit.ts';
+import { Kit, mat, shade, ngon, PROFILE, type V3, type V2, type Mat } from './kit.ts';
+import { balustrade } from './ornament.ts';
 import type { Model, Site } from './index.ts';
 import { Surface, Stone, Metal, Glass } from '../../src/core/buildings.ts';
 
@@ -165,7 +166,7 @@ function lamp(d: Kit, x: number, y: number, z: number, kind: Style['lamp']) {
     d.light([x, y + 9.3, z]);
     return;
   }
-  const h = kind === 'candelabra' ? 5.6 : kind === 'nouveau' ? 5.2 : 6.5;
+  const h = kind === 'candelabra' ? 6.8 : kind === 'nouveau' ? 5.2 : 6.5;
   d.lathe(x, z, [[0.22, y], [0.18, y + 0.5], [0.09, y + 0.7], [0.07, y + h]], 6, IRON);
   if (kind === 'candelabra') {
     // Legion Bridge: a cast-iron candelabra, a crown of five globes.
@@ -190,6 +191,7 @@ function lamp(d: Kit, x: number, y: number, z: number, kind: Style['lamp']) {
 
 /** A bridge of arches (stone, concrete or steel) on the given style. */
 function archBridge(site: Site, k: Kit, d: Kit, key: string, st: Style, clip?: [number, number]) {
+  // Changed in M13 (9486): a cornice swept under the parapet, balusters where the parapet is one, taller lamps, darker granite.
   const A = axisOf(site, key, clip);
   const deck = deckProfile(site, A, st.clear);
   const { spans, piers } = layout(A, st, deck, site);
@@ -204,6 +206,8 @@ function archBridge(site: Site, k: Kit, d: Kit, key: string, st: Style, clip?: [
   const steel = st.arch === 'steel';
   const girder = steel ? 1.5 : 0.9; // the deck's own depth over the crown
   const parH = st.parapet === 'rail' ? 0 : st.parapet === 'balustrade' ? 1.0 : 1.1;
+  // How high the face itself rises over the deck: to the parapet's top, or only to the walk where balusters stand.
+  const faceTop = st.parapet === 'balustrade' ? 0.15 : parH;
 
   const radial = (h: Span) => !!st.voussoir && h.kind === 'segment';
   // Stations: every 1.5 m under an arch, where the soffit curves; every 5 m elsewhere.
@@ -225,7 +229,7 @@ function archBridge(site: Site, k: Kit, d: Kit, key: string, st: Style, clip?: [
     // Faces: steel bridges show only the deck girder over their arches; the rest are walls.
     for (const t of [-H, H]) {
       const lo0 = steel && h ? d0 - girder : B0, lo1 = steel && h ? d1 - girder : B1;
-      k.poly([P3(s0, t, lo0), P3(s1, t, lo1), P3(s1, t, d1 + parH), P3(s0, t, d0 + parH)], steel && h ? STEEL : st.face, { normal: side(t) });
+      k.poly([P3(s0, t, lo0), P3(s1, t, lo1), P3(s1, t, d1 + faceTop), P3(s0, t, d0 + faceTop)], steel && h ? STEEL : st.face, { normal: side(t) });
       if (h && !steel) {
         // The arch ring standing proud of the face; Palacký's alternates its stones.
         const band = 0.9, o = t + Math.sign(t) * 0.1;
@@ -246,7 +250,7 @@ function archBridge(site: Site, k: Kit, d: Kit, key: string, st: Style, clip?: [
       const a = sg * (H - walkW), b = sg * inner;
       k.poly([P3(s0, a, d0 + 0.15), P3(s0, b, d0 + 0.15), P3(s1, b, d1 + 0.15), P3(s1, a, d1 + 0.15)], st.walk, { normal: [0, 1, 0] });
       k.poly([P3(s0, a, d0), P3(s1, a, d1), P3(s1, a, d1 + 0.15), P3(s0, a, d0 + 0.15)], st.walk, { normal: side(-sg) });
-      if (parH) {
+      if (parH && st.parapet !== 'balustrade') {
         k.poly([P3(s0, b, d0 + 0.15), P3(s1, b, d1 + 0.15), P3(s1, b, d1 + parH), P3(s0, b, d0 + parH)], st.face, { normal: side(-sg) });
         k.poly([P3(s0, b, d0 + parH), P3(s0, sg * H, d0 + parH), P3(s1, sg * H, d1 + parH), P3(s1, b, d1 + parH)], st.coping, { normal: [0, 1, 0] });
       } else {
@@ -256,12 +260,13 @@ function archBridge(site: Site, k: Kit, d: Kit, key: string, st: Style, clip?: [
         d.poly([P3(s0, rt, d0 + 0.15), P3(s0, rt, d0 + 1.15), P3(s1, rt, d1 + 1.15), P3(s1, rt, d1 + 0.15)], IRON, { normal: side(-sg) });
       }
     }
-    // String course under the parapet.
-    if (!steel) for (const t of [-H, H]) {
-      const o = t + Math.sign(t) * 0.15;
-      k.poly([P3(s0, o, d0 - 0.5), P3(s1, o, d1 - 0.5), P3(s1, o, d1 - 0.1), P3(s0, o, d0 - 0.1)], st.coping, { normal: side(t) });
-      k.poly([P3(s0, t, d0 - 0.1), P3(s0, o, d0 - 0.1), P3(s1, o, d1 - 0.1), P3(s1, t, d1 - 0.1)], st.coping, { normal: [0, 1, 0] });
-    }
+  }
+  // The cornice under the parapet, swept along each face (the left hand outward: the near face
+  // travelled with s, the far one against it), and the balusters where the parapet is one.
+  if (!steel) for (const sg of [-1, 1]) {
+    const stations = sg > 0 ? S.slice().reverse() : S;
+    k.sweep(stations.map((s) => P3(s, sg * H, deck(s) - 0.55)), PROFILE.cornice(0.42, 0.55), st.coping);
+    if (st.parapet === 'balustrade') balustrade(d, S.map((s) => P3(s, sg * (H - 0.22), deck(s) + 0.15)), st.coping, { h: 1.0, step: 0.5, w: 0.3, sides: 4 });
   }
   // Ends of the deck, and the jambs of every opening down to the foundations.
   for (const s of [A.s0, A.s1]) {
@@ -387,9 +392,9 @@ function archBridge(site: Site, k: Kit, d: Kit, key: string, st: Style, clip?: [
 
 // Changed in M10 (8440): the arch rings pale granite voussoirs, the piers' ashlar warmer.
 const legion: Style = {
-  face: mat('#77716a', Surface.Stone, Stone.Ashlar, 0.5), ring: mat('#b9b3a7', Surface.Stone, Stone.Render, 0.25), ring2: mat('#a39d92', Surface.Stone, Stone.Render, 0.3),
-  voussoir: 0.62, band: 1.15, soffit: shade(GRANITE, 0.9),
-  pier: mat('#85766a', Surface.Stone, Stone.Ashlar, 0.5), coping: mat('#8a857c', Surface.Stone, Stone.Ashlar, 0.3),
+  face: mat('#655f58', Surface.Stone, Stone.Ashlar, 0.6), ring: mat('#a8a297', Surface.Stone, Stone.Render, 0.25), ring2: mat('#948e83', Surface.Stone, Stone.Render, 0.3),
+  voussoir: 0.62, band: 1.15, soffit: shade(GRANITE, 0.85),
+  pier: mat('#736860', Surface.Stone, Stone.Ashlar, 0.6), coping: mat('#8f8a80', Surface.Stone, Stone.Ashlar, 0.3),
   road: ASPHALT, walk: WALK, arch: 'segment', rise: 0.17, pierT: 4.6, cut: 3.4, cutwater: 'round', parapet: 'solid',
   arches: [3, 0, 6], land: [], clear: 6.3, lamp: 'candelabra',
 };
@@ -407,8 +412,8 @@ const cech: Style = {
 };
 
 const jirasek: Style = {
-  face: mat('#aaa497', Surface.Stone, Stone.Render, 0.2), ring: mat('#a19b8e', Surface.Stone, Stone.Render, 0.25), pier: mat('#958f83', Surface.Stone, Stone.Ashlar, 0.4),
-  coping: mat('#b3ad9f', Surface.Stone, Stone.Render, 0.1), road: ASPHALT, walk: WALK, arch: 'ellipse', rise: 0.17, pierT: 4.2, cut: 2.6,
+  face: mat('#8f8a81', Surface.Stone, Stone.Render, 0.25), ring: mat('#86817a', Surface.Stone, Stone.Render, 0.3), pier: mat('#7f7a70', Surface.Stone, Stone.Ashlar, 0.45),
+  coping: mat('#a19b90', Surface.Stone, Stone.Render, 0.1), road: ASPHALT, walk: WALK, arch: 'ellipse', rise: 0.17, pierT: 4.2, cut: 2.6,
   cutwater: 'round', parapet: 'solid', arches: [6], clear: 7.8, lamp: 'post', lampEvery: 24,
 };
 
