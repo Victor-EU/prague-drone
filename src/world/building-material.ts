@@ -8,7 +8,7 @@
 
 import * as THREE from 'three';
 import { patchLit } from '../sky/lit.ts';
-import { STYLES, Surface, Stone, Metal, Glass } from '../core/buildings.ts';
+import { STYLES, Style, Surface, Stone, Metal, Glass } from '../core/buildings.ts';
 
 const GLSL_PARS = /* glsl */ `
 varying vec4 vFacade;
@@ -16,6 +16,7 @@ flat varying vec4 vInfo;
 varying vec3 vPraN;
 uniform vec4 uStyleA[${STYLES.length}];
 uniform vec4 uStyleB[${STYLES.length}];
+uniform float uDetail;
 float praHash(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
 float praNoise(vec2 p) {
   vec2 i = floor(p), f = fract(p);
@@ -31,6 +32,10 @@ float praPulse(float x, float a, float b, float w) {
   return (F1 - F0) / w;
 }
 float praStep(float e, float x, float w) { return clamp((x - e) / max(w, 1e-4) + 0.5, 0.0, 1.0); }
+// The box-filtered coverage of the rectangle [lo, hi] at p, for a footprint w.
+float praBox(vec2 p, vec2 lo, vec2 hi, vec2 w) {
+  return (praStep(lo.x, p.x, w.x) - praStep(hi.x, p.x, w.x)) * (praStep(lo.y, p.y, w.y) - praStep(hi.y, p.y, w.y));
+}
 `;
 
 const GLSL_MAIN = /* glsl */ `
@@ -48,20 +53,38 @@ float praAbove = -1.0;
   if (kind == ${Surface.Wall}) {
     vec4 A = uStyleA[style], B = uStyleB[style];
     float u = vFacade.x, L = vFacade.y, v = vFacade.z, top = vFacade.w;
-    float wv = max(fwidth(v), 1e-4);
+    float wv = max(fwidth(v), 1e-4), wu = max(fwidth(u), 1e-4);
     vec3 c = diffuseColor.rgb;
+    // The details of the close-ups (design.md §8.2, M9) on the old fronts; the rich ones (baroque,
+    // Old Town, palace) also get aprons and hoods. They fade out between about 50 and 150 m.
+    bool orn = style == ${Style.Baroque} || style == ${Style.OldTown} || style == ${Style.Palace} || style == ${Style.Block} || style == ${Style.House};
+    bool rich = style == ${Style.Baroque} || style == ${Style.OldTown} || style == ${Style.Palace};
+    float near = orn ? (1.0 - smoothstep(0.03, 0.09, max(wu, wv))) * uDetail : 0.0;
+    // Two tones: the trim paler (white and cream on ochre, 8884), deeper and warmer (salmon on pale
+    // pink, 8777; red-orange on ochre, 8082), or the field's own colour in relief; by building.
+    float mx = max(c.r, max(c.g, c.b)), sat = (mx - min(c.r, min(c.g, c.b))) / max(mx, 1e-3);
+    float tk = praHash(vec2(seed * 7.13, 3.7));
+    float pDeep = sat < 0.35 ? 0.5 : 0.2, pPale = sat < 0.35 ? 0.3 : 0.65;
+    vec3 trim = tk < pDeep ? c * vec3(0.8, 0.44, 0.34) : tk < pDeep + pPale ? mix(c, vec3(0.86, 0.82, 0.72), 0.75) : c * 1.08;
+    if (!orn) trim = c;
+    float inC = 0.0;
     if (party > 0.5) {
       // A firewall: bare, a little grey.
       c = mix(c, vec3(dot(c, vec3(0.3333))), 0.35) * 0.86;
     } else if (top > 3.0) {
-      // Cornice under the eave: a lit moulding over a line of shadow.
-      float inC = praStep(top - 0.5, v, wv);
+      // Cornice under the eave, in the trim: a lit moulding over a line of shadow.
+      inC = praStep(top - 0.5, v, wv);
       float line = praStep(top - 0.78, v, wv) * (1.0 - inC);
-      c *= (1.0 + 0.12 * inC) * (1.0 - 0.38 * line);
+      c = mix(c, trim, 0.85 * inC) * (1.0 + 0.12 * inC) * (1.0 - 0.38 * line);
       // Plinth.
       c *= mix(0.8, 1.0, praStep(0.9, v, wv));
+      // Lesenes: strips of the trim up the ends of the front, from the plinth to the cornice.
+      if (orn && style != ${Style.House} && L > 5.0) {
+        float les = ((1.0 - praStep(0.55, u, wu)) + praStep(L - 0.55, u, wu)) * praStep(0.9, v, wv) * (1.0 - inC);
+        c = mix(c, trim, les);
+      }
     }
-    float win = 0.0;
+    float win = 0.0, frame = 0.0;
     float n = A.x > 0.0 ? floor((L - 0.8) / A.x) : 0.0;
     if (n >= 1.0 && top > 2.5) {
       float span = (L - 0.8) / n;
@@ -82,23 +105,69 @@ float praAbove = -1.0;
       if (B.y > 0.5) {
         float sw = min(0.42, hw * 1.7);
         win += ground * praPulse(cc, 0.5 - sw, 0.5 + sw, wc) * inside * praPulse(r, 0.1, 0.78, wr);
+        // The blocks' ground floor is rusticated.
+        if (style == ${Style.Block}) c *= 1.0 - 0.14 * ground * praPulse(v / 0.42, 0.0, 0.1, wv / 0.42);
       } else {
         win += ground * cols * praPulse(r, 0.3, min(0.88, 0.3 + A.z / sh), wr);
       }
-      // String course between the ground floor and the first.
-      c *= 1.0 - 0.18 * praPulse(r, 0.96, 1.0, wr) * step(0.5, r) * step(r, 1.5);
+      // String course between the ground floor and the first, in the trim.
+      float sc = praPulse(r, 0.96, 1.0, wr) * step(0.5, r) * step(r, 1.5);
+      c = mix(c, trim, 0.7 * sc) * (1.0 - 0.18 * sc);
       win = clamp(win, 0.0, 1.0);
       float h = praHash(vec2(floor(cc) + seed * 3.7, floor(r) + seed * 1.3));
-      vec3 glass = mix(vec3(0.03, 0.038, 0.046), vec3(0.12, 0.11, 0.1), h * h);
+      vec3 glass = mix(vec3(0.035, 0.042, 0.05), vec3(0.13, 0.13, 0.13), h * h);
+      // White casements; the modern fronts' frames are dark metal. From afar a window is glass
+      // with its frame in it, a grey, not a black hole.
+      vec3 frameC = orn ? vec3(0.78, 0.76, 0.7) : vec3(0.08, 0.085, 0.09);
+      if (near > 0.0) {
+        // Metres from the window's axis, and above the storey's floor.
+        vec2 p = vec2((fract(cc) - 0.5) * span, fract(r) * sh), w2 = vec2(wu, wv);
+        float fl = floor(r);
+        bool gf = fl < 0.5;
+        // The ground floor's plain windows take the same frames; shopfronts do not.
+        float m = near * inside * (gf ? (B.y > 0.5 ? 0.0 : 1.0) : step(fl, nS - 1.0));
+        float W = A.y, y0 = gf ? 0.3 * sh : A.w, y1 = gf ? min(0.88 * sh, 0.3 * sh + A.z) : min(A.w + A.z, 0.9 * sh);
+        float sw = rich ? 0.17 : 0.12;
+        float rect = praBox(p, vec2(-0.5 * W, y0), vec2(0.5 * W, y1), w2);
+        float sur = praBox(p, vec2(-0.5 * W - sw, y0 - sw), vec2(0.5 * W + sw, y1 + sw), w2) - rect;
+        // The sill: a lit ledge with its shadow under it; the rich fronts an apron panel below.
+        float sill = praBox(p, vec2(-0.5 * W - sw - 0.06, y0 - sw - 0.07), vec2(0.5 * W + sw + 0.06, y0 - sw + 0.01), w2);
+        float sillSh = praBox(p, vec2(-0.5 * W - sw, y0 - sw - 0.16), vec2(0.5 * W + sw, y0 - sw - 0.07), w2);
+        float apron = rich && !gf ? praBox(p, vec2(-0.5 * W + 0.05, y0 - sw - 0.62), vec2(0.5 * W - 0.05, y0 - sw - 0.22), w2) : 0.0;
+        c = mix(c, trim, clamp(sur + 0.55 * apron, 0.0, 1.0) * m);
+        c = mix(c, trim * 1.15, sill * m);
+        c *= 1.0 - 0.35 * sillSh * m;
+        // A hood over the window: on the first floor of the rich fronts segmental, triangular or
+        // straight by building; over every upper window but the top row of the blocks, straight.
+        if ((rich && fl > 0.5 && fl < 1.5) || (style == ${Style.Block} && fl > 0.5 && fl < nS - 1.5)) {
+          float hk = praHash(vec2(seed * 3.1, 9.2));
+          float yt = y1 + sw + 0.05, hwH = 0.5 * W + sw + 0.1;
+          float xx = clamp(abs(p.x) / hwH, 0.0, 1.0);
+          float rise = style == ${Style.Block} || hk < 0.34 ? 0.0 : hk < 0.67 ? 0.26 * sqrt(1.0 - xx * xx) : 0.34 * (1.0 - xx);
+          float span2 = praStep(-hwH, p.x, wu) - praStep(hwH, p.x, wu);
+          float hood = span2 * (praStep(yt, p.y, wv) - praStep(yt + 0.14 + rise, p.y, wv));
+          float hoodSh = praBox(p, vec2(-hwH + 0.05, yt - 0.08), vec2(hwH - 0.05, yt), w2);
+          c = mix(c, trim * 1.12, hood * m);
+          c *= 1.0 - 0.4 * hoodSh * m;
+        }
+        // The casement: a frame, a mullion and a transom two thirds up; the upper panes take more sky.
+        float fw = 0.07, yT = y0 + 0.66 * (y1 - y0);
+        float panes = praBox(p, vec2(-0.5 * W + fw, y0 + fw), vec2(0.5 * W - fw, y1 - fw), w2);
+        float bars = max(praBox(p, vec2(-0.035, y0), vec2(0.035, y1), w2), praBox(p, vec2(-0.5 * W, yT - 0.035), vec2(0.5 * W, yT + 0.035), w2));
+        frame = clamp(rect - panes * (1.0 - bars), 0.0, 1.0) * m;
+        glass += vec3(0.03, 0.035, 0.04) * praStep(yT, p.y, wv) * m;
+      }
+      glass = mix(glass, frameC, (orn ? 0.22 : 0.12) * (1.0 - near));
       c = mix(c, glass, win);
+      c = mix(c, frameC, frame * win);
       // At night a quarter of the windows are lit, and half the shopfronts: warm, some whiter.
       float hl = praHash(vec2(floor(cc) * 1.7 + seed * 5.3, floor(r) * 2.3 + seed));
       float lit = step(hl, r < 1.0 ? 0.4 : 0.18);
       vec3 warm = mix(vec3(1.0, 0.46, 0.17), vec3(1.0, 0.7, 0.42), praHash(vec2(hl * 7.0, seed)));
-      praEmit += warm * win * lit * 0.07;
+      praEmit += warm * win * (1.0 - 0.7 * frame) * lit * 0.07;
     }
     diffuseColor.rgb = c;
-    praGlass = win;
+    praGlass = win * (1.0 - frame);
     praAbove = v;
   } else if (kind == ${Surface.Roof} || kind == ${Surface.DormerRoof}) {
     float u = vFacade.x, s = vFacade.y, smax = vFacade.z;
@@ -117,6 +186,20 @@ float praAbove = -1.0;
     vec3 c = diffuseColor.rgb * tile * weather * (1.0 + 0.16 * ridge);
     // Lichen and grime on north slopes, patchy.
     c = mix(c, c * vec3(0.7, 0.76, 0.64), north * (0.25 + 0.5 * n2) * 0.7);
+    // Skylights, one in about twelve cells of 3.4 by 2.6 m on the tiled slopes (8884): dark glass in
+    // a pale metal frame, fading out beyond a few hundred metres.
+    float su = max(fwidth(u), 1e-4), ss = max(fwidth(s), 1e-4);
+    float nearR = kind == ${Surface.Roof} ? (1.0 - smoothstep(0.15, 0.4, max(su, ss))) * uDetail : 0.0;
+    if (nearR > 0.0) {
+      vec2 cell = vec2(u / 3.4, s / 2.6), id = floor(cell);
+      float on = step(praHash(id + seed * 0.71), 0.085) * step(1.0, id.y * 2.6) * step((id.y + 1.0) * 2.6, smax - 1.0);
+      vec2 q = (fract(cell) - 0.5) * vec2(3.4, 2.6), w2 = vec2(su, ss);
+      float pane = praBox(q, vec2(-0.39, -0.55), vec2(0.39, 0.55), w2) * on * nearR;
+      float gl = praBox(q, vec2(-0.33, -0.49), vec2(0.33, 0.49), w2) * on * nearR;
+      c = mix(c, vec3(0.32, 0.32, 0.3), pane);
+      c = mix(c, vec3(0.03, 0.036, 0.044), gl);
+      praGlass = gl;
+    }
     diffuseColor.rgb = c;
   } else if (kind == ${Surface.FlatRoof}) {
     diffuseColor.rgb *= 0.86 + 0.22 * praNoise(wp.xz * 0.4 + seed) + 0.08 * (praNoise(wp.xz * 2.7) - 0.5);
@@ -124,13 +207,22 @@ float praAbove = -1.0;
     if (party > 0.5) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(dot(diffuseColor.rgb, vec3(0.3333))), 0.35) * 0.86;
   } else if (kind == ${Surface.Chimney}) {
     float v = vFacade.z, H = vFacade.w;
+    // Most stacks in the core are plastered white or cream (8884), the rest the house's colour.
+    float ck = praHash(vec2(seed * 5.9, 1.3));
+    diffuseColor.rgb = mix(diffuseColor.rgb, mix(vec3(0.84, 0.81, 0.74), vec3(0.72, 0.68, 0.6), ck), step(ck, 0.7));
     diffuseColor.rgb *= mix(1.0, 0.42, praStep(H - 0.28, v, max(fwidth(v), 1e-4)));
   } else if (kind == ${Surface.DormerFront}) {
     float x = vFacade.x / max(vFacade.y, 0.1), y = vFacade.z / max(vFacade.w, 0.1);
     float wx = fwidth(x), wy = fwidth(y);
     float win = (praStep(0.2, x, wx) - praStep(0.8, x, wx)) * (praStep(0.18, y, wy) - praStep(0.86, y, wy));
-    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.04, 0.045, 0.05), win);
-    praGlass = win;
+    // The front white (8884), the window a casement with a cross.
+    vec3 front = mix(diffuseColor.rgb, vec3(0.84, 0.81, 0.74), 0.7);
+    float fx = 0.06 / max(vFacade.y, 0.1), fy = 0.06 / max(vFacade.w, 0.1);
+    float panes = (praStep(0.2 + fx, x, wx) - praStep(0.8 - fx, x, wx)) * (praStep(0.18 + fy, y, wy) - praStep(0.86 - fy, y, wy));
+    float bars = max(praStep(0.5 - 0.5 * fx, x, wx) - praStep(0.5 + 0.5 * fx, x, wx), praStep(0.62 - 0.5 * fy, y, wy) - praStep(0.62 + 0.5 * fy, y, wy));
+    float glassA = win * panes * (1.0 - bars);
+    diffuseColor.rgb = mix(front, vec3(0.04, 0.045, 0.05), glassA);
+    praGlass = glassA;
   } else if (kind == ${Surface.Stone}) {
     // Courses of blocks (ashlar, brick, rubble) or setts, each block its own tone, the joints
     // darker; then the blackening Prague sandstone takes on in patches and streaks, and grime at
@@ -227,6 +319,9 @@ float praAbove = -1.0;
 vec3 praPoolE = praAbove >= 0.0 ? diffuseColor.rgb * praLampPool(vPraWorld, praAbove) * 0.14 : vec3(0.0);
 `;
 
+/** The close-up details of M9 (1 on, 0 off; `?detail=0` in development, to measure their cost). */
+export const DETAIL = { value: 1 };
+
 export function buildingMaterial(): THREE.MeshStandardMaterial {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88, metalness: 0 });
   const styleA = STYLES.map((s) => new THREE.Vector4(s.cell, s.winW, s.winH, s.sill));
@@ -234,6 +329,7 @@ export function buildingMaterial(): THREE.MeshStandardMaterial {
   return patchLit(m, (shader) => {
     shader.uniforms.uStyleA = { value: styleA };
     shader.uniforms.uStyleB = { value: styleB };
+    shader.uniforms.uDetail = DETAIL;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec4 aFacade;\nattribute vec4 aInfo;\nvarying vec4 vFacade;\nflat varying vec4 vInfo;\nvarying vec3 vPraN;')
       .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nvFacade = aFacade;\nvInfo = aInfo;\nvPraN = objectNormal;');

@@ -39,7 +39,7 @@
       "weather": {"seed": 8725, "coverage": 0.3, "overcast": false, "cirrus": 0.6}},
     {"id": "8722", "x": -1176.6, "north": -413.2, "agl": 0.8, "heading": 270, "tilt": 6, "focal35": 64, "aspect": 0.6667, "clock": "09:57",
       "weather": {"seed": 8722, "coverage": 0.2, "overcast": false, "cirrus": 0.3}},
-    {"id": "9204", "x": -273, "north": -146, "agl": 0, "y": 7, "heading": 3, "tilt": -4, "focal35": 64, "aspect": 0.6667, "clock": "12:10",
+    {"id": "9204", "x": -300.3, "north": -285, "agl": 0, "y": 5, "heading": 15, "tilt": -4, "focal35": 64, "aspect": 0.6667, "clock": "12:10",
       "weather": {"seed": 9204, "coverage": 0.5, "overcast": true, "cirrus": 0}},
     {"id": "8683", "x": 160, "north": 225, "agl": 0, "y": 9, "heading": 203.2, "tilt": -2, "focal35": 24, "aspect": 1.5, "clock": "20:00",
       "weather": {"seed": 8683, "coverage": 0, "overcast": false, "cirrus": 0.4}},
@@ -57,7 +57,7 @@
       "weather": {"seed": 8884, "coverage": 0.6, "overcast": true, "cirrus": 0}},
     {"id": "8825", "x": 135, "north": -185, "agl": 0, "y": 7, "heading": 315, "tilt": -2, "focal35": 24, "aspect": 0.6667, "clock": "11:12",
       "weather": {"seed": 8825, "coverage": 0.08, "overcast": false, "cirrus": 0.5}},
-    {"id": "8440", "x": -125, "north": -715, "agl": 1.6, "heading": 340, "tilt": 2, "focal35": 83, "aspect": 1.5, "clock": "13:11",
+    {"id": "8440", "x": 110, "north": -650, "agl": 0, "y": 8, "heading": 300, "tilt": 1, "focal35": 83, "aspect": 1.5, "clock": "13:11",
       "weather": {"seed": 8440, "coverage": 0.45, "overcast": false, "cirrus": 0}},
     {"id": "8988", "x": -110, "north": -1290, "agl": 0, "y": 4.8, "heading": 71.3, "tilt": 4.2, "focal35": 40, "aspect": 1.5, "clock": "17:55",
       "weather": {"seed": 8988, "coverage": 0.6, "overcast": true, "cirrus": 0}}

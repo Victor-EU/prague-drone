@@ -5,6 +5,9 @@
 // of detail, each lobe moved and resized by the tree's own seed; the near set is sorted again
 // whenever the camera has moved a few metres. Beyond it every tree is a sprite facing the camera,
 // shaded as the ellipsoid it stands for, with a lumpy edge, thinned with distance (fewer, bigger).
+// Within 50 m the crown also carries leaf clusters (design.md §8.4, M9): small cards over the
+// lobes, each cut into a few leaves in the shader, so a near crown has leaves and sky between
+// them at its edge, as the photographs' trees have (8385, 8884, 9204).
 // All of it in three's standard material with the sky patch, so the crowns take the sun, the
 // sky's light, the haze, and cast shadows (drawn with the simplest crowns, as is the mirror).
 //
@@ -27,6 +30,8 @@ import { U } from '../sky/uniforms.ts';
 import { REFLECT } from '../render/reflection.ts';
 import { BLOOMS } from './blooms.ts';
 
+/** Within this 3D distance a tree carries its leaf clusters. */
+const NEAR_LEAF = 50;
 /** Within these 3D distances a tree has its most detailed crown, then its middle one. */
 const NEAR0 = 90;
 const NEAR_MID = 230;
@@ -43,6 +48,8 @@ interface Lobe { c: [number, number, number]; r: number }
 /** A mesh under construction: positions, normals, part (0 crown, 1 trunk). */
 class Builder {
   pos: number[] = []; nor: number[] = []; part: number[] = []; index: number[] = [];
+  /** Per vertex, a leaf card's corner (−1..1) and its seed; zero off the cards. */
+  card: number[] = [];
   /** Per vertex, the lobe it belongs to (centre, radius; radius 0 for cones and trunks). */
   lobeOf: number[] = [];
   lobe(l: Lobe, detail: number) {
@@ -62,6 +69,7 @@ class Builder {
         this.pos.push(l.c[0] + x * l.r, l.c[1] + y * l.r, l.c[2] + z * l.r);
         this.nor.push(x, y, z);
         this.part.push(0);
+        this.card.push(0, 0, 0);
         this.lobeOf.push(l.c[0], l.c[1], l.c[2], l.r);
       }
       map.push(k);
@@ -79,6 +87,7 @@ class Builder {
       this.pos.push(c * r, y0, s * r); this.nor.push(c / len, slope / len, s / len); this.part.push(0);
       this.pos.push(0, y1, 0); this.nor.push(c / len, slope / len, s / len); this.part.push(0);
       this.lobeOf.push(0, y0, 0, 0, 0, y0, 0, 0);
+      this.card.push(0, 0, 0, 0, 0, 0);
     }
     for (let i = 0; i < n; i++) {
       const a = base + i * 2;
@@ -88,10 +97,49 @@ class Builder {
     const hub = this.pos.length / 3;
     this.pos.push(0, y0 + (y1 - y0) * 0.15, 0); this.nor.push(0, -1, 0); this.part.push(0);
     this.lobeOf.push(0, y0, 0, 0);
+    this.card.push(0, 0, 0);
     for (let i = 0; i < n; i++) {
       const a = base + i * 2, b = base + (i + 1) * 2;
       this.index.push(hub, b, a);
     }
+  }
+  /**
+   * Leaf clusters over the lobes: square cards of half-size `h` a little outside each lobe's
+   * surface, facing out but turned and tipped at random, where no other lobe covers them. Each is
+   * drawn from both sides.
+   */
+  cards(ls: Lobe[], h: number, perArea: number, seed: number) {
+    const r = rng(seed);
+    const n = new THREE.Vector3(), t = new THREE.Vector3(), b = new THREE.Vector3(), up = new THREE.Vector3();
+    ls.forEach((l, li) => {
+      const count = Math.round(perArea * 4 * Math.PI * l.r * l.r);
+      for (let i = 0; i < count; i++) {
+        // An even spread over the sphere, jittered.
+        const y = 1 - 2 * (i + r()) / count, rad = Math.sqrt(Math.max(0, 1 - y * y)), a = i * 2.39996 + r();
+        n.set(Math.cos(a) * rad, y, Math.sin(a) * rad);
+        const p = [l.c[0] + n.x * l.r * 1.04, l.c[1] + n.y * l.r * 1.04, l.c[2] + n.z * l.r * 1.04];
+        if (ls.some((o, oi) => oi !== li && Math.hypot(p[0] - o.c[0], p[1] - o.c[1], p[2] - o.c[2]) < o.r * 0.97)) continue;
+        // Tip the card off the surface by up to 40°, turn it about its normal at random.
+        up.set(r() - 0.5, r() - 0.5, r() - 0.5).multiplyScalar(0.9);
+        const f = n.clone().add(up).normalize();
+        t.set(-f.z, 0, f.x);
+        if (t.lengthSq() < 1e-4) t.set(1, 0, 0);
+        t.normalize();
+        b.crossVectors(f, t);
+        const turn = r() * Math.PI, ct = Math.cos(turn), st = Math.sin(turn);
+        const T = t.clone().multiplyScalar(ct).addScaledVector(b, st), B = b.clone().multiplyScalar(ct).addScaledVector(t, -st);
+        const s = h * (0.8 + 0.4 * r()), cs = r();
+        const base = this.pos.length / 3;
+        for (const [u, v] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+          this.pos.push(p[0] + (T.x * u + B.x * v) * s, p[1] + (T.y * u + B.y * v) * s, p[2] + (T.z * u + B.z * v) * s);
+          this.nor.push(n.x, n.y, n.z);
+          this.part.push(2);
+          this.lobeOf.push(l.c[0], l.c[1], l.c[2], l.r);
+          this.card.push(u, v, cs);
+        }
+        this.index.push(base, base + 1, base + 2, base, base + 2, base + 3, base, base + 2, base + 1, base, base + 3, base + 2);
+      }
+    });
   }
   /** The trunk: a prism of radius 1 from y 0 to 1 (scaled per tree). */
   trunk(n: number) {
@@ -102,6 +150,7 @@ class Builder {
       this.nor.push(c, 0, s, c, 0, s);
       this.part.push(1, 1);
       this.lobeOf.push(0, 0, 0, 0, 0, 0, 0, 0);
+      this.card.push(0, 0, 0, 0, 0, 0);
     }
     for (let i = 0; i < n; i++) {
       const a = base + i * 2;
@@ -156,7 +205,7 @@ function lobes(kind: number, count: number, seed: number): Lobe[] {
 function crownGeometry(kind: number): { geom: THREE.BufferGeometry; lod: [number, number][] } {
   const b = new Builder();
   const lod: [number, number][] = [];
-  const add = (detail: 0 | 1 | 2) => {
+  const add = (detail: 0 | 1 | 2, leaves = false) => {
     const start = b.index.length;
     if (kind === Kind.Conifer) {
       // Tiers of cones, each overlapping the one below.
@@ -168,11 +217,15 @@ function crownGeometry(kind: number): { geom: THREE.BufferGeometry; lod: [number
       }
     } else {
       const many = kind === Kind.Poplar ? 7 : 12, few = kind === Kind.Poplar ? 4 : 5;
-      for (const l of lobes(kind, detail === 2 ? many : few, 11 + kind)) b.lobe(l, detail);
+      const ls = lobes(kind, detail === 2 ? many : few, 11 + kind);
+      for (const l of ls) b.lobe(l, detail);
+      // Leaf clusters on the broad trees, fruit trees and poplars; their size in the unit crown.
+      if (leaves && kind !== Kind.Rose) b.cards(ls, kind === Kind.Poplar ? 0.05 : 0.06, kind === Kind.Poplar ? 90 : 75, 71 + kind);
     }
     b.trunk([3, 4, 6][detail]);
     lod.push([start, b.index.length - start]);
   };
+  add(2, true);
   add(2);
   add(1);
   add(0);
@@ -181,6 +234,7 @@ function crownGeometry(kind: number): { geom: THREE.BufferGeometry; lod: [number
   geom.setAttribute('normal', new THREE.Float32BufferAttribute(b.nor, 3));
   geom.setAttribute('aPart', new THREE.Float32BufferAttribute(b.part, 1));
   geom.setAttribute('aLobe', new THREE.Float32BufferAttribute(b.lobeOf, 4));
+  geom.setAttribute('aCard', new THREE.Float32BufferAttribute(b.card, 3));
   geom.setIndex(b.index);
   return { geom, lod };
 }
@@ -204,6 +258,8 @@ const MESH_VERT_PARS = /* glsl */ `
 ${INSTANCE_PARS}
 attribute float aPart;
 attribute vec4 aLobe;
+attribute vec3 aCard;
+varying vec3 vCard;
 varying float vKind;
 varying vec3 vTreeCol;
 varying vec3 vUnit;
@@ -226,13 +282,13 @@ float praC = cos(iA.w), praS = sin(iA.w);
 mat3 praRot = mat3(praC, 0.0, -praS, 0.0, 1.0, 0.0, praS, 0.0, praC);
 vec3 praScale = vec3(iB.x, iB.y, iB.x);
 vec3 transformed;
-if (aPart > 0.5) {
+if (aPart > 0.5 && aPart < 1.5) {
   transformed = iA.xyz + praRot * vec3(position.x * iB.w, position.y * iB.z, position.z * iB.w);
 } else {
   vec3 local = praLobe(position, aLobe, fract(iC.w));
   #ifdef PRA_BUMPS
   // Near, each lobe is lumpy: pushed in and out along its normal by the leaf-clump noise.
-  if (aLobe.w > 0.0) {
+  if (aLobe.w > 0.0 && aPart < 0.5) {
     vec3 wp0 = iA.xyz + vec3(0.0, iB.z, 0.0) + praRot * (local * praScale);
     float bump = textureLod(tLeafNoise, wp0 * 0.9 / 8.0, 0.0).r - 0.5;
     local += normal * bump * 0.55 * aLobe.w;
@@ -248,10 +304,11 @@ if (aPart > 0.5) {
 const MESH_NORMAL = /* glsl */ `
 float praC0 = cos(iA.w), praS0 = sin(iA.w);
 mat3 praRot0 = mat3(praC0, 0.0, -praS0, 0.0, 1.0, 0.0, praS0, 0.0, praC0);
-vec3 objectNormal = aPart > 0.5 ? praRot0 * normal : normalize(praRot0 * (normal / vec3(iB.x, iB.y, iB.x)));
+vec3 objectNormal = aPart > 0.5 && aPart < 1.5 ? praRot0 * normal : normalize(praRot0 * (normal / vec3(iB.x, iB.y, iB.x)));
 vTreeCol = iC.rgb;
 vUnit = praLobe(position, aLobe, fract(iC.w));
 vPart = aPart;
+vCard = aCard;
 vSeed = fract(iC.w);
 vKind = floor(iC.w);
 vCrownN = normalize(praRot0 * (vUnit / vec3(iB.x, iB.y, iB.x)));
@@ -269,6 +326,7 @@ varying vec3 vTreeCol;
 varying vec3 vUnit;
 varying vec3 vCrownN;
 varying float vPart;
+varying vec3 vCard;
 varying float vSeed;
 ${NOISE}
 float praTreeOcc = 1.0;
@@ -277,13 +335,16 @@ float praClump = 0.5;
 float praDetail = 0.0;
 float praMid = 0.0;
 float praRoseBloom = 0.0;
+// The leaf noise is read along turned axes: a value noise thresholded along the world's axes
+// showed as square blocks up close (8884).
+const mat3 PRA_TURN = mat3(0.8440, 0.4491, -0.2931, -0.2931, 0.8440, 0.4491, 0.4491, -0.2931, 0.8440);
 `;
 
 // Albedo, leaf texture and the outline's breakup; before the normal is formed. Two scales of
 // leaf cluster: half-metre leaves that show near, and two-metre clumps that still show from 500 m.
 const FOLIAGE_COLOUR = /* glsl */ `
 {
-  vec3 wp = vPraWorld;
+  vec3 wp = vPraWorld, wq = PRA_TURN * vPraWorld;
   // Metres per pixel here: each scale fades out as it falls under two pixels.
   float mpp = length(fwidth(wp));
   praDetail = 1.0 - smoothstep(0.12, 0.45, mpp * (vKind > ${Kind.Rose - 0.5} ? 3.4 : 1.0));
@@ -292,37 +353,65 @@ const FOLIAGE_COLOUR = /* glsl */ `
   // Nothing within a few metres of the lens: the near plane would cut a crown into slivers.
   if (length(vViewPosition) < (vKind > ${Kind.Rose - 0.5} ? 3.2 : 5.0)) discard;
   #endif
-  if (vPart > 0.5) {
+  if (vPart > 1.5) {
+    // A leaf cluster: nine leaves on the card, pointed ellipses turned at random; the rest cut away.
+    float cs = vCard.z, top = -1.0, tone = 0.0;
+    for (int i = 0; i < 9; i++) {
+      float fi = float(i);
+      vec2 c0 = vec2(praTHash(vec3(cs * 91.0, fi, 1.3)), praTHash(vec3(cs * 91.0, fi, 2.7))) * 1.4 - 0.7;
+      float a = praTHash(vec3(cs * 91.0, fi, 4.1)) * 6.2832;
+      vec2 d = vCard.xy - c0;
+      vec2 e = vec2(cos(a) * d.x + sin(a) * d.y, -sin(a) * d.x + cos(a) * d.y) / vec2(0.32, 0.15);
+      // Narrower toward the tip.
+      if (e.x * e.x + e.y * e.y * (1.0 + 0.9 * max(e.x, 0.0)) < 1.0) { top = fi; tone = praTHash(vec3(cs * 91.0, fi, 7.7)); }
+    }
+    #ifdef PRA_CUT
+    if (top < 0.0) discard;
+    #endif
+    vec3 c = vTreeCol * (0.6 + 0.5 * tone);
+    // Leaves turned to the light at the top of the crown are lighter and yellower.
+    c = mix(c, c * vec3(1.2, 1.2, 0.8), smoothstep(0.7, 1.0, tone) * smoothstep(0.0, 0.8, vUnit.y));
+    diffuseColor.rgb = c;
+    praLeaf = tone;
+    float depth = smoothstep(0.25, 0.95, length(vUnit));
+    praTreeOcc = mix(0.4, 1.0, depth) * (0.55 + 0.45 * smoothstep(-1.0, 0.7, vCrownN.y));
+  } else if (vPart > 0.5) {
     diffuseColor.rgb = vec3(0.075, 0.062, 0.05) * (0.8 + 0.4 * texture(tLeafNoise, wp * 3.0 / 8.0).r);
   } else {
     // A rose's leaves are a few centimetres: the same texture, finer. The noise comes from a small
     // tiling 3D texture (four channels: a value and a tilt for the normal), each scale only where it shows.
     float ls = vKind > ${Kind.Rose - 0.5} ? 3.4 : 1.0;
     if (praDetail > 0.0) {
-      praNd = texture(tLeafNoise, (wp * 2.2 * ls + vSeed * 31.0) / 8.0);
-      float leaf2 = texture(tLeafNoise, (wp * 5.1 * ls + 7.0) / 8.0).r;
+      praNd = texture(tLeafNoise, (wq * 2.2 * ls + vSeed * 31.0) / 8.0);
+      float leaf2 = texture(tLeafNoise, (wq * 5.1 * ls + 7.0) / 8.0).r;
       praLeaf = mix(0.5, praNd.r * 0.65 + leaf2 * 0.35, praDetail);
       // Close, the leaves themselves: clusters of a decimetre or so, crisp, with dark gaps between.
       praFine = 1.0 - smoothstep(0.012, 0.05, mpp * ls);
       if (praFine > 0.0) {
-        praNf = texture(tLeafNoise, (wp * 8.5 * ls + 3.0) / 8.0);
+        praNf = texture(tLeafNoise, (wq * 8.5 * ls + 3.0) / 8.0);
         float cluster = smoothstep(0.42, 0.58, praNf.r * 0.7 + leaf2 * 0.3);
         // A rose bush is dense: its gaps are shallower than a tree's.
         praLeaf = mix(praLeaf, vKind > ${Kind.Rose - 0.5} ? 0.35 + 0.55 * cluster : cluster * 0.9 + 0.05, praFine);
       }
     }
     if (praMid > 0.0) {
-      praNm = texture(tLeafNoise, (wp * 0.6 + vSeed * 13.0) / 8.0);
-      praClump = mix(0.5, praNm.r, praMid);
+      praNm = texture(tLeafNoise, (wq * 0.6 + vSeed * 13.0) / 8.0);
+      // Close up the leaves carry the texture, and the two-metre clumps only half of it: at full
+      // strength they read as camouflage blotches (8385).
+      praClump = mix(0.5, praNm.r, praMid * (1.0 - 0.5 * praFine));
     }
     // Holes along each lobe's outline where the clusters thin out.
     #ifdef PRA_CUT
     float facing = abs(dot(normalize(vNormal), normalize(vViewPosition)));
-    float ragged = 0.55 * praLeaf * praDetail + 0.5 * max(0.0, praClump - 0.35) * praMid + 0.25 * praFine * (1.0 - praLeaf);
+    // The clumps cut deep lobes into the outline, as the photographs' crowns have (8884, 9204).
+    float ragged = 0.55 * praLeaf * praDetail + 0.7 * max(0.0, praClump - 0.32) * praMid + 0.25 * praFine * (1.0 - praLeaf);
     if (facing < ragged * (vKind > ${Kind.Rose - 0.5} ? 0.4 : 1.0)) discard;
     #endif
     vec3 c = vTreeCol;
-    c *= (0.72 + 0.56 * praLeaf) * (0.62 + 0.76 * praClump * mix(1.0, 0.55, praDetail) + 0.17 * praDetail);
+    // Near, the leaf clusters stand out more: lit clusters lighter and yellower, the gaps deeper.
+    float lc = mix(0.56, 0.8, praFine);
+    c *= (1.0 - 0.5 * lc + lc * praLeaf) * (0.62 + 0.76 * praClump * mix(1.0, 0.55, praDetail) + 0.17 * praDetail);
+    c = mix(c, c * vec3(1.12, 1.15, 0.85), praFine * smoothstep(0.6, 0.9, praLeaf));
     // Lighter, yellower young growth where a cluster catches the light at the crown's top.
     c = mix(c, c * vec3(1.18, 1.16, 0.9), smoothstep(0.55, 0.95, vUnit.y) * praClump);
     if (vKind > ${Kind.Rose - 0.5}) {
@@ -355,10 +444,10 @@ const FOLIAGE_COLOUR = /* glsl */ `
 
 // The normal: bent toward the crown's, tilted by the clumps and the leaf clusters.
 const FOLIAGE_NORMAL = /* glsl */ `
-if (vPart < 0.5) {
+if (vPart < 0.5 || vPart > 1.5) {
   vec3 cn = normalize((viewMatrix * vec4(vCrownN, 0.0)).xyz);
   normal = normalize(mix(normal, cn, 0.62));
-  vec3 tilt = (praNm.gba - 0.5) * 2.0 * praMid + (praNd.gba - 0.5) * 1.6 * praDetail + (praNf.gba - 0.5) * 2.4 * praFine;
+  vec3 tilt = (praNm.gba - 0.5) * 2.0 * praMid * (1.0 - 0.5 * praFine) + (praNd.gba - 0.5) * 1.6 * praDetail + (praNf.gba - 0.5) * 2.4 * praFine;
   normal = normalize(normal + (viewMatrix * vec4(tilt, 0.0)).xyz);
 }`;
 
@@ -605,19 +694,19 @@ export class Trees {
     // Near: per level of detail and kind, a mesh whose instances are rewritten as the camera moves.
     const meshes = [meshMaterial(this.near, true), meshMaterial(this.near, false)];
     const geoms = [Kind.Broad, Kind.Fruit, Kind.Poplar, Kind.Conifer, Kind.Rose].map((k) => crownGeometry(k));
-    for (let lod = 0; lod < 3; lod++) {
+    for (let lod = 0; lod < 4; lod++) {
       const row: Bucket[] = [];
       for (let kind = 0; kind < geoms.length; kind++) {
         const { geom: base, lod: ranges } = geoms[kind];
         const geom = new THREE.InstancedBufferGeometry();
         geom.index = base.index;
-        for (const name of ['position', 'normal', 'aPart', 'aLobe']) geom.setAttribute(name, base.getAttribute(name));
+        for (const name of ['position', 'normal', 'aPart', 'aLobe', 'aCard']) geom.setAttribute(name, base.getAttribute(name));
         const buffer = new THREE.InstancedInterleavedBuffer(new Float32Array(FLOATS * 64), FLOATS, 1).setUsage(THREE.DynamicDrawUsage);
         instanceAttributes(geom, buffer);
         geom.instanceCount = 0;
-        const own = ranges[lod], cheap = ranges[2];
+        const own = ranges[lod], cheap = ranges[ranges.length - 1];
         geom.setDrawRange(own[0], own[1]);
-        const mesh = meshes[lod < 2 ? 0 : 1];
+        const mesh = meshes[lod < 3 ? 0 : 1];
         const m = new THREE.Mesh(geom, mesh.material);
         m.customDepthMaterial = mesh.depth;
         m.frustumCulled = false;
@@ -664,6 +753,9 @@ export class Trees {
     }
   }
 
+  /** Whether the nearest trees carry their leaf clusters. */
+  leaves = true;
+
   /** Whether the far trees' sprites cast shadows (the lite preset turns them off). */
   set spriteShadows(on: boolean) {
     for (const m of this.sprites) m.castShadow = on;
@@ -675,7 +767,7 @@ export class Trees {
     this.sorted.copy(camera);
     this.near.centre.copy(camera);
     for (const row of this.buckets) for (const b of row) b.count = 0;
-    const r1 = NEAR1 * NEAR1, r0 = NEAR0 * NEAR0, rm = NEAR_MID * NEAR_MID;
+    const r1 = NEAR1 * NEAR1, rl = this.leaves ? NEAR_LEAF * NEAR_LEAF : 0, r0 = NEAR0 * NEAR0, rm = NEAR_MID * NEAR_MID;
     for (const t of this.tiles) {
       const dx = Math.max(0, t.x0 - camera.x, camera.x - (t.x0 + 1000)), dz = Math.max(0, t.z0 - camera.z, camera.z - (t.z0 + 1000));
       if (dx * dx + dz * dz > r1) continue;
@@ -686,7 +778,7 @@ export class Trees {
         if (h2 >= r1) continue;
         const ey = d[o + 1] + d[o + 6] - camera.y;
         const d2 = h2 + ey * ey;
-        const lod = d2 < r0 ? 0 : d2 < rm ? 1 : 2;
+        const lod = d2 < rl ? 0 : d2 < r0 ? 1 : d2 < rm ? 2 : 3;
         const b = this.buckets[lod][Math.floor(d[o + 11])];
         if ((b.count + 1) * FLOATS > b.buffer.array.length) grow(b);
         (b.buffer.array as Float32Array).set(d.subarray(o, o + FLOATS), b.count * FLOATS);

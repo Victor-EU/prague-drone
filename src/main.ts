@@ -2,6 +2,7 @@
 
 import * as THREE from 'three';
 import { World } from './world/world.ts';
+import { DETAIL } from './world/building-material.ts';
 import { Atmosphere } from './sky/sky.ts';
 import { rollSession } from './sky/clouds.ts';
 import { TerrainShadow } from './sky/terrain-shadow.ts';
@@ -99,6 +100,10 @@ function applyQuality(q: Quality) {
   world.buildings.detailRange = q.detail;
   if (world.landmarks) world.landmarks.detailRange = q.detail * 0.9;
   if (world.trees) world.trees.spriteShadows = q.spriteShadows;
+  // The close-up details (design.md §8.2, §8.4), off with `?detail=0` in development to measure them.
+  const detail = !(import.meta.env.DEV && params.get('detail') === '0');
+  DETAIL.value = detail ? 1 : 0;
+  if (world.trees) world.trees.leaves = detail;
 }
 applyQuality(quality);
 // The shadow maps are sized once, before the first frame allocates them.

@@ -2,7 +2,7 @@
 // the side-by-side (tools/compare.ts) and the motion and loading tests (tools/motion.ts).
 
 import { spawn } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -44,14 +44,18 @@ export async function quietServer(port = 5174): Promise<{ origin: string; close:
 
 /** Opens one page in a fresh headless Chrome with the GPU. */
 export async function openPage(size = { width: 2048, height: 1536 }): Promise<Page> {
+  const profile = mkdtempSync(join(tmpdir(), 'praha-chrome-'));
   const chrome = spawn(CHROME, [
-    '--headless=new', '--remote-debugging-port=0', `--user-data-dir=${mkdtempSync(join(tmpdir(), 'praha-chrome-'))}`,
+    '--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`,
     '--window-size=1800,1200', '--force-device-scale-factor=1', '--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist',
     '--hide-scrollbars', '--mute-audio', 'about:blank',
   ], { stdio: ['ignore', 'ignore', 'pipe'] });
   // Never leave a Chrome behind: an orphan keeps rendering the app and loads the GPU for every later
-  // measurement. Exit on an interrupt so the handler runs then too.
-  process.on('exit', () => chrome.kill('SIGKILL'));
+  // measurement. Exit on an interrupt so the handler runs then too. And remove its profile, some
+  // 120 MB of caches a run: left behind, 131 runs filled the disk.
+  // Chrome may still be writing its caches as it dies: retry, and never fail a run over it.
+  const remove = () => { try { rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* left for the OS */ } };
+  process.on('exit', () => { chrome.kill('SIGKILL'); remove(); });
   for (const sig of ['SIGINT', 'SIGTERM'] as const) process.once(sig, () => process.exit(130));
   const endpoint = await new Promise<string>((ok, fail) => {
     let err = '';
@@ -99,7 +103,10 @@ export async function openPage(size = { width: 2048, height: 1536 }): Promise<Pa
     on(fn) { listeners.push(fn); },
     async close() {
       ws.close();
+      const gone = new Promise((ok) => (chrome.exitCode !== null || chrome.signalCode !== null ? ok(null) : chrome.once('exit', ok)));
       chrome.kill('SIGKILL');
+      await Promise.race([gone, sleep(3000)]);
+      remove();
     },
   };
 }

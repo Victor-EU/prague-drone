@@ -403,11 +403,20 @@ As built in M2, at world build time (`tools/lib/roofs.ts`, `props.ts`, `plan.ts`
 - **Colour** follows rule 5, with `roof:colour` and `roof:material` snapped to the palette where tagged. Copper belongs to churches and palaces: untagged ordinary roofs draw terracotta and slate only.
 - **Weathering** is drawn in the building shader instead of an atlas: tile courses and joints filtered by distance, world-space noise patches, lighter ridges, lichen on north slopes; valleys darken through the ambient occlusion of §11.
 
+Built in M9, from 8884 and the panoramas: seven chimney stacks in ten plastered white or cream with a dark cap, the rest the house's colour; skylights, dark panes of 0.8 by 1.1 m in a pale metal frame, in about one cell in twelve of 3.4 by 2.6 m on the tiled slopes, clear of the eave and the ridge, shown to a few hundred metres; dormer fronts white, the window a casement with a cross.
+
 ### 8.2 Facades
 
 Procedural: storey count from OSM or footprint area, window grid with district-specific rhythm (Malá Strana: small windows, deep reveals, 2 to 3 storeys; Old Town: 3 to 4 storeys, arcades on the square; New Town embankments: 5 to 6 storeys, tall windows, balconies, Art Nouveau cornices), plaster colour from the district palette (§8.9), ground-floor darkening, a cornice line, shutters occasionally. No text, no signs.
 
 As built in M2: the windows are drawn in the shader from wall coordinates (along the wall, height above ground, the eave) and five styles (`src/core/buildings.ts`): baroque, Old Town, block, modern, house. Each wall gets as many window columns as fit, centred; storeys divide the height below the cornice evenly; the ground floor has shopfronts or plain windows by style; a cornice and a string course; glass dark with a little variation per window, and glossy, so it takes the sky at a glance. Party walls are blank and a shade greyer, which shows where a building rises above its neighbour. Every pattern is box-filtered to its own pixel size, so it fades to its average instead of shimmering. Balconies, shutters and the Old Town Square arcades are not built yet; the square's houses come with the square in M3.
+
+Built in M9, the details of the close-ups (8777, 8082, 8884), modelled and applied to every facade of the same kind, not only where a photograph was taken (§14). Approximate, for the beauty of the street, not a survey of it:
+
+- **Two tones.** Prague's plaster comes in two colours: the field, and the trim on the window surrounds, the corner strips (lesenes), the cornice, the string course and the plinth. The trim is either paler (white and cream on ochre and yellow, 8884) or deeper and warmer (salmon on pale pink, 8777; red-orange on ochre, 8082), or the same colour in relief; chosen per building.
+- **Windows** are white-painted casements with a cross, their glass taking the sky, set in a surround with an apron panel under the sill; on the first floor of baroque, Old Town and palace fronts a hood above, segmental or triangular by building. From a distance a window averages to a grey with its frame in it, not a black hole.
+- **Ground floors**: the 19th-century blocks have a rusticated base; the plain ground-floor windows take the same frames and surrounds. Round-arched windows and portals are not built.
+- Relief is drawn as light and shadow in the shader, a lit edge over a line of shadow under each projection, as the cornice already is. The details are drawn within about 50 m and fade out by 150 m; beyond that a window is its glass with a fifth of frame in it, and the trim stays on the lesenes, the cornice and the string course, which are big enough to show from the drone.
 
 ### 8.3 Streets and squares
 
@@ -446,6 +455,8 @@ As built in M5 (`tools/lib/trees.ts` at build time, `src/world/trees.ts` in the 
 Cost, and a lesson: the first version cost 8 ms a frame. Two things on the M2's tile-based GPU made it so. A shader that may discard (for the ragged outlines) is shaded under every crown that overlaps it, so only the two nearest levels of detail discard; and the frame's geometry matters (a quarter of a million crowns of 100 triangles made the tiler work far harder than their pixels), so meshes stop at 250 m instead of 600. Outlines drawn as polygons instead of discarded cost more in vertices than they saved. The noise became a texture instead of arithmetic. Trees now cost about 1.3 ms a frame on average.
 
 Changed in M8: the sky's light inside and under a crown never falls below 30% of what reaches its outer leaves, as leaves let light through; seen from below against the sky (9369, 9486) the crowns were black.
+
+Changed in M9, the trees close up, against 8385, 8884 and 9204, where a near crown was a smooth ball with camouflage blotches and the photographs show leaves, lit clusters and sky between them at the edge. Within 50 m a crown now carries leaf clusters: small cards scattered over its lobes where no other lobe covers them, each cut into nine pointed leaves in the shader, the ones turned up at the crown's top lighter and yellower; the lobes stay as the mass inside. Shadows and the mirror keep the simplest crowns. The leaf noise is read along turned axes (along the world's, it showed as square blocks), the two-metre clumps count half as much close up, where the leaves carry the texture, and cut deeper lobes into the outline.
 
 ### 8.5 The river
 
@@ -726,6 +737,8 @@ Added in M5: 8725 was taken in the Seminary garden, looking up at the gloriette 
 
 Added in M8: viewpoints for the last eleven hero frames, so all thirty are on the sheet. Where landmarks show they were solved as before, and four of the hero list's descriptions turned out wrong (§3.3 is corrected). 8683 is from the Alšovo embankment 75 m south of Mánes Bridge, not the Smetana embankment: St Francis's dome, the Old Town Bridge Tower and the water tower on Novotného lávka fix it exactly. 8849 looks from Legion Bridge downstream at Charles Bridge, not the other way. 8825 is at the head of the Old Town weir below Novotného lávka, looking past the lávka's willow at the Castle. 8988 is from the Smíchov bank at the water, below Jiráskův Bridge, looking at the Dancing House and the Rašín embankment. 8608 was taken a few metres from 8607, below the astronomical clock (the Kinský palace, the Stone Bell, the Marian column and Týn). 8903 stands on Charles Bridge 80 m short of the Lesser Town towers. Where nothing fixes the frame, the same kind of view: 8440 from Střelecký island at Legion Bridge's western arm, 8884 over Kampa's roofs from Charles Bridge, 9204 on the footbridge over the Čertovka, looking along it. 8082 and 8777 are street close-ups the world does not give (§4, nothing below about 8 m); their viewpoints stand in Nerudova, a street of the same kind in the same light, and like 8722 they are judged on colours and light. 8158's camera moved 5 m, from behind the end of Jiráskův Bridge's parapet, which filled the lower half of the frame, onto the roadway of the square, and turned 7° to frame the Dancing House as the photograph does; it shows no tram, as the world's track passes within 10 m of the lens there, where the photograph's tram runs along the foot of the building. A viewpoint's weather may set a coverage of 0 (no cumulus, as in thirteen of the photographs) and `light`, the day's own air where it differs from the family's (9486 and 8753 were hazier). `npm run compare -- --fit` also writes what `tools/lut-fit.ts` reads (§12.3), and `node tools/sheet.ts` makes the final sheet from it: `compare/sheet/index.html`, every pair with the three questions to click pass or fail, kept in the browser, and a button that copies the verdicts.
 
+Changed in M9: two of the guessed views moved to where their photographs' content is. 9204 looked along the Čertovka between houses; it now stands over the canal's tree-lined stretch beside Kampa park, 5 m above the water, looking up the canal toward the mill. 8440 looked north at Legion Bridge with the Castle behind it; the photograph has the arches next to Střelecký island and a wooded slope behind them, so it now looks west-north-west from the east bank 90 m south of the bridge, with the photograph's 83 mm lens, 8 m above the water.
+
 ### 12.2 Motion tests
 
 - Fly the full auto route at 1× and 2× with no hitches over 33 ms.
@@ -780,6 +793,7 @@ Each milestone ends with a build the user can fly. Effort is the implementer's; 
 | M6 | City life: trams, boats, swans, pigeons, crowds, cars | The read-back checklist "is anything moving" passes on every leg |
 | M7 | Interface, loading, fast mode, the blue-hour hold, polish, lite preset | Motion tests pass; loading under 8 s; 30 fps floor on integrated graphics |
 | M8 | LUT refinement against all hero frames, final side-by-side sheet | Every hero pair passes all three questions |
+| M9 | Details from the close-ups (§8.2, §8.1, §8.4): the architecture, roofs and greens the close-up photographs show, modelled and applied across the city | The close-ups (8082, 8777, 8884, 9204, 8440, 8722) read as the same kind of place at a glance; no pair of the M8 sheet gets worse |
 
 ### Progress
 
@@ -930,6 +944,24 @@ Known gaps after M8:
 - **The river** edge on shows the sky's colours but not yet the ripples' texture of 8683 and 8704; low over the water in 8988 the ripples repeat as a visible grid.
 - **Seen on the sheet**: a pale block at the waterline in 8809 where the photograph has a restaurant's terrace; a red box on 8725's lawn; the cumulus of 8490 and 8725, seen from low down, still read as cotton balls.
 
+**M9, built 2026-09-26.** The details of the close-ups, modelled and applied across the city (§14):
+
+- **Facades** (§8.2): two-tone plaster, the trim paler, deeper and warmer, or the field's own colour by building, on the window surrounds, the lesenes, the cornice and the string course; white casements with a cross in every window of the old fronts; sills, aprons and first-floor hoods, segmental, triangular or straight, on the baroque, Old Town and palace fronts; straight hoods and a rusticated base on the 19th-century blocks. 8777's pink front with its salmon surrounds and 8884's yellow house with red-orange lesenes now read as their photographs' kind of house.
+- **Roofs** (§8.1): white and cream chimney stacks, skylights on the tiled slopes, white dormer fronts with a cross in the window.
+- **Trees** (§8.4): leaf clusters on every crown within 50 m, the leaf noise turned off the world's axes, the near clumps halved, deeper lobes in the outline.
+- **Viewpoints** (§12.1): 9204 over the Čertovka's tree-lined stretch by Kampa park, 8440 at the arches next to Střelecký island with the wooded slope behind.
+- **The capture tool** deletes headless Chrome's profile after each run: 131 had been left behind, 16 GB, and filled the disk.
+
+Measured with the synced benchmark on the Apple M2 at 2048 × 1536, in alternating rounds with the details on and off (`bench "" "detail=0"`): 15.4 and 15.5 ms a frame on average with them, 15.6 and 15.6 without; no measurable cost on the route, where few crowns come within 50 m and the facade details are drawn only near. Another application kept the GPU about 80% busy during the runs.
+
+Known gaps after M9:
+
+- **Not built**: round-arched ground-floor windows and portals, stucco ornament and cartouches, shutters, balconies, wall lanterns (8777, 8082).
+- **Near trees**: within a few metres of the lens the leaves read large; beyond 50 m the crowns are as in M5.
+- **Legion Bridge** lacks the pale granite arch rings of 8440; the Čertovka's banks are the river's pale embankment walls, where 9204's are dark and overgrown.
+- **8722's roses** are still beyond the world: the camera cannot come nearer than 3 m.
+- **The verdicts** on the sheet are still the user's, for M8 and M9 alike.
+
 ---
 
 ## 14. Decisions already made
@@ -971,6 +1003,10 @@ Decided on 2026-09-25 by the user, after M1:
 Decided on 2026-09-26 by the user, the cover:
 
 - **The cover is the take-off.** The app opens on the route's stop 1, waiting and drifting, under a three-line caption, and the flight continues from it without a cut (§10.2). The alternative, the Petřín evening panorama as the cover with a fade to black into the dawn take-off, was shown as the more beautiful frame and declined for the continuity. Stop 1 was reframed lower and flatter for the cover, and stop 2 moved on with it (§9.2).
+
+Decided on 2026-09-26 by the user, after the M8 sheet:
+
+- **The photographs' details are modelled and applied across the city.** Where the close-ups show what the world lacks (the facades of Nerudova and Malá Strana, the roofs of Kampa, the trees over the Čertovka, the roses), the details are built in code and used wherever the same kind of building or place stands, approximately: the app shows the beauty of the city, not an exact copy. They are modelled, not cut from the photographs as textures: the photographs stay reference, never content, and the app still ships none. This brings the street-level look of the facades into scope (§4's line at about 8 m moves down for facades); interiors, signs and cars stay out.
 
 ---
 
