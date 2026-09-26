@@ -94,7 +94,7 @@ float praAbove = -1.0;
       // At night a quarter of the windows are lit, and half the shopfronts: warm, some whiter.
       float hl = praHash(vec2(floor(cc) * 1.7 + seed * 5.3, floor(r) * 2.3 + seed));
       float lit = step(hl, r < 1.0 ? 0.4 : 0.18);
-      vec3 warm = mix(vec3(1.0, 0.52, 0.22), vec3(1.0, 0.76, 0.5), praHash(vec2(hl * 7.0, seed)));
+      vec3 warm = mix(vec3(1.0, 0.46, 0.17), vec3(1.0, 0.7, 0.42), praHash(vec2(hl * 7.0, seed)));
       praEmit += warm * win * lit * 0.07;
     }
     diffuseColor.rgb = c;
@@ -218,7 +218,8 @@ float praAbove = -1.0;
   if (mod(floor(vInfo.z / 2.0 + 0.01), 2.0) > 0.5) {
     float facing = 1.0 - 0.6 * abs(normalize(vPraN).y);
     float up = praAbove >= 0.0 ? praAbove : 20.0;
-    praEmit += diffuseColor.rgb * vec3(1.0, 0.5, 0.17) * 0.1 * facing * (0.45 + 0.55 * exp(-up / 22.0));
+    // Sodium and halogen through a daylight white balance: deep orange (9542).
+    praEmit += diffuseColor.rgb * vec3(1.0, 0.42, 0.12) * 0.13 * facing * (0.45 + 0.55 * exp(-up / 22.0));
   }
   if (kind == ${Surface.Glass} && style != ${Glass.Curtain}) praEmit += vec3(1.0, 0.7, 0.4) * 0.02 * praGlass;
   if (kind == ${Surface.Glass} && style == ${Glass.Curtain}) praEmit += vec3(1.0, 0.86, 0.66) * 0.07 * praGlass;

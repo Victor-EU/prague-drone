@@ -11,11 +11,11 @@ function compareSink(): Plugin {
     configureServer(server) {
       server.middlewares.use('/__compare', (req, res) => {
         const name = new URL(req.url ?? '', 'http://x').searchParams.get('name') ?? '';
-        if (req.method !== 'POST' || !/^[\w.-]+\.png$/.test(name)) { res.statusCode = 400; res.end(); return; }
+        if (req.method !== 'POST' || !/^(fit\/)?[\w.-]+\.(png|json)$/.test(name)) { res.statusCode = 400; res.end(); return; }
         const chunks: Buffer[] = [];
         req.on('data', (c: Buffer) => chunks.push(c));
         req.on('end', () => {
-          mkdirSync('compare', { recursive: true });
+          mkdirSync(join('compare', name.startsWith('fit/') ? 'fit' : ''), { recursive: true });
           writeFileSync(join('compare', name), Buffer.concat(chunks));
           res.end('ok');
         });

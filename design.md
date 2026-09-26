@@ -107,22 +107,22 @@ Hero frames are the frames the renders are tested against (see §12). Confirmed 
 | 8753 | Petřín / Strahov looking north to the Castle | Castle massing and ridge |
 | 9204 | Kampa, the Čertovka channel, soft light | Overcast grade in daylight, the mill channel |
 | 8372, 8385 | Vyšehrad ramparts looking north | Red roofs, cumulus, cloud shadows, Castle on the horizon |
-| 8683, 8704 | Smetana embankment looking west (8683); Mánes Bridge looking south (8704) | Charles Bridge, towers, evening grade |
-| 8849 | On Charles Bridge looking upstream | Pedal boats, river colour, Střelecký island |
+| 8683, 8704 | Alšovo embankment south of Mánes Bridge, looking upstream (8683; first listed as the Smetana embankment looking west, M8); Mánes Bridge looking south (8704) | Charles Bridge, towers, evening grade |
+| 8849 | Legion Bridge looking downstream to Charles Bridge (first listed as from Charles Bridge upstream; the solved viewpoint, M8, is the other way round) | Pedal boats, river colour |
 | 8607, 8608 | Old Town Square, south-west corner, below the astronomical clock | Týn, the square |
 | 8903 | Charles Bridge west end, overcast | Lesser Town towers |
 | 8942 | Malostranské náměstí | St Nicholas, tram |
 | 8158 | Jiráskovo náměstí, the corner of the Rašín embankment | Dancing House, tram |
 | 8809 | Charles Bridge near the Old Town end, looking north-west (first listed as the Rudolfinum embankment; the solved viewpoint, §12.1, put it on the bridge) | Castle and Malá Strana waterfront across the water |
 | 8082, 8777, 8884 | Malá Strana streets and roofs | Plaster colours, dormers, chimneys |
-| 8825 | Kampa looking at the weir | Petřín as backdrop, foam |
+| 8825 | The head of the Old Town weir below Novotného lávka, looking at the Castle (first listed as Kampa looking at the weir, M8) | The weir, the Castle across the water |
 | 8490 | Legion Bridge looking north | Castle, island, cumulus |
 | 8440 | Střelecký island looking at Legion Bridge | Tram, bridge, hill |
 | 8725 | Petřín meadow and orchard | Season, greens |
 | 8722 | Petřín, roses on a wall | Season, red |
 | 9369 | Letná lawn looking up | The sky |
 | 9486 | Letná looking south | All bridges, late light |
-| 8694, 8988 | Charles Bridge at golden hour, Jiráskův bridge at pastel dusk | Evening grades |
+| 8694, 8988 | Charles Bridge at golden hour; Jiráskův Bridge and the Rašín embankment from the Smíchov bank, overcast | Evening grades |
 | 9547, 9542 | Charles Bridge at blue hour, the Old Town waterfront at night | Blue hour, city lights |
 
 ---
@@ -187,6 +187,13 @@ As built in M1: the tonemap is a per-channel filmic curve with separate toe and 
 
 Changed in M5, the greens: the green window of the LUT reaches down to the yellow-greens of sunlit grass and young leaves (centred at OKLCh hue 130 instead of 135, 42° wide instead of 34), turns them 17° toward teal instead of 12°, and takes more of their chroma (0.64 instead of 0.72). Measured in 8725, the photograph's sunlit meadow is at hue 141 and chroma 0.043; the render's had been at 119 and 0.066, a yellow olive, and is now at 130 to 135 and 0.048. Reds, ochres and the sky are outside the window and unchanged.
 
+Changed in M8, the grade refined against all thirty hero frames by `tools/lut-fit.ts` (§12.3), v2 of the LUT. Measured, the renders' roofs were half again as saturated as the photographs' and their ochres yellower; their neutral highlights were yellower; their shadows bluer. The fit moved: reds' chroma from 1.06 to 0.94 and their hue 4° from orange toward red instead of 2°; yellows' turn toward green from 6° to 2°; greens 19° toward teal instead of 17° and a little darker; blues' chroma from 0.80 to 0.76, 7° toward cyan instead of 9° and a little lighter; purples 33° toward blue instead of 30°; the shadows' tint neutral instead of blue (b 0.001 instead of −0.014) and a little more green; the highlights' tint a trace redder (a 0.004 instead of 0.003); less lift of the blacks (0.008 instead of 0.012). The overall chroma, the yellows' and greens' chroma and the S stay as authored. Over the thirty pairs the fit's loss went from 47.3 to 45.0, and the mean ΔE between the dominant clusters from 4.66 to 4.35. The parameters are in `assets/lut/classic-neg.params.json`, with each pair's statistics; the hand authoring stays in `tools/lib/grade.ts`, which both tools share.
+
+Also changed in M8, after the grade:
+
+- **The family's contrast** is an S about the middle that keeps black and white where they are. It was a straight stretch about the middle, clipped, which at 1.1 sent everything below 5% to pure black: trees against the sky (9369) were black where the photograph's are deep green.
+- **The meter** may brighten a frame by up to 0.8 of a stop from the sky's base, not 0.6. Views away from a low sun, where the photographs let the pale sky go nearly white (8683, 9486), came out a stop dark.
+
 Provide a runtime toggle (key G, developer builds only) that bypasses steps 4 and 5 so the grade can be judged. Comparison against photographs happens only in the offline tool `tools/compare.ts` (§12.1); the app itself never loads a photograph.
 
 ### 5.3 The four light families
@@ -203,6 +210,13 @@ The time-of-day slider blends between these anchors. Each anchor has a sun eleva
 As built in M2: the late-afternoon key at 18:30 is tuned against the Petřín panoramas: clear air (a third of the M1 haze), the sky's light on shaded surfaces at 55%, contrast 1.12, so shadowed walls go dark and sunlit plaster reaches near white as in 7924. With real roofs the midday keys needed the same in milder form (sky light 72%, contrast 1.1, a fifth of a stop brighter), the morning keys milder still; the golden-hour and blue-hour keys are as in M1. Each family also has a horizon knob: three wavelengths make the low sky away from a low sun greenish (yellowed sunlight over the air's blue), where the photographs show pale blue, so that band takes a pale version of the hue 15° above it. Aerosol scatters with an Ångström exponent of 1.3.
 
 Weather variant, independent of time: **overcast pastel** (8952 to 9026, 8881 to 8918, 9203 to 9204). Flat light, no shadows, colours go pastel, sky is a bright grey with texture. Rolled with 20% probability at session start, or forced from the UI.
+
+Changed in M8, measured against the hero frames of each family (§12.3):
+
+- **Golden hour at the river** (the 20:12 key; 8683, 8694, 8704): the sky away from the sun was two stops too dark against the city and the highlights yellow. Now clearer and brighter air toward the horizon (aerosol 2.8), the sky's dark band lifted further, a neutral white balance, and the sun at two thirds of its physical strength with the exposure 0.7 of a stop up, so the pale sky outshines the warm stone as in the photographs.
+- **Blue hour**: once the sun is 5° down, the whole low band of the sky takes the pale blue of the sky above it, the afterglow's side too; three wavelengths had left it pink toward the north-west, where 9547 is blue. The white balance is a little cooler (0.78, 0.97, 1.24) and the exposure half a stop higher; the floodlights and windows are deeper orange to stay sodium through it (§8.7).
+- **Overcast**: the photographs' deck is a faintly blue grey and the shadows under it still go dark (8903, 8884, 8942, 8988); it had been cream and flat. A cooler balance (0.92, 1.0, 1.12), contrast 1.12, no lift, no exposure bias.
+- **A viewpoint's own air**: 9486 and 8753 were taken on hazier days than the family's; a viewpoint may give its day's aerosol and haze (§12.1).
 
 ### 5.4 Sun position
 
@@ -431,6 +445,8 @@ As built in M5 (`tools/lib/trees.ts` at build time, `src/world/trees.ts` in the 
 
 Cost, and a lesson: the first version cost 8 ms a frame. Two things on the M2's tile-based GPU made it so. A shader that may discard (for the ragged outlines) is shaded under every crown that overlaps it, so only the two nearest levels of detail discard; and the frame's geometry matters (a quarter of a million crowns of 100 triangles made the tiler work far harder than their pixels), so meshes stop at 250 m instead of 600. Outlines drawn as polygons instead of discarded cost more in vertices than they saved. The noise became a texture instead of arithmetic. Trees now cost about 1.3 ms a frame on average.
 
+Changed in M8: the sky's light inside and under a crown never falls below 30% of what reaches its outer leaves, as leaves let light through; seen from below against the sky (9369, 9486) the crowns were black.
+
 ### 8.5 The river
 
 - Surface mesh follows the OSM water polygon; flow direction south to north at 0.5 m/s in the shader; ripple normal map tiled at two scales.
@@ -448,11 +464,15 @@ As built in M4 (`src/world/water.ts`, `src/render/reflection.ts`, `tools/lib/riv
 - **Embankments**: stone walls wherever the bank stands a metre or more above the water, between Vyšehrad and Letná and on the islands, 21 km of them. Each has a face 2 m out from OSM's edge (the 5 m terrain grid's slope stays behind it), a parapet, and a paved walk 3.5 m deep that covers the slope. The stone's grime band sits at the waterline. There is no beach.
 - The islands' trees came with M5 (§8.4); the pedal boat pontoon on Střelecký island and the boats with M6 (§8.8).
 
+Changed in M8, against 8683, 8694, 8704, 8849 and 8490: the water read grey seen edge on and navy seen from above, where the photographs show sky blue and grey-blue. The ripples now tilt the facets both ways: the sky is taken at the reflected ray, 7° and 17° above it, and halfway down toward the horizon, weighted by the angle, since edge on the eye sees mostly the facets turned toward it (the blue above the pale horizon) and from above those turned away (the paler sky toward the horizon). And the reflection is scaled to 55%, not three quarters: seen edge on, rippled water in the photographs reflects about a tenth of the sky's brightness, not half.
+
+Also in M8, the moored boats that OSM maps as buildings (houseboats, ships, anything floating), restaurants and botels along the quays, are low flat-topped cabins with a row of windows. By the rules for houses they had tiled roofs and stood in the river as town houses (8683).
+
 ### 8.6 Sky, sun, clouds
 
 - Physically based sky from precomputed scattering tables (transmittance, multiple scattering and a sky view table, after Hillaire 2020), tuned per light family (aerosol amount, sky saturation), then graded. Not Hosek-Wilkie or Preetham as first written: both are fitted for the sun above the horizon only and have no twilight, and the flight ends in the blue hour, whose deep blue comes from ozone absorption with the sun below the horizon. The same tables give the sunlight's colour through the air and the haze colour, so sun, sky and haze agree at every hour.
 - Sun disc with a soft glare, no lens flare streaks.
-- **Clouds**: cumulus as raymarched impostors or layered billboards with proper lighting (lit tops, shaded bases), base 1200 to 1800 m above the river, drifting with a wind of 3 to 8 m/s from the west-south-west. Coverage rolled per session between 5% and 65%. Clouds cast shadows on the city through the shadow map or a projected cloud-shadow texture; the shadow movement is essential. As built: a raymarched layer at half resolution over a 2D coverage map and two tiling 3D noises; shadows come from the same coverage map projected along the sun, so they move with the clouds. The rolled coverage is the afternoon peak: cumulus build through the late morning and thin out after 18:00, so the dawn of §5.3 is clear; by day the coverage shown never leaves 5 to 65%. Changed in M7: after sunset the last of them dissolve, and the sky of the blue hour is clear from 21:45, as it is in 9541, 9542 and 9547. Kept at 5% into the dusk, they hung over the blue-hour hold as dark blobs against the afterglow.
+- **Clouds**: cumulus as raymarched impostors or layered billboards with proper lighting (lit tops, shaded bases), base 1200 to 1800 m above the river, drifting with a wind of 3 to 8 m/s from the west-south-west. Coverage rolled per session between 5% and 65%. Clouds cast shadows on the city through the shadow map or a projected cloud-shadow texture; the shadow movement is essential. As built: a raymarched layer at half resolution over a 2D coverage map and two tiling 3D noises; shadows come from the same coverage map projected along the sun, so they move with the clouds. The rolled coverage is the afternoon peak: cumulus build through the late morning and thin out after 18:00, so the dawn of §5.3 is clear; by day the coverage shown never leaves 5 to 65%. Changed in M7: after sunset the last of them dissolve, and the sky of the blue hour is clear from 21:45, as it is in 9541, 9542 and 9547. Kept at 5% into the dusk, they hung over the blue-hour hold as dark blobs against the afterglow. Changed in M8, the cumulus' shape, against 9369, 8372 and 8490, where they were cotton balls: a flat, sharp base; a layer 400 to 1,100 m deep instead of 500 to 1,600, and the shape noise wider than tall, as fair-weather cumulus spread more than they tower; billows of 100 to 200 m eroded out of the tops at full strength (the noise had carved them only at its middle values), so the tops are cauliflower; and the folds between the billows darker when the sun is behind the eye, as the thin outer layer has had little light scattered into it. A viewpoint may ask for no cumulus at all, as thirteen of the photographs have none; the flight's sessions still roll 5 to 65%.
 - A thin cirrus layer at 50% probability.
 - Overcast preset: a continuous stratus layer with visible texture, sun disc hidden, ambient light from a bright grey dome.
 - Haze: aerial perspective that desaturates and cools toward the horizon; strength varies by family (strongest in the warm morning, weakest at midday). As built: height fog whose colour is the sky's own colour just above the horizon in that direction (from the sky view table), so distant roofs fade into the sky they stand under, warm toward the sun and cool away from it.
@@ -469,6 +489,8 @@ As built in M4 (`src/world/lights.ts` and the building material):
 - **Exposure and colour**: after dark the photographs are exposed for the lights, so the meter's base puts the horizon at 7% instead of 24%, and the sky goes deep. The blue-hour white balance is cooled to the photographs' daylight setting, which turns twilight blue. The light-pollution glow of M1 is a third as strong.
 - **Fix**: shadow maps are rendered once even at night. The materials sample them, and a view opened after dark drew no city at all.
 - Not yet: the penguins on Kampa (9531).
+
+Changed in M8: the floodlights and lit windows are a deeper orange and the floodlights a third brighter. The blue hour's cooler white balance (§5.3) had turned them cream, where 9542 shows sodium through a daylight balance.
 
 ### 8.8 City life
 
@@ -664,18 +686,18 @@ design.md            this document
 Photos/              the reference set (422) and _excluded/
 mockup/              index.html (3D sketch), plan.html (set + route), set/ thumbnails
 data/                hero.json (starred frames), viewpoints.json, route.json, palette.json, landmarks.json
-tools/               fetch-data.ts, build-world.ts, check-route.ts, find-landmarks.ts, make-lut.ts, lut-fit.ts, compare.ts, motion.ts;
-                     lib/ roofs.ts, skeleton.ts, props.ts, plan.ts (+ plan-worker.ts), districts.ts, river.ts, trees.ts, walls.ts, life.ts,
+tools/               fetch-data.ts, build-world.ts, check-route.ts, find-landmarks.ts, make-lut.ts, lut-fit.ts, compare.ts, sheet.ts, motion.ts;
+                     lib/ grade.ts (the Classic Negative parameters, shared by make-lut and lut-fit), png.ts, roofs.ts, skeleton.ts, props.ts, plan.ts (+ plan-worker.ts), districts.ts, river.ts, trees.ts, walls.ts, life.ts,
                      chrome.ts (headless Chrome for compare and motion);
                      landmarks/ kit.ts, index.ts, parts.ts, bridges.ts, and one module per landmark or group (§7.1)
 cache/               raw downloads from fetch-data.ts (generated, git-ignored)
-assets/              lut/classic-neg.cube
+assets/              lut/classic-neg.cube, lut/classic-neg.params.json (the refined parameters and each pair's statistics)
 src/                 app: core/ (incl. buildings.ts, trees.ts and life.ts, shared with the build), world/ (terrain, tiles, buildings
                      and their material, landmarks, streets, water, lights, trees, blooms), sky/ (atmosphere, families, clouds, shadows),
                      render/ (post, the river's mirror, the quality presets), life/ (trams, the river's boats and swans, people, pigeons, cars), drone/, ui/,
                      dev/ (side-by-side, development only)
 public/world/        built tiles (generated, git-ignored)
-compare/             side-by-side sheets from tools/compare.ts (generated, git-ignored)
+compare/             side-by-side sheets from tools/compare.ts, fit/ for lut-fit.ts, sheet/ the final sheet (generated, git-ignored)
 ```
 
 ---
@@ -702,6 +724,8 @@ Added in M6: a viewpoint may give `life`, the seconds of city life it shows (60 
 
 Added in M5: 8725 was taken in the Seminary garden, looking up at the gloriette of the Schönborn garden (the US Embassy's flag on it gives it away); its size in the frame puts the camera 147 m from it, and the street lamp at the right edge, 10 m away and 35° from it, with OSM's paths fixes the rest. 8722 is a close-up of single roses at 64 mm, which the world cannot give: its viewpoint is a rose bed near the Petřín tower, low and 5 m from the bushes, with the sky behind and the sun behind the camera, and it is judged on its colours and light. 9369's camera moved 200 m across the Letná lawn: at its M1 place it now stands in a grove.
 
+Added in M8: viewpoints for the last eleven hero frames, so all thirty are on the sheet. Where landmarks show they were solved as before, and four of the hero list's descriptions turned out wrong (§3.3 is corrected). 8683 is from the Alšovo embankment 75 m south of Mánes Bridge, not the Smetana embankment: St Francis's dome, the Old Town Bridge Tower and the water tower on Novotného lávka fix it exactly. 8849 looks from Legion Bridge downstream at Charles Bridge, not the other way. 8825 is at the head of the Old Town weir below Novotného lávka, looking past the lávka's willow at the Castle. 8988 is from the Smíchov bank at the water, below Jiráskův Bridge, looking at the Dancing House and the Rašín embankment. 8608 was taken a few metres from 8607, below the astronomical clock (the Kinský palace, the Stone Bell, the Marian column and Týn). 8903 stands on Charles Bridge 80 m short of the Lesser Town towers. Where nothing fixes the frame, the same kind of view: 8440 from Střelecký island at Legion Bridge's western arm, 8884 over Kampa's roofs from Charles Bridge, 9204 on the footbridge over the Čertovka, looking along it. 8082 and 8777 are street close-ups the world does not give (§4, nothing below about 8 m); their viewpoints stand in Nerudova, a street of the same kind in the same light, and like 8722 they are judged on colours and light. 8158's camera moved 5 m, from behind the end of Jiráskův Bridge's parapet, which filled the lower half of the frame, onto the roadway of the square, and turned 7° to frame the Dancing House as the photograph does; it shows no tram, as the world's track passes within 10 m of the lens there, where the photograph's tram runs along the foot of the building. A viewpoint's weather may set a coverage of 0 (no cumulus, as in thirteen of the photographs) and `light`, the day's own air where it differs from the family's (9486 and 8753 were hazier). `npm run compare -- --fit` also writes what `tools/lut-fit.ts` reads (§12.3), and `node tools/sheet.ts` makes the final sheet from it: `compare/sheet/index.html`, every pair with the three questions to click pass or fail, kept in the browser, and a button that copies the verdicts.
+
 ### 12.2 Motion tests
 
 - Fly the full auto route at 1× and 2× with no hitches over 33 ms.
@@ -715,9 +739,17 @@ As built in M7, `tools/motion.ts` runs each of them in headless Chrome on the GP
 - **manual** flies five minutes at Shift speed, simulated at 60 Hz without drawing: a key held at random for one to four seconds (turns, climbs, descents three times as often as climbs, strafes, tilts), turned back toward Charles Bridge past 1.6 km. It passes if the drone never comes within the camera's near plane (3 m) of the clearance grid (ground, water, roofs, decks, landmarks) and never leaves the world.
 - **clouds** reseeds twenty times and reads each session's peak coverage, the coverage drawn at 14:00 and how far the shadows moved in a second.
 - **clock** slides the clock from 04:30 to 23:00 over 3,600 frames (a third of a minute each) at a stop and reads the frame's brightness in rows across the sky and the city; a pop is a step unlike the steps either side of it.
- Colour statistics (assistive, not a gate)
+### 12.3 Colour statistics (assistive, not a gate)
 
 For each hero pair, compute Lab histograms of the photograph and the render, excluding sky masks, and report ΔE between the dominant clusters. Used by `tools/lut-fit.ts` to refine the LUT and reported in the compare sheet. Not a gate, because composition differences move the numbers; the human judgement in §12.1 is the gate.
+
+As built in M8 (`tools/lut-fit.ts`):
+
+- **What it reads.** `npm run compare -- --fit` renders each viewpoint three more times: as the image enters the LUT (after the exposure, white balance, saturation and filmic curve), the sky's mask from the depth buffer, and the photograph drawn at the render's size, with what the final pass does after the LUT (the family's contrast and lift, the vignette). Nothing of it reaches the app.
+- **The photograph's sky** is grown from the top of the frame through smooth, bright pixels of sky colour, taking cumulus across their edges, and only where the render has sky within a tenth of the frame's width, so smooth blue water is not taken for it (8849). The skies are compared only where render and photograph show about as much of it.
+- **What it compares**, city and sky apart, in OKLab: lightness at five percentiles, the share, chroma and hue of each of twelve hue sectors, and the tint of the near-greys in shadow and in highlight. OKLab instead of CIELAB throughout, as the grade itself is built in it; the ΔE reported between the five dominant k-means clusters of each pair is the OKLab distance × 100, near CIELAB's scale.
+- **The fit.** Eighteen of the grade's parameters are moved by coordinate descent to make the graded render's statistics like the photograph's, over all thirty frames; the render's pixels are gathered by colour first, so a candidate grade costs a few milliseconds. A frame's mismatch counts in full up to a point and only logarithmically beyond, so a frame whose composition differs (the roses of 8722, the Čertovka's trees in 9204) cannot pull the grade alone. The parameters are held toward the hand authoring, and two are bounded where the statistics and the eye disagreed: highlights may warm toward yellow but hardly toward pink (the overcast decks went rose), and the blues may be lightened only a little (the evening frames ask for it, the deep afternoon skies of 8607 and 9369 for the opposite). Night frames count half: the lamps and the exposure make them, not the grade.
+- **What it cannot fix** it measures all the same, and M8 fixed those in the world first (§5.3, §8.4 to §8.7): the evening sky two stops dark, the grey river, the pink blue-hour band, the cream overcast, the black trees against the sky.
 
 ### 12.4 Read-back checklist for the drone view
 
@@ -878,6 +910,25 @@ Known gaps after M7:
 - **Most of this session the GPU was shared.** Another application kept the M2's GPU 85 to 100% busy (full measured 22 ms a frame then), so the lite breakdown above is differences between alternating runs; the benchmark and the route at 1800 × 1100 were taken once it was quiet. M6's 21 ms was the same load, not M6.
 - **Frame pacing** at the busiest stops is still uneven by 3 to 4 ms, the mirror being drawn every other frame (M4).
 - **Loading and the hitches** were measured in headless Chrome; Safari is untested.
+
+**M8, built 2026-09-26.** The grade refined against all thirty hero frames, and the final sheet:
+
+- **Every hero frame on the sheet.** Viewpoints for the last eleven (§12.1), four of the hero list's descriptions corrected (§3.3), and 8158 moved off the end of Jiráskův Bridge's parapet, which had filled the lower half of its frame.
+- **The tools** (§12.3): `npm run compare -- --fit` also saves, for each frame, the image as it enters the LUT, the render's sky and the photograph at the render's size; `tools/lut-fit.ts` measures each pair in OKLab, city and sky apart, and fits the grade's parameters to all of them (`--report` measures only); `tools/sheet.ts` lays the pairs out in `compare/sheet/index.html` with the three questions to click. The grade's authoring moved to `tools/lib/grade.ts`, shared by `make-lut.ts` and the fit, and `make-lut.ts` writes the fitted parameters when they exist (`--hand` for the authored ones).
+- **The world first.** What a LUT cannot fix, the statistics showed all the same, and it was fixed where it arises: the cumulus' shape (flat bases, cauliflower tops, the folds darker against the light, §8.6); a viewpoint's own air and no cumulus where the photograph has none; the 20:00 key, whose sky was two stops dark (§5.3); the blue hour's horizon, blue instead of pink after sunset, and its cooler balance; the overcast, faintly blue instead of cream, with its shadows dark; the river, grey-blue instead of navy from above and grey edge on (§8.5); the crowns against the sky, which were black (§8.4); the family contrast, an S instead of a clipped stretch; the meter's reach up to 0.8 of a stop; the floodlights a deeper orange (§8.7); houseboats and botels as low cabins instead of town houses standing in the river.
+- **The grade, v2 of the LUT** (§5.2): reds less saturated and less orange, the ochres less yellow, the shadows neutral instead of blue, less lift of the blacks.
+
+Measured by `tools/lut-fit.ts` over the thirty pairs (a mismatch of the statistics, lower is better; not a gate, §12.3): 47.3 with M8's world and the authored grade, 45.0 with the fitted grade; the mean ΔE between the pairs' dominant colour clusters 4.66 with the authored grade and 4.35 with the fitted one. The frame's cost was not measured again: besides constants, the shaders gained one sky lookup on the water and a term in the cumulus' light.
+
+Known gaps after M8:
+
+- **The verdicts are the user's.** M8 is accepted when every pair on the sheet passes the three questions; the sheet is made, the judging is not done.
+- **Skies.** The deep blue afternoon skies of 8607 and 8608 render paler than the photographs'; the milky skies of 9486 and 8753 render darker and bluer, even with those days' own haze. The grade cannot fix both, as they sit at the same hues.
+- **Roofs** are still a little more orange than the photographs', and 8372's middle tones a little brighter.
+- **8158** is exposed about a stop brighter in the photograph than the other overcast frames, with the sky blown white; the render keeps the family's exposure. It shows no tram: the world's track passes within 10 m of the lens there, where the photograph's tram runs along the foot of the Dancing House.
+- **The close-ups** (8082, 8777, 8722, 9204) and the views that nothing fixes (8440, 8884) are the same kind of view, judged on colours and light; their statistics differ most, from composition.
+- **The river** edge on shows the sky's colours but not yet the ripples' texture of 8683 and 8704; low over the water in 8988 the ripples repeat as a visible grid.
+- **Seen on the sheet**: a pale block at the waterline in 8809 where the photograph has a restaurant's terrace; a red box on 8725's lawn; the cumulus of 8490 and 8725, seen from low down, still read as cotton balls.
 
 ---
 

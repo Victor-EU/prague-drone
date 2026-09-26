@@ -115,7 +115,9 @@ vec3 aSky(vec3 dir) {
     float lu = dot(up, vec3(0.2126, 0.7152, 0.0722));
     vec3 hue = mix(vec3(1.0), up / max(lu, 1e-9), 0.45);
     vec2 dh = normalize(dir.xz + vec2(1e-6, 0.0)), sh = normalize(uSunDir.xz + vec2(1e-6, 0.0));
-    float away = smoothstep(0.3, -0.4, dot(dh, sh));
+    // Once the sun is well down the whole horizon, the afterglow's side too, is the photographs'
+    // pale blue (9547): three wavelengths leave twilight's low band pink.
+    float away = max(smoothstep(0.3, -0.4, dot(dh, sh)), smoothstep(-0.02, -0.09, uSunDir.y));
     float w = aSkyHorizon * away * (1.0 - smoothstep(0.0, 0.26, max(dir.y, 0.0)));
     s = mix(s, l * hue / max(dot(hue, vec3(0.2126, 0.7152, 0.0722)), 1e-6), w);
   }

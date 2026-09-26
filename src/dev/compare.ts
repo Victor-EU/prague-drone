@@ -59,3 +59,28 @@ export async function sheet(view: HTMLCanvasElement, render: () => void, id: str
   g.fillText('50% blend', W / 2 + 12, H + H / 30 + 6);
   return save(`${id}${suffix}.png`, out);
 }
+
+/**
+ * For tools/lut-fit.ts: the render, the image as it enters the LUT, the sky's mask and the
+ * photograph at the render's size, saved to compare/fit/, with what the grade does after the LUT.
+ */
+export async function fitCapture(view: HTMLCanvasElement, render: () => void, setFit: (mode: number) => void, id: string, meta: Record<string, unknown>) {
+  const photo = (await loadImage(`/Photos/DSCF${id}.JPG`)) ?? (await loadImage(`/mockup/set/${id}.jpg`));
+  if (!photo) throw new Error(`no photograph for ${id}`);
+  const shots: [string, HTMLCanvasElement][] = [['render', grab(view, render)]];
+  for (const [mode, name] of [[1, 'pre'], [2, 'sky']] as const) {
+    setFit(mode);
+    shots.push([name, grab(view, render)]);
+  }
+  setFit(0);
+  const p = document.createElement('canvas');
+  p.width = view.width;
+  p.height = view.height;
+  const g = p.getContext('2d')!;
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(photo, 0, 0, p.width, p.height);
+  shots.push(['photo', p]);
+  for (const [name, c] of shots) await save(`fit/${id}-${name}.png`, c);
+  await fetch(`/__compare?name=${encodeURIComponent(`fit/${id}.json`)}`, { method: 'POST', body: JSON.stringify(meta) });
+  return `compare/fit/${id}-*.png`;
+}

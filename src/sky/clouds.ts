@@ -93,19 +93,23 @@ float density(vec3 p, bool detail, out float hRel) {
   float h = (p.y - uLayer.x) / (top - uLayer.x);
   hRel = h;
   if (h <= 0.0 || h >= 1.0) return 0.0;
-  // Flat base, widest a quarter of the way up, rounding toward the top.
-  float grad = smoothstep(0.0, 0.14, h) * (1.0 - smoothstep(0.3, 1.0, h));
+  // A flat, sharp base (the condensation level), widest a third of the way up, rounding toward
+  // the top.
+  float grad = smoothstep(0.0, 0.05, h) * (1.0 - smoothstep(0.35, 1.0, h));
   vec3 q = p;
   q.xz -= uWind;
   q += uNoiseOffset;
-  vec4 n = texture(tShape, q / 1300.0);
+  // Wider than tall: fair-weather cumulus spread more than they tower.
+  vec4 n = texture(tShape, q / vec3(1700.0, 900.0, 1700.0));
   float fbm = n.g * 0.625 + n.b * 0.25 + n.a * 0.125;
   float base = remap(n.r, fbm - 1.0, 1.0, 0.0, 1.0);
   base = remap(base * grad, 1.0 - cov, 1.0, 0.0, 1.0) * cov;
   if (base <= 0.0) return 0.0;
   if (detail) {
-    vec3 d = texture(tDetail, q / 320.0).rgb;
-    float dfbm = d.r * 0.625 + d.g * 0.25 + d.b * 0.125;
+    // Billows of 100 to 200 m: the cauliflower of the photographs' cumulus (8372, 9369).
+    vec3 d = texture(tDetail, q / 160.0).rgb;
+    // Stretched to the full range: the fbm of cells sits near its middle, and so carved little.
+    float dfbm = smoothstep(0.3, 0.8, d.r * 0.625 + d.g * 0.25 + d.b * 0.125);
     float m = mix(dfbm, 1.0 - dfbm, clamp(h * 4.0, 0.0, 1.0));
     base = remap(base, m * uLayer.w, 1.0, 0.0, 1.0);
   }
@@ -161,8 +165,11 @@ void main() {
       // the cloud after many bounces: nearly isotropic and slow to fade. Without that second term
       // a cumulus renders grey; with it, sunlit tops are white and bases a soft grey.
       float single = mix(hg(cosT, 0.8), hg(cosT, -0.25), 0.3) * exp(-od);
-      float diffuse = 0.24 * exp(-od * 0.1);
-      vec3 sun = uSunColour * (single + diffuse);
+      float diffuse = 0.24 * exp(-od * 0.2);
+      // Powder: the thin outer layer has had little light scattered into it yet, so seen with the
+      // sun behind, the folds between the billows are darker than their sunlit fronts.
+      float powder = mix(1.0, 1.0 - exp(-dens * 5.0), 0.7 * (0.5 - 0.5 * cosT));
+      vec3 sun = uSunColour * (single + diffuse) * powder;
       vec3 amb = mix(ground * 1.1, hemi * 1.25, clamp(h * 1.3, 0.0, 1.0));
       vec3 S = (sun + amb) * ext;
       float sT = exp(-ext * dt);
@@ -349,8 +356,8 @@ export class Clouds {
     this.cirrusOffset.x += Math.sin(a) * s.wind * 2.5 * dt;
     this.cirrusOffset.y += -Math.cos(a) * s.wind * 2.5 * dt;
     // Never under 5% by day, so there are always shadows moving; none once the evening's share has
-    // gone (the blue hour's sky is clear, design.md §5.3).
-    const floor = 0.05 * THREE.MathUtils.smoothstep(share, 0, 0.25);
+    // gone (the blue hour's sky is clear, design.md §5.3), nor in a viewpoint's clear sky (0).
+    const floor = Math.min(0.05, s.coverage) * THREE.MathUtils.smoothstep(share, 0, 0.25);
     this.coverage = THREE.MathUtils.clamp(Math.min(s.coverage, this.maxCoverage) * share, floor, 0.65) * (1 - overcast);
     // The threshold that leaves `coverage` of the map above it; the soft edge takes a little more.
     const n = this.sorted.length;
@@ -358,9 +365,10 @@ export class Clouds {
     // Local coverage reaches 1 part of the way from the threshold to the densest cell, so the
     // cores are solid whatever the coverage.
     const width = Math.max(0.06, (this.sorted[n - 1] - thr) * 0.5);
-    const thickness = 500 + 1100 * Math.min(1, s.coverage / 0.5);
+    // Fair-weather cumulus: a few hundred metres deep, near a kilometre on the fuller days.
+    const thickness = 400 + 700 * Math.min(1, s.coverage / 0.5);
     U.uCloud.value.set(thr, 0.82 * (1 - overcast) * THREE.MathUtils.smoothstep(this.coverage, 0, 0.01), s.base + thickness * 0.3, width);
-    (this.pass.uniforms.uLayer.value as THREE.Vector4).set(s.base, s.base + thickness, 0.065, 0.42);
+    (this.pass.uniforms.uLayer.value as THREE.Vector4).set(s.base, s.base + thickness, 0.065, 0.62);
     // Slow boil: the noise rises through the cloud.
     (this.pass.uniforms.uNoiseOffset.value as THREE.Vector3).y -= 0.8 * dt;
   }

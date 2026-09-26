@@ -179,7 +179,8 @@ void main() {
   float meterLog = s.x / max(s.y, 1e-6);
   // The sky near the horizon sets the base, as a camera exposed for the highlights would: there
   // it lands near a third of full scale. The meter, weighted toward the highlights, may move a
-  // stop either way from there.
+  // stop darker or 0.8 of one brighter from there: views away from a low sun, where the
+  // photographs let the pale sky go near white (8683, 9486), needed more than the 0.6 of M1.
   // Under overcast the deck is the sky, and the photographs let it go nearly white (8942, 8158).
   // After dark the photographs are exposed for the city's lights: the sky goes deep (9542, 9547).
   float target = mix(mix(0.24, 0.5, uOvercast), 0.07, uCityLights);
@@ -188,7 +189,7 @@ void main() {
   hor = mix(hor, uOvercastSky * 0.85, uOvercast);
   // A camera stops brightening somewhere: 11.5 stops below the midday sky (9547 is 10 below).
   float evSky = log2(target / max(dot(hor, ${LUMA}), 0.003));
-  float ev = evSky + clamp(evFrame - evSky, -1.0, 0.6) + uBias;
+  float ev = evSky + clamp(evFrame - evSky, -1.0, 0.8) + uBias;
   float prev = texture2D(tPrev, vec2(0.5)).r;
   float next = uReset > 0.5 ? ev : prev + (ev - prev) * (1.0 - exp(-uDt / 0.7));
   gl_FragColor = vec4(next, ev, evFrame, evSky);
@@ -209,6 +210,8 @@ uniform float uGrain;
 uniform float uCA;
 uniform float uTime;
 uniform vec2 uResolution;
+uniform float uFit;
+uniform sampler2D tDepth;
 varying vec2 vUv;
 
 // Uchimura's filmic curve (Gran Turismo): toe, linear middle, shoulder, each its own knob.
@@ -243,10 +246,15 @@ void main() {
   }
   c = vec3(curve(c.r), curve(c.g), curve(c.b));
   vec3 s = srgb(clamp(c, 0.0, 1.0));
+  // Development only, for tools/lut-fit.ts: the image as it enters the LUT, or the sky's mask.
+  if (uFit > 0.5) { gl_FragColor = uFit > 1.5 ? vec4(vec3(step(texture2D(tDepth, vUv).r, 0.0)), 1.0) : vec4(s, 1.0); return; }
   float n = hash(gl_FragCoord.xy + fract(uTime * 7.31) * 517.0) + hash(gl_FragCoord.yx * 1.37 + fract(uTime * 3.17) * 911.0) - 1.0;
   if (uGrade > 0.5) {
     s = texture(tLut, s * ((uLutSize - 1.0) / uLutSize) + 0.5 / uLutSize).rgb;
-    s = clamp((s - 0.5) * uContrast + 0.5, 0.0, 1.0);
+    // The family's contrast as an S about the middle that keeps black and white where they are: a
+    // straight stretch clipped the darkest few percent to black, and shadows never go to pure
+    // black in daylight (design.md §5.1).
+    s = clamp(s + 4.0 * (uContrast - 1.0) * (s - 0.5) * s * (1.0 - s), 0.0, 1.0);
     s = uLift + s * (1.0 - uLift);
     float aspect = uResolution.x / uResolution.y;
     float r = length(cc * vec2(aspect, 1.0)) / length(vec2(aspect, 1.0) * 0.5);
@@ -284,6 +292,8 @@ export interface FrameOptions {
 export class Pipeline {
   /** Grade, vignette and grain on; key G in development turns them off (design.md §5.2). */
   grade = true;
+  /** Development only, for tools/lut-fit.ts: 1 draws the image as it enters the LUT, 2 the sky's mask. */
+  fit = 0;
   readonly renderer: THREE.WebGLRenderer;
   private hdr: THREE.WebGLRenderTarget;
   private hist: THREE.WebGLRenderTarget[];
@@ -379,6 +389,8 @@ export class Pipeline {
       uCA: { value: 0 },
       uTime: { value: 0 },
       uResolution: { value: new THREE.Vector2() },
+      uFit: { value: 0 },
+      tDepth: { value: this.hdr.depthTexture },
     });
   }
 
@@ -494,6 +506,7 @@ export class Pipeline {
     fu.tColor.value = histOut.texture;
     fu.tExposure.value = expoOut.texture;
     fu.uGrade.value = this.grade ? 1 : 0;
+    fu.uFit.value = this.fit;
     (fu.uWB.value as THREE.Vector3).set(...o.light.wb);
     fu.uSat.value = o.light.sat;
     fu.uContrast.value = o.light.contrast;

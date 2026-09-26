@@ -71,9 +71,15 @@ vec3 praWaterReflect(vec3 wp, vec3 N) {
   R.y = max(R.y, 0.015);
   R = normalize(R);
   // Ripples too small to see tilt the facets up and down: the water shows the sky over a band of
-  // heights above the reflected ray, deeper blue than the horizon's alone.
-  vec3 R1 = normalize(vec3(R.x, R.y + 0.08, R.z)), R2 = normalize(vec3(R.x, R.y + 0.2, R.z));
-  vec3 sky = aSky(R) * 0.45 + aSky(R1) * 0.33 + aSky(R2) * 0.22;
+  // heights about the reflected ray. Seen low (8704, 8683) the facets tilted up show the blue
+  // above the pale horizon; seen from above (8849, 8490) those tilted away show the paler sky
+  // toward the horizon, and the river reads grey-blue, not navy.
+  vec3 R1 = normalize(vec3(R.x, R.y + 0.12, R.z)), R2 = normalize(vec3(R.x, R.y + 0.3, R.z));
+  vec3 R0 = normalize(vec3(R.x, max(0.015, R.y * 0.45), R.z));
+  // Edge on, the eye sees mostly the facets turned toward it, which reflect higher.
+  float g = smoothstep(0.03, 0.4, R.y);
+  vec4 wt = mix(vec4(0.2, 0.35, 0.35, 0.1), vec4(0.35, 0.15, 0.1, 0.4), g);
+  vec3 sky = aSky(R) * wt.x + aSky(R1) * wt.y + aSky(R2) * wt.z + aSky(R0) * wt.w;
   // Cumulus along the reflected ray, from the coverage map at the layer's middle.
   if (uCloud.x < 1.0) {
     vec3 c = wp + R * ((uCloud.z - wp.y) / R.y);
@@ -213,7 +219,7 @@ export class Water {
         .replace('#include <color_fragment>', `#include <color_fragment>\n${MAIN}`)
         .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.85, praFoamK);')
         .replace('#include <normal_fragment_maps>', 'normal = normalize((viewMatrix * vec4(praRipN, 0.0)).xyz);')
-        .replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>\n// Seen almost edge on, ripples reflect less than a flat surface would.\nradiance = praWaterReflect(vPraWorld, praRipN) * (1.0 - praFoamK) * 0.74;');
+        .replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>\n// Seen almost edge on, ripples reflect less than a flat surface would.\nradiance = praWaterReflect(vPraWorld, praRipN) * (1.0 - praFoamK) * 0.55;');
     }, '-water');
 
     // Triangles sorted into kilometre tiles, each its own mesh for culling, sharing the vertex arrays.

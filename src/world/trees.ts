@@ -363,9 +363,10 @@ if (vPart < 0.5) {
 }`;
 
 // A crown is mostly its own shadow: the sky's light reaches the outer leaves only, and the sheen
-// of the leaves is weak and broken.
+// of the leaves is weak and broken. Leaves pass some light through, so the inside and underside
+// of a crown seen against the sky are deep green, not black (9369, 9486).
 const OCCLUSION = /* glsl */ `#include <lights_fragment_end>
-reflectedLight.indirectDiffuse *= praTreeOcc * 0.7;
+reflectedLight.indirectDiffuse *= (0.3 + 0.7 * praTreeOcc) * 0.7;
 reflectedLight.indirectSpecular *= praTreeOcc * praTreeOcc * 0.35;
 reflectedLight.directDiffuse *= mix(1.0, praTreeOcc, 0.5);
 reflectedLight.directSpecular *= 0.4;`;

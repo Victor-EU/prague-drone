@@ -67,6 +67,8 @@ const FLAT_TYPES = new Set(['industrial', 'warehouse', 'retail', 'commercial', '
   'train_station', 'parking', 'manufacture', 'storage_tank', 'silo', 'garages', 'garage', 'carport', 'kiosk', 'stadium', 'grandstand',
   'sports_hall', 'sports_centre', 'service', 'transformer_tower', 'container', 'toilets', 'shelter', 'bunker']);
 const CHURCH = new Set(['church', 'cathedral', 'chapel', 'basilica', 'monastery']);
+/** Boats moored for good (restaurants, botels), which OSM maps as buildings. */
+const BOATS = new Set(['houseboat', 'ship']);
 /** Where a copper roof is at home when untagged (design.md §8.1, rule 5: churches, palaces). */
 const GRAND = new Set(['church', 'cathedral', 'chapel', 'basilica', 'monastery', 'palace', 'civic', 'government', 'public', 'museum', 'university', 'college']);
 const DIRECTIONS: Record<string, number> = { N: 0, NNE: 22.5, NE: 45, ENE: 67.5, E: 90, ESE: 112.5, SE: 135, SSE: 157.5, S: 180, SSW: 202.5, SW: 225, WSW: 247.5, W: 270, WNW: 292.5, NW: 315, NNW: 337.5 };
@@ -150,6 +152,17 @@ export function planBuilding(b: PlanInput): PlanOutput {
     if (out.roof && out.roof.faces.length === 0) out.roof = null;
     out.top = out.eave + (out.roof ? out.roof.height : 0);
     out.failed = lshape !== 'flat' && !out.roof;
+    return out;
+  }
+
+  // A boat stands low on the water, flat-topped, a row of windows along a pale cabin; by the
+  // rules for houses it had a tiled roof and stood in the river as a town house (8683).
+  if (BOATS.has(type) || t.floating === 'yes') {
+    out.style = Style.Modern;
+    out.eave = b.gref + 5.5;
+    out.top = out.eave;
+    out.wall = '#bdbcb6';
+    out.roofC = '#45494b';
     return out;
   }
 

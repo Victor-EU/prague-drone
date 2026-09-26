@@ -27,7 +27,7 @@ const BASE = `${import.meta.env.BASE_URL}world`;
 // against the photograph (design.md §12.1). The shipped app never loads either.
 interface Viewpoint {
   id: string; x: number; north: number; agl: number; y?: number; heading: number; tilt: number; focal35: number; aspect: number; clock: string;
-  weather: { seed: number; coverage: number; overcast: boolean; cirrus: number; cloudAt?: [number, number] };
+  weather: { seed: number; coverage: number; overcast: boolean; cirrus: number; cloudAt?: [number, number]; light?: Record<string, number> };
   /** Seconds of city life to show (trams, boats, people), so a frame always shows the same scene. */
   life?: number;
 }
@@ -48,6 +48,8 @@ if (view) {
   if (!params.has('coverage')) params.set('coverage', String(view.weather.coverage));
   if (!params.has('overcast')) params.set('overcast', view.weather.overcast ? '1' : '0');
   if (!params.has('cirrus')) params.set('cirrus', String(view.weather.cirrus));
+  // The day's own air where it differs from the light family's (9486 and 8753 were hazier).
+  for (const [k, v] of Object.entries(view.weather.light ?? {})) if (!params.has(`light.${k}`)) params.set(`light.${k}`, String(v));
   document.body.classList.add('viewpoint');
 }
 
@@ -68,7 +70,8 @@ let firstFrameAt = 0;
 
 // The weather of this session: clouds rolled per session (design.md §8.6), overcast on one in five.
 const session = rollSession(params.has('seed') ? Number(params.get('seed')) : undefined);
-if (params.has('coverage')) session.coverage = THREE.MathUtils.clamp(Number(params.get('coverage')), 0.05, 0.65);
+// A viewpoint may ask for no cumulus at all (0), where its photograph has none (8704, 9547).
+if (params.has('coverage')) session.coverage = THREE.MathUtils.clamp(Number(params.get('coverage')), 0, 0.65);
 if (params.has('cirrus')) session.cirrus = Number(params.get('cirrus'));
 const overcast = params.has('overcast') ? params.get('overcast') !== '0' : Math.random() < 0.2;
 
@@ -215,6 +218,12 @@ if (import.meta.env.DEV) {
       frame: (n = 1) => { for (let k = 0; k < n; k++) once(); },
       capture: (name = 'capture.png') => dev.capture(canvas, once, name),
       sheet: (width = 0, suffix = '') => view && dev.sheet(canvas, once, view.id, width, suffix),
+      /** For tools/lut-fit.ts: what the grade does after the LUT at this viewpoint, and the images it needs. */
+      fitCapture: () => view && dev.fitCapture(canvas, once, (m) => { pipeline.fit = m; }, view.id, {
+        id: view.id, clock: view.clock, overcast, contrast: atmosphere.light.contrast, lift: atmosphere.light.lift,
+        vignette: THREE.MathUtils.lerp(0.26, 0.12, THREE.MathUtils.clamp((view.focal35 - WIDE) / (LONG - WIDE), 0, 1)),
+        grade: pipeline.grade,
+      }),
     },
   });
 }
