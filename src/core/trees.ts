@@ -14,6 +14,10 @@ export const Kind = {
   Rose: 4,
   /** Bushes overgrowing the Čertovka's banks, their crowns hanging over the water (9204). */
   Shrub: 5,
+  /** Weeping willows on the islands and the green banks, their fronds hanging to the water (8490). */
+  Willow: 6,
+  /** Chestnuts and planes: broad crowns in tiers of flat lobes, where the lime's is a dome. */
+  Chestnut: 7,
 } as const;
 export type TreeKind = (typeof Kind)[keyof typeof Kind];
 
@@ -21,9 +25,12 @@ export type TreeKind = (typeof Kind)[keyof typeof Kind];
  * trees.bin, per 1 km world tile (row by row, `start` indexing into the per-tree arrays):
  *   xz    uint16 pairs, position in the tile in 1/65.535 m
  *   hr    uint8 pairs, height to the crown's top in 0.2 m, crown radius in 0.1 m
- *   ks    uint8 pairs, kind, and a seed for its shape and tint
+ *   ks    uint8 pairs: the kind in the low four bits with the crown's exposure in the high four
+ *         (0 closed in by neighbours as tall as it, 15 standing free), and a seed for its shape and tint
  * The tree stands on the terrain (terrain.bin) at its position.
  */
 export const TREE_XZ = 65.535;
 export const TREE_H = 0.2;
 export const TREE_R = 0.1;
+export const KIND_MASK = 15;
+export const EXPOSURE_SHIFT = 4;

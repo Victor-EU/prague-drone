@@ -479,6 +479,7 @@ Height field from §6.4. Vegetation instanced by land-use polygon and district:
 |---|---|---|
 | Broad round crowns (lime, chestnut, plane) | Petřín slopes, Letná, Kampa, embankments, Wallenstein | Olive to mid green, 12 to 20 m |
 | Tall poplars | Střelecký island, Slovanský island | Narrow, 25 m, darker |
+| Willows | The islands' and the green banks' water's edge | Fountains of hanging fronds to the water, lighter and greyer |
 | Orchard trees | Petřín orchards, the Seminary garden | Small, 4 to 6 m, on grass, in loose rows |
 | Rose beds and flower beds | Petřín rose garden | Reds, pinks, white; a colour field, not modelled flowers |
 | Meadow grass | Petřín, Letná, Vyšehrad ramparts | Slightly yellowed early-summer green with paths worn through |
@@ -519,6 +520,18 @@ Changed in M11, the roses close up (8722):
 - **Stems and leaves**: each bloom stands on a stem of 50 cm with three rose leaves, a leaflet at the end of each and two pairs along it.
 - **The bush opens near the lens**: within 4.5 m its mass of lobes thins to its lit clusters, and within 1.8 m to nothing, leaving the leaf clusters, the stems, leaves and blooms, and the sky between them.
 - **The coral** is a little oranger (linear 0.7, 0.07, 0.004) and without the blue that turned it pink; the grade no longer takes it toward crimson (§5.2). On 8722 the petals' median is now (206, 51, 13), the photograph's (206, 49, 12).
+
+Changed in M16, the trees as species, against 8725, 8809, 8753, 8385, 8884 and 8490, where the crowns were balls of one shape and one shading, lit like billiard balls (bright on the sun's side, teal-black on the other), and the near foliage a confetti of nine fat leaves to a card:
+
+- **Kinds.** Two more: the willow, on the islands and the green banks within eight metres of water (a fountain of hanging fronds that reach the water, lighter and greyer than the rest), and the chestnut, four in ten of the broad trees taller than eight metres (a crown in tiers, wide and flat-lobed, where the lime's is a dome). Each kind has its own crown: the lime a dome of lobes with a shoulder to one side, the chestnut three layers of flattened lobes, the fruit tree a low, wide, open crown of a few flat lobes on a short leaning trunk that forks into crooked limbs, its trunk whitewashed to a metre as the Petřín orchards' are (8725), the poplar a flame of stacked lobes narrowing to a point, the willow a dome over a curtain of tall hanging lobes, the conifer its tiers. No crown is symmetric: a lean, a bigger side, and lobes of unequal size, all by the tree's seed.
+- **Limbs.** Within 230 m the broad kinds, the fruit trees and the willows have limbs: the trunk forks and three to six tapered branches, each with a kink, run to the main lobes' centres, so a crown's gaps and underside show wood, and the orchard trees stand on their gnarled frames. The limbs move with the lobes they lead to.
+- **Exposure.** The world build measures, for every crown, how far its neighbours in the canopy rise toward its own height round it, and stores it with the kind (`trees.bin`: kind in the low four bits, exposure in the high four). A tree closed in by a wood is lit only on its top; a tree standing free is lit down its sides. Far away, when the sprites thin out, the closed-in trees go first, so a wood keeps its outline.
+- **Lit as a canopy.** The sun lights the tops of the leaf clumps and not their hollows (the direct light is gated by the same clump noise that textures the crown), and reaches less far down a crown's side than a sphere's shading would; the shadow side is lifted by the sky and by the light the leaves let through toward the camera when the sun is behind them, so a crown seen against the sun is deep green, not black (8490), and one seen with the sun is not a bright ball (8809, 8753). The foliage tones are darker and less saturated, the lit clumps yellower; the far sprites take the same terms.
+- **Silhouettes.** A far sprite is no longer a wobbled disc: its outline is the union of a few lobes placed by the seed (and per kind: the poplar's flame, the conifer's spire, the willow's fountain with a ragged streaky hem, the chestnut's tiers), and its shading follows those lobes, so a wood at 500 m is a mass of lit tops and dark hollows, not a row of balls.
+- **The near foliage.** A leaf card now carries a sprig of sixteen small overlapping leaves (a lime's, eight to twelve centimetres) rather than nine large ones, each leaf lit or shaded on its own, so the edge of a near crown reads as leaf clusters against the sky (8385, 8884), not confetti; within about 40 m gaps between the leaf clusters open the crown's skin onto the lobes behind, darker for their depth, and the two-metre clumps no longer tilt the normal there (they read as camouflage). Willow foliage is read with its noise stretched down into streaks, and its hem cut ragged.
+- **The islands' ground.** OSM has no polygon for Střelecký, Slovanský or Dětský island, so their ground was the default pavement: bare ground on an island (water on three sides within 150 m, and within 40 m of it) is park now, lawn under the trees (8490).
+
+The trees' cost is measured with the rest of the milestone (§13).
 
 ### 8.5 The river
 
@@ -1187,6 +1200,28 @@ Known gaps after M15:
 - **8809**: the Lesser Town waterfront's houses are the generic fronts, and a flat-topped blank block still stands at the bank north of the bridge, as it has since M13: it is none of the tile's buildings, the walls or the landmark pack's items within 40 m of it (a flat OSM part there, once three storeys tall and blank, now takes its outline's height, which did not remove it), so its source is still to be found.
 - **Strahov's ranges** and the Castle's palace wings are the palace rules' plain fronts; the Lobkowicz, Schwarzenberg and Salm palaces are generic.
 - **The verdicts** on the sheet after M15 are the user's.
+
+---
+
+**M16, built 2026-09-27.** The trees as species (§8.4):
+
+- **Kinds and crowns** (`src/world/trees.ts`, `tools/build-world.ts`): willows on the islands and the green banks (1,164), chestnuts among the limes (83,700); each kind its own crown of lobes, asymmetric by the seed: the lime's dome with a shoulder, the chestnut's tiers of flat lobes, the fruit tree's low wide crown on a short leaning whitewashed trunk, the poplar's flame, the willow's dome over its curtain of hanging lobes, the conifer's tiers (8725, 8490).
+- **Limbs** within 230 m: the trunk forks and tapered, kinked branches run to the main lobes, moving with them when the seed moves the lobes; the orchard trees stand on their frames (8725).
+- **Exposure** measured by the world build for every crown and packed with its kind (`trees.bin`); the far sprites thin out the closed-in trees first.
+- **Lit as a canopy**: the sun gated by the leaf clumps, reaching less far down a side and less onto a closed-in tree's sides; the sky's light lifted; light through the leaves toward a camera facing the sun (8490); the far sprites shaded by the lobes of their new outlines (a poplar's flame, a conifer's spire, a willow's fountain with its streaky hem, the chestnut's tiers), so a wood at 500 m is lit tops and dark hollows, not balls (8809, 8753, 8385).
+- **The near foliage**: sprigs of sixteen leaves to a card, each leaf lit on its own; gaps between the leaf clusters open the crown's skin onto the lobes behind; the two-metre clumps no longer tilt the normal near, where they read as camouflage (8385, 8884).
+- **The islands' ground**: OSM leaves Střelecký, Slovanský and Dětský islands unmapped; their bare ground is now park, lawn under the trees, not pavement (8490).
+- **A mirror artefact fixed**: the crown normal, passed normalized and interpolated across a coarse lobe's face, went non-finite where the face lies near the crown's centre, and the water's column smear spread it into black boxes under the island's willows; it is passed unnormalized now.
+
+Measured with the synced benchmark at 2048 × 1536 in two rounds each, the milestone's code and world against M15's (commit dfde75e, built and served from a worktree of its own, since the change is in the shaders and the geometry, which `?world=` cannot switch; the rounds therefore ran one after the other, not alternating): M16 22.5 and 21.8 ms a frame against M15's 20.4 and 21.6: the trees as species cost about a millisecond on the route (the first stop, over the Petřín orchards, 28 to 33 ms against 27 to 28), inside the 25 ms budget (§11). The world is 33.2 MB (`trees.bin` 3.47 MB, up 0.2 MB for the exposure bits; `landuse.bin` unchanged in size); the production build 797 kB of JavaScript, up 12 kB for the crowns, the limbs and the sprites' outlines; `dist/` 38 MB.
+
+Known gaps after M16:
+
+- **Within 20 m** a crown is still a lumpy skin under its sprigs: the leaf clusters and their gaps show, but the two-metre lumps shade softly where the photographs' near foliage is leaves at every scale (8385's near tree, the willow's fronds). The drone never comes so close on the route.
+- **8809, 8753**: the trees on the Castle's slopes and terraces stand as single crowns on lawns where the photographs show continuous dark masses along the walls; the canopy model finds the crowns, but their spread is the survey's, and the gardens' lawns between them are real.
+- **8490**: the island's trees are lit as the photograph's now but still a shade darker; the bank is grass without the photograph's undergrowth to the water.
+- **The willow's fronds** are lobes with streaked foliage, not hanging strands; from the river they read as willows, from under them as curtains.
+- **The verdicts** on the sheet after M16 are the user's.
 
 ## 14. Decisions already made
 

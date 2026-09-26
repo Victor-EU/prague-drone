@@ -9,7 +9,8 @@ import { join } from 'node:path';
 import { WORLD } from '../../src/core/geo.ts';
 import { Kind } from '../../src/core/trees.ts';
 
-export interface TreeRec { x: number; z: number; h: number; r: number; kind: number; seed: number }
+/** `exp`: how free the crown stands, 0 (closed in by neighbours as tall as it) to 15 (alone). */
+export interface TreeRec { x: number; z: number; h: number; r: number; kind: number; seed: number; exp: number }
 
 /** The canopy over the world at 1 m, row by row from the north-west corner, in 0.2 m steps. */
 export interface Canopy { data: Uint8Array; nx: number; nz: number; x0: number; z0: number }
@@ -129,7 +130,16 @@ export function findTrees(c: Canopy, o: FindOptions): TreeRec[] {
           else if (r < 1.7 || lo < 0.5) continue;
           const seed = hash(x, z);
           r = Math.min(r, 14);
-          out.push({ x, z, h, r, kind: o.kind(x, z, h, r, seed), seed });
+          // Exposure: how far the canopy round the crown rises toward its own height, on a ring
+          // just outside its spread. A tree in a wood shows only its top; a lone tree its sides.
+          let crowd = 0;
+          const ring = r + 1.5;
+          for (let a = 0; a < 16; a++) {
+            const q = Math.round(j + Math.sin(a * 0.3927) * ring) * W + Math.round(i + Math.cos(a * 0.3927) * ring);
+            crowd += Math.min(1, s[q] / h);
+          }
+          const exp = Math.round(15 * Math.max(0, 1 - crowd / 16));
+          out.push({ x, z, h, r, kind: o.kind(x, z, h, r, seed), seed, exp });
         }
     }
   return out;

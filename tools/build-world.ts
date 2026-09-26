@@ -43,7 +43,7 @@ import { Flow, flowLines, weirs, inWeirBand, weirStrip, embankments, bankDistanc
 import { loadCanopy, findTrees, tally, hash as treeHash } from './lib/trees.ts';
 import { gardenWalls } from './lib/walls.ts';
 import { buildLife } from './lib/life.ts';
-import { Kind as TreeKind, TREE_XZ, TREE_H, TREE_R } from '../src/core/trees.ts';
+import { Kind as TreeKind, TREE_XZ, TREE_H, TREE_R, EXPOSURE_SHIFT } from '../src/core/trees.ts';
 
 const OUT = join('public', 'world');
 /** --partial: build with whatever layers are cached, for testing while a fetch is still running. */
@@ -52,6 +52,8 @@ const PARTIAL = process.argv.includes('--partial');
 const ONLY_LANDMARKS = process.argv.includes('--landmarks');
 /** --life: rebuild life.bin and streets.bin only, skipping the roofs, for working on city life. */
 const ONLY_LIFE = process.argv.includes('--life');
+/** --trees: rebuild trees.bin and landuse.bin only, skipping the roofs, for working on the trees. */
+const ONLY_TREES = process.argv.includes('--trees');
 function layer(name: string) {
   if (PARTIAL && !layerExists(name)) {
     console.warn(`  (partial build: no ${name} yet)`);
@@ -784,7 +786,7 @@ async function planAll(inputs: PlanInput[]): Promise<PlanOutput[]> {
       river: nearRiver(b.cx, b.cz),
     };
   });
-  const outputs = ONLY_LIFE ? inputs.map(() => ({ base: 0, top: 0, eave: 0, gnd: 0, style: 0, flags: 0, wall: '', roofC: '', roof: null, props: [], failed: false }) as unknown as PlanOutput) : await planAll(inputs);
+  const outputs = ONLY_LIFE || ONLY_TREES ? inputs.map(() => ({ base: 0, top: 0, eave: 0, gnd: 0, style: 0, flags: 0, wall: '', roofC: '', roof: null, props: [], failed: false }) as unknown as PlanOutput) : await planAll(inputs);
   let failed = 0, pitched = 0, dormers = 0, chimneys = 0, roofBoxes = 0, gables = 0, turrets = 0, bays = 0, figures = 0;
   kept.forEach((b, k) => {
     const o = outputs[k];
@@ -1276,17 +1278,42 @@ let treesPack: Uint8Array | null = null;
       }
       return n >= 3;
     };
+    // The river's islands are parks (Střelecký, Slovanský, Dětský), which OSM leaves unmapped as
+    // ground: what is bare there is lawn under the trees, not pavement (8490).
+    {
+      let n = 0;
+      for (let j = 0; j < LNZ; j++)
+        for (let i = 0; i < LNX; i++) {
+          const k = j * LNX + i;
+          if ((landuse.data[k] & CANOPY_MASK) !== Ground.Urban) continue;
+          const x = landuse.x0 + i * LU, z = landuse.z0 + j * LU;
+          let near = false;
+          for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (let d = 10; d <= 40 && !near; d += 10) if (wet(x + dx * d, z + dz * d)) near = true;
+          if (near && island(x, z)) { landuse.data[k] = Ground.Park; n++; }
+        }
+      log(`islands: ${n} ground cells made park`);
+    }
     const GREEN = new Set<number>([Ground.Park, Ground.Garden, Ground.Grass, Ground.Meadow, Ground.Orchard, Ground.Scrub, Ground.Vineyard, Ground.Pitch, Ground.Flowerbed]);
+    // The water's edge: water within 8 m in some direction (a bank, not a quay: the class there is green).
+    const waterside = (x: number, z: number) => {
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [0.71, 0.71], [-0.71, 0.71], [0.71, -0.71], [-0.71, -0.71]])
+        for (let d = 3; d <= 9; d += 3) if (wet(x + dx * d, z + dz * d)) return true;
+      return false;
+    };
     const kind = (x: number, z: number, h: number, r: number, seed: number) => {
       const cls = landuse.nearest(x, z);
-      const a = seed / 256, b = ((seed * 97) % 256) / 256;
+      const a = seed / 256, b = ((seed * 97) % 256) / 256, c = ((seed * 53) % 256) / 256;
       if (isNeedle(x, z)) return TreeKind.Conifer;
       if (cls === Ground.Orchard && h < 12) return TreeKind.Fruit;
-      if (h < 7.5 && r < 4.5 && GREEN.has(cls)) return TreeKind.Fruit;
+      if (h < 7.5 && r < 4.5 && GREEN.has(cls) && !island(x, z)) return TreeKind.Fruit;
+      // Willows on the islands and the green banks, at the water's edge (8490).
+      if (h >= 5 && h <= 17 && (GREEN.has(cls) || island(x, z)) && c < 0.7 && waterside(x, z)) return TreeKind.Willow;
       if (h > 14 && island(x, z) && a < 0.25) return TreeKind.Poplar;
       if (h > 18 && r < 0.2 * h) return a < 0.3 ? TreeKind.Poplar : a < 0.6 ? TreeKind.Conifer : TreeKind.Broad;
       const conifers = cls === Ground.Cemetery ? 0.3 : cls === Ground.Wood ? 0.1 : cls === Ground.Park || cls === Ground.Garden ? 0.07 : 0.03;
       if (h > 6 && b < conifers) return TreeKind.Conifer;
+      // Chestnuts and planes, in tiers, among the limes' domes.
+      if (h > 8 && c < 0.4) return TreeKind.Chestnut;
       return TreeKind.Broad;
     };
     const LOW = new Set<number>([Ground.Park, Ground.Garden, Ground.Grass, Ground.Meadow, Ground.Orchard, Ground.Cemetery]);
@@ -1316,7 +1343,7 @@ let treesPack: Uint8Array | null = null;
           for (let a = 0; a < 2; a++) {
             const x0 = landuse.x0 + i * LU + (a - 0.5) * LU / 2, z0 = landuse.z0 + j * LU + (b - 0.5) * LU / 2;
             const seed = treeHash(x0, z0), u = seed / 256, v = ((seed * 131) % 256) / 256;
-            trees.push({ x: x0 + (u - 0.5) * 0.4, z: z0 + (v - 0.5) * 0.4, h: 0.8 + 0.5 * v, r: 0.42 + 0.18 * u, kind: TreeKind.Rose, seed });
+            trees.push({ x: x0 + (u - 0.5) * 0.4, z: z0 + (v - 0.5) * 0.4, h: 0.8 + 0.5 * v, r: 0.42 + 0.18 * u, kind: TreeKind.Rose, seed, exp: 12 });
           }
       }
     // The Čertovka's banks, overgrown (9204): bushes along both sides wherever no building stands
@@ -1343,7 +1370,7 @@ let treesPack: Uint8Array | null = null;
               const x = px + nx * side * (d + 0.4 + 0.8 * u), z = pz + nz * side * (d + 0.4 + 0.8 * u);
               const claimed = (qx: number, qz: number) => claims.some((p) => pointInPolygon(qx, qz, p));
               if (near.some((b) => pointInPolygon(x, z, b.poly)) || [[0, 0], [2, 0], [-2, 0], [0, 2], [0, -2]].some(([ox, oz]) => claimed(x + ox, z + oz))) continue;
-              trees.push({ x, z, h: 2.6 + 2.2 * u, r: 1.6 + 1.0 * v, kind: TreeKind.Shrub, seed });
+              trees.push({ x, z, h: 2.6 + 2.2 * u, r: 1.6 + 1.0 * v, kind: TreeKind.Shrub, seed, exp: 8 });
               shrubs++;
             }
         }
@@ -1367,7 +1394,7 @@ let treesPack: Uint8Array | null = null;
         xz[n * 2 + 1] = Math.min(65535, Math.round((t.z - z0) * TREE_XZ));
         hr[n * 2] = Math.min(255, Math.round(t.h / TREE_H));
         hr[n * 2 + 1] = Math.min(255, Math.round(t.r / TREE_R));
-        ks[n * 2] = t.kind;
+        ks[n * 2] = t.kind | (t.exp << EXPOSURE_SHIFT);
         ks[n * 2 + 1] = t.seed;
         n++;
       }
@@ -1391,6 +1418,12 @@ let treesPack: Uint8Array | null = null;
     }
     log(`trees: ${n} crowns (${tally(trees)})`);
   }
+}
+if (ONLY_TREES) {
+  if (treesPack) writeFileSync(join(OUT, 'trees.bin'), gzipSync(treesPack, { level: 9 }));
+  writeFileSync(join(OUT, 'landuse.bin'), gzipSync(encodePack({ x0: landuse.x0, z0: landuse.z0, cell: landuse.cell, nx: landuse.nx, nz: landuse.nz }, { ground: landuse.data }), { level: 9 }));
+  log('wrote trees.bin and landuse.bin (trees only)');
+  process.exit(0);
 }
 
 // ---- Horizon ----------------------------------------------------------------------------------
