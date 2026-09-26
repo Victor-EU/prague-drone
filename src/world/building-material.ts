@@ -9,7 +9,7 @@
 
 import * as THREE from 'three';
 import { patchLit } from '../sky/lit.ts';
-import { STYLES, Style, Surface, Stone, Metal, Glass } from '../core/buildings.ts';
+import { STYLES, Style, Surface, Stone, Metal, Glass, SFlag, RAND_GLSL, Choice } from '../core/buildings.ts';
 
 const GLSL_PARS = /* glsl */ `
 varying vec4 vFacade;
@@ -18,6 +18,8 @@ varying vec3 vPraN;
 uniform vec4 uStyleA[${STYLES.length}];
 uniform vec4 uStyleB[${STYLES.length}];
 uniform float uDetail;
+uniform float uRelief;
+${RAND_GLSL}
 float praHash(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
 float praNoise(vec2 p) {
   vec2 i = floor(p), f = fract(p);
@@ -94,6 +96,9 @@ float praAbove = -1.0;
   int style = int(vInfo.y + 0.5);
   float party = mod(vInfo.z, 2.0);
   float seed = vInfo.w;
+  // The seed as an integer and the flags' bits, for the choices the tile worker makes too (M14).
+  uint us = uint(seed + 0.5);
+  int bits = int(vInfo.z + 0.5);
   vec3 wp = vPraWorld;
   if (kind == ${Surface.Wall}) {
     vec4 A = uStyleA[style], B = uStyleB[style];
@@ -106,11 +111,10 @@ float praAbove = -1.0;
     bool rich = style == ${Style.Baroque} || style == ${Style.OldTown} || style == ${Style.Palace};
     float near = orn ? (1.0 - smoothstep(0.03, 0.09, max(wu, wv))) * uDetail : 0.0;
     // Two tones: the trim paler (white and cream on ochre, 8884), deeper and warmer (salmon on pale
-    // pink, 8777; red-orange on ochre, 8082), or the field's own colour in relief; by building.
-    float mx = max(c.r, max(c.g, c.b)), sat = (mx - min(c.r, min(c.g, c.b))) / max(mx, 1e-3);
-    float tk = praHash(vec2(seed * 7.13, 3.7));
-    float pDeep = sat < 0.35 ? 0.5 : 0.2, pPale = sat < 0.35 ? 0.3 : 0.65;
-    vec3 trim = tk < pDeep ? c * vec3(0.8, 0.44, 0.34) : tk < pDeep + pPale ? mix(c, vec3(0.86, 0.82, 0.72), 0.75) : c * 1.08;
+    // pink, 8777; red-orange on ochre, 8082), or the field's own colour in relief; by building,
+    // decided in the tile worker (src/world/relief.ts) from the seed and the field's saturation,
+    // and carried in the flags.
+    vec3 trim = (bits & ${SFlag.TrimDeep}) != 0 ? c * vec3(0.8, 0.44, 0.34) : (bits & ${SFlag.TrimPale}) != 0 ? mix(c, vec3(0.86, 0.82, 0.72), 0.75) : c * 1.08;
     if (!orn) trim = c;
     float inC = 0.0;
     if (party > 0.5) {
@@ -180,14 +184,14 @@ float praAbove = -1.0;
         float W = A.y, y0 = gf ? 0.3 * sh : A.w, y1 = gf ? min(0.88 * sh, 0.3 * sh + A.z) : min(A.w + A.z, 0.9 * sh);
         float sw = rich ? 0.17 : 0.12;
         // The portal (8777, 8082): one door to a street front, in the middle of a rich one.
-        float hd = praHash(vec2(seed * 2.3, L * 0.37)), hb = praHash(vec2(seed * 6.1, 1.7));
+        float hd = praRand(us, ${Choice.Portal}u + uint(L * 10.0 + 0.5)), hb = praRand(us, ${Choice.Balcony}u);
         bool portal = party < 0.5 && top > 3.0 && hd < 0.9 && span > 1.9;
         float dcol = rich && n >= 3.0 ? floor(n * 0.5) : floor(hd / 0.9 * n);
         bool door = portal && gf && col == dcol;
         bool balc = praBalcony(style, rich, portal, fl, col, n, nS, dcol, hb);
         bool balcUp = praBalcony(style, rich, portal, fl + 1.0, col, n, nS, dcol, hb);
         // Round-headed windows on the rich fronts' ground floors (8777).
-        bool arch = rich && gf && B.y < 0.5 && !door && praHash(vec2(seed * 1.7, 5.3)) < 0.65;
+        bool arch = rich && gf && B.y < 0.5 && !door && praRand(us, ${Choice.Arch}u) < 0.65;
         float ys = arch ? y1 - 0.5 * W : y1;
         float yb = 0.12; // a balcony's floor above the storey's
         float rect = arch ? praArch(p, 0.5 * W, y0, ys, w2) : praBox(p, vec2(-0.5 * W, y0), vec2(0.5 * W, y1), w2);
@@ -216,10 +220,10 @@ float praAbove = -1.0;
           st0 = max(st0, praBox(p, vec2(-0.1, y1), vec2(0.1, y1 + sw + 0.12), w2));
           st1 = max(st1, praBox(p + up, vec2(-0.1, y1), vec2(0.1, y1 + sw + 0.12), w2));
         }
-        float hk = praHash(vec2(seed * 3.1, 9.2));
+        float hk = praRand(us, ${Choice.Hood}u);
         if (rich && fl > 0.5 && fl < 1.5) {
-          float pc = floor(praHash(vec2(seed * 8.7, 3.3)) * max(n - 1.0, 1.0));
-          if (praHash(vec2(seed * 5.5, 7.1)) < 0.4 && n > 1.5 && span - W > 1.1 && (col == pc || col == pc + 1.0)) {
+          float pc = floor(praRand(us, ${Choice.WreathPier}u) * max(n - 1.0, 1.0));
+          if (praRand(us, ${Choice.Wreath}u) < 0.4 && n > 1.5 && span - W > 1.1 && (col == pc || col == pc + 1.0)) {
             vec2 q = p - vec2((col == pc ? 0.5 : -0.5) * span, 0.5 * (y0 + y1));
             st0 = max(st0, praWreath(q, w2)); st1 = max(st1, praWreath(q + up, w2));
           }
@@ -277,7 +281,8 @@ float praAbove = -1.0;
             float rails = max(praBox(q, vec2(-bw, yb + 0.9), vec2(bw, yb + 0.95), w2), praBox(q, vec2(-bw, yb + 0.03), vec2(bw, yb + 0.07), w2));
             float bal = praPulse((q.x + bw) / 0.11, 0.0, 0.2, wu / 0.11) * praBox(q, vec2(-bw, yb), vec2(bw, yb + 0.92), w2);
             ovC = vec3(0.025, 0.028, 0.028);
-            ovA = max(ovA, max(rails, bal) * mCell);
+            // The railing is geometry where the relief is built (M14).
+            ovA = max(ovA, max(rails, bal) * mCell * (1.0 - uRelief));
           }
         }
         if (door) {
@@ -316,7 +321,7 @@ float praAbove = -1.0;
           vec2 a2 = vec2(abs(p.x), p.y);
           float pan = praBox(a2, vec2(0.1, 0.25), vec2(hw2 - 0.1, 0.4 * yS), w2) + praBox(a2, vec2(0.1, 0.48 * yS), vec2(hw2 - 0.1, yS - 0.14), w2);
           float panU = praBox(a2 + up, vec2(0.1, 0.25), vec2(hw2 - 0.1, 0.4 * yS), w2) + praBox(a2 + up, vec2(0.1, 0.48 * yS), vec2(hw2 - 0.1, yS - 0.14), w2);
-          float wk = praHash(vec2(seed * 9.1, 0.7));
+          float wk = praRand(us, ${Choice.Wood}u);
           vec3 wood = wk < 0.5 ? vec3(0.07, 0.038, 0.022) : wk < 0.75 ? vec3(0.028, 0.055, 0.038) : vec3(0.1, 0.03, 0.022);
           wood *= 1.0 + 0.5 * pan * (1.0 - panU) - 0.4 * (1.0 - pan) * panU;
           wood *= 1.0 - 0.6 * praBox(p, vec2(-0.012, 0.0), vec2(0.012, yS), w2);
@@ -327,7 +332,7 @@ float praAbove = -1.0;
       // Shutters (design.md §8.2) on some plain houses and villas, not on the core's baroque fronts,
       // which the photographs show without: two painted leaves beside each window, louvred, in
       // faded colours; big enough to show from the drone.
-      float shK = praHash(vec2(seed * 4.3, 2.9));
+      float shK = praRand(us, ${Choice.Shutters}u);
       if (style == ${Style.House} && shK < 0.12 && party < 0.5 && 2.0 * A.y < span - 0.4) {
         float rows = praPulse(r, a, b, wr) * upper + (B.y > 0.5 ? 0.0 : praStep(0.0, r, wr) * (1.0 - praStep(1.0, r, wr)) * praPulse(r, 0.3, min(0.88, 0.3 + A.z / sh), wr));
         float leaf = (praPulse(cc, 0.5 + hw, 0.5 + 2.0 * hw, wc) + praPulse(cc, 0.5 - 2.0 * hw, 0.5 - hw, wc)) * inside * rows;
@@ -488,6 +493,8 @@ float praAbove = -1.0;
     praGlass = 1.0 - stone;
   } else if (kind == ${Surface.Opening}) {
     praRough = 1.0;
+  } else if (kind == ${Surface.Trim}) {
+    praAbove = vFacade.z;
   }
   // Floodlit landmarks: warm light from below on the walls, less on the roofs, fading upward.
   if (mod(floor(vInfo.z / 2.0 + 0.01), 2.0) > 0.5) {
@@ -504,6 +511,8 @@ vec3 praPoolE = praAbove >= 0.0 ? diffuseColor.rgb * praLampPool(vPraWorld, praA
 
 /** The close-up details of M9 and M10 (1 on, 0 off; `?detail=0` in development, to measure their cost). */
 export const DETAIL = { value: 1 };
+/** Whether the facades' relief is built as geometry (M14): the shader then leaves out what the geometry draws. */
+export const RELIEF = { value: 1 };
 
 export function buildingMaterial(): THREE.MeshStandardMaterial {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88, metalness: 0 });
@@ -516,6 +525,7 @@ export function buildingMaterial(): THREE.MeshStandardMaterial {
     shader.uniforms.uStyleA = { value: styleA };
     shader.uniforms.uStyleB = { value: styleB };
     shader.uniforms.uDetail = DETAIL;
+    shader.uniforms.uRelief = RELIEF;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec4 aFacade;\nattribute vec4 aInfo;\nvarying vec4 vFacade;\nflat varying vec4 vInfo;\nvarying vec3 vPraN;')
       .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nvFacade = aFacade;\nvInfo = aInfo;\nvPraN = objectNormal;');

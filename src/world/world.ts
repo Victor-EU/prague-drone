@@ -77,9 +77,9 @@ export class World implements Ground {
     this.rest = rest;
   }
 
-  /** True once the streamed parts and every building tile are in. */
+  /** True once the streamed parts and every building tile are in, and the relief near the camera is built. */
   get complete() {
-    return this.streamDone && this.buildings.loaded >= this.buildings.total;
+    return this.streamDone && this.buildings.loaded >= this.buildings.total && this.buildings.reliefSettled;
   }
 
   /**

@@ -2,7 +2,7 @@
 
 import * as THREE from 'three';
 import { World } from './world/world.ts';
-import { DETAIL } from './world/building-material.ts';
+import { DETAIL, RELIEF } from './world/building-material.ts';
 import { LENS } from './world/trees.ts';
 import { Atmosphere } from './sky/sky.ts';
 import { rollSession } from './sky/clouds.ts';
@@ -113,6 +113,9 @@ function applyQuality(q: Quality) {
   atmosphere.clouds.maxCoverage = q.coverage;
   atmosphere.sun.shadow.camera.far = q.shadowFar;
   world.buildings.detailRange = q.detail;
+  // `?relief=0` (development) leaves the facades' relief painted, to measure it (design.md §11, M14).
+  world.buildings.reliefRange = import.meta.env.DEV && params.has('relief') ? Number(params.get('relief')) : q.relief;
+  RELIEF.value = world.buildings.reliefRange > 0 ? 1 : 0;
   // `?fine=0` (development) leaves the landmarks' fine tier out, to measure it (design.md §11).
   if (world.landmarks) { world.landmarks.detailRange = q.detail * 0.9; world.landmarks.fineRange = import.meta.env.DEV && params.get('fine') === '0' ? 0 : q.fine; }
   if (world.trees) world.trees.spriteShadows = q.spriteShadows;

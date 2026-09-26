@@ -95,7 +95,7 @@ async function bench(variants: string[]) {
         await page.send('Page.navigate', { url: `${origin}/?scale=1&${q}` });
         await waitFor(page, 'window.praha && praha.world.complete', 90000, 'the city');
         await sleep(3000);
-        const r = await page.evaluate<{ gpu: number[]; cpu: number[]; size: string }>(`(() => {
+        const r = await page.evaluate<{ gpu: number[]; cpu: number[]; size: string }>(`(async () => {
           ${setup};
           const gl = praha.renderer.getContext(), px = new Uint8Array(4);
           const sync = () => gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
@@ -103,6 +103,8 @@ async function bench(variants: string[]) {
           for (const s of praha.route.stops) {
             praha.drone.setAuto(s.t);
             for (let k = 0; k < 40; k++) praha.world.terrain.update(praha.drone.position, 8);
+            // The facades' relief (M14) streams in from the workers over the frames after a move: let it settle.
+            for (let k = 0; k < 600 && !praha.world.buildings.reliefSettled; k++) { praha.frame(1); await new Promise((ok) => setTimeout(ok, 0)); }
             praha.frame(3); sync();
             const t0 = performance.now();
             praha.frame(${frames}); sync();
@@ -287,6 +289,10 @@ try {
   else if (test === 'clock') await clock();
   else if (test === 'bench') await bench(args.length ? args : ['']);
   else throw new Error(`unknown test ${test}`);
+} catch (err) {
+  // Without this a failure (a page that never completes) would exit quietly with 0 below.
+  console.error(err instanceof Error ? err.message : err);
+  process.exitCode = 1;
 } finally {
   process.exit(process.exitCode ?? 0);
 }

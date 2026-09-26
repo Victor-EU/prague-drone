@@ -35,7 +35,7 @@ import type { Roof } from './lib/roofs.ts';
 import type { PropRec } from './lib/props.ts';
 import type { PlanInput, PlanOutput } from './lib/plan.ts';
 import { District, districtMaps, districtAt, LANDMARK_COLOURS, BRIDGE, hexRgb, type DistrictId } from './lib/districts.ts';
-import { Style, BFlag, EFlag } from '../src/core/buildings.ts';
+import { Style, BFlag, EFlag, Prop } from '../src/core/buildings.ts';
 import { buildLandmarks, packLandmarks, raiseSurface, MODELS, type Site, type Built } from './landmarks/index.ts';
 import { rampartLines, carveRamparts } from './landmarks/vysehrad.ts';
 import { Kit } from './landmarks/kit.ts';
@@ -577,6 +577,8 @@ for (const m of MODELS)
   }
 const replacedKeys = new Set(MODELS.flatMap((m) => m.replaces ?? []));
 let landmarkMeshes: Built[];
+/** The water surface at a point, or NaN on land (the landmarks' site reports it; kept for the fronts near the river, M14). */
+let waterAt: (x: number, z: number) => number = () => NaN;
 {
   const featureCentre = new Map<string, [number, number]>();
   const site: Site = {
@@ -603,6 +605,7 @@ let landmarkMeshes: Built[];
       return { x: l.x, z: -l.north };
     },
   };
+  waterAt = site.water;
   landmarkMeshes = await buildLandmarks(site, log);
   // The embankment walls along the river and its channels, in the same pack (tools/lib/river.ts).
   {
@@ -712,6 +715,62 @@ function ringsOf(p: Polygon): Ring[] { return [p.outer, ...p.holes]; }
   log(`party walls: ${shared} of ${E.length} edges`);
 }
 
+// The squares' arcades (design.md §8.3, M14): a street front of an old town house within 4 m of
+// one of these squares, facing it on one of the listed sides, gets the Arcade flag; the tile worker
+// builds its ground floor as an arcade.
+{
+  const ARCADES: { name: string; faces: [number, number][]; xMin?: number }[] = [
+    { name: 'Staroměstské náměstí', faces: [[0, -1], [-1, 0]] }, // the south row facing north, the east side facing west
+    { name: 'Malé náměstí', faces: [[-1, 0], [0, -1]] },
+    { name: 'Malostranské náměstí', faces: [[0, 1], [-1, 0]], xMin: -560 }, // the lower square's north and east rows
+  ];
+  const squares = features(layer('landuse'), (t) => t.place === 'square').filter((f) => ARCADES.some((a) => a.name === f.tags.name));
+  const OLD = new Set<number>([District.StareMesto, District.MalaStrana]);
+  let flagged = 0;
+  for (const b of kept) {
+    if (b.part || b.landmark >= 0 || b.area < 80 || !OLD.has(districtAt(districts, b.cx, b.cz))) continue;
+    const r = b.poly.outer, n = r.length / 2;
+    let area = 0;
+    for (let i = 0; i < n; i++) { const j = (i + 1) % n; area += r[i * 2] * r[j * 2 + 1] - r[j * 2] * r[i * 2 + 1]; }
+    const sgn = Math.sign(area) || 1;
+    for (let i = 0; i < n; i++) {
+      if (b.edges[i] & EFlag.Party) continue;
+      const j = (i + 1) % n, ex = r[j * 2] - r[i * 2], ez = r[j * 2 + 1] - r[i * 2 + 1], len = Math.hypot(ex, ez);
+      if (len < 4) continue;
+      const nx = (sgn * ez) / len, nz = (-sgn * ex) / len, mx = (r[i * 2] + r[j * 2]) / 2, mz = (r[i * 2 + 1] + r[j * 2 + 1]) / 2;
+      for (const sq of squares) {
+        const spec = ARCADES.find((a) => a.name === sq.tags.name)!;
+        if (spec.xMin !== undefined && mx < spec.xMin) continue;
+        if (!spec.faces.some(([fx, fz]) => nx * fx + nz * fz > 0.7)) continue;
+        // The front's middle within 4 m of the square's edge, and the square before it.
+        const q = sq.polygons[0];
+        let near = false;
+        const o = q.outer, m = o.length / 2;
+        for (let k = 0; k < m && !near; k++) {
+          const l = (k + 1) % m, ax = o[k * 2], az = o[k * 2 + 1], bx = o[l * 2], bz = o[l * 2 + 1];
+          const dx = bx - ax, dz = bz - az, ll = dx * dx + dz * dz || 1;
+          const t = Math.max(0, Math.min(1, ((mx - ax) * dx + (mz - az) * dz) / ll));
+          if (Math.hypot(mx - (ax + dx * t), mz - (az + dz * t)) < 4) near = true;
+        }
+        if (!near || !pointInPolygon(mx + nx * 3, mz + nz * 3, q)) continue;
+        b.edges[i] |= EFlag.Arcade;
+        flagged++;
+        break;
+      }
+    }
+  }
+  log(`arcades: ${flagged} fronts on the squares`);
+}
+
+/** Whether the river lies within about 75 m of a point: the embankment fronts (M14). */
+function nearRiver(x: number, z: number): boolean {
+  for (const r of [30, 55, 75]) for (let k = 0; k < 12; k++) {
+    const a = (k / 12) * Math.PI * 2;
+    if (!Number.isNaN(waterAt(x + r * Math.cos(a), z + r * Math.sin(a)))) return true;
+  }
+  return false;
+}
+
 /** Plans every building on a pool of worker threads (the roofs' straight skeletons dominate). */
 async function planAll(inputs: PlanInput[]): Promise<PlanOutput[]> {
   const out: PlanOutput[] = new Array(inputs.length);
@@ -744,10 +803,11 @@ async function planAll(inputs: PlanInput[]): Promise<PlanOutput[]> {
       key: b.key, part: b.part, tags: b.tags, area: b.area, cx: b.cx, poly: b.poly,
       landmark: b.landmark >= 0 ? landmarks[b.landmark].id : undefined,
       gmin: g.min, gref: g.ref, district: districtAt(districts, b.cx, b.cz), edges: b.edges,
+      river: nearRiver(b.cx, b.cz),
     };
   });
   const outputs = ONLY_LIFE ? inputs.map(() => ({ base: 0, top: 0, eave: 0, gnd: 0, style: 0, flags: 0, wall: '', roofC: '', roof: null, props: [], failed: false }) as unknown as PlanOutput) : await planAll(inputs);
-  let failed = 0, pitched = 0, dormers = 0, chimneys = 0, roofBoxes = 0;
+  let failed = 0, pitched = 0, dormers = 0, chimneys = 0, roofBoxes = 0, gables = 0, turrets = 0, bays = 0, figures = 0;
   kept.forEach((b, k) => {
     const o = outputs[k];
     b.base = o.base; b.top = o.top; b.eave = o.eave; b.gnd = o.gnd;
@@ -755,9 +815,14 @@ async function planAll(inputs: PlanInput[]): Promise<PlanOutput[]> {
     b.roof = o.roof; b.props = o.props;
     if (o.failed) failed++;
     if (o.roof) pitched++;
-    for (const pr of o.props) pr.type === 0 ? chimneys++ : pr.type === 3 ? roofBoxes++ : dormers++;
+    for (const pr of o.props) {
+      if (pr.type === Prop.Chimney) chimneys++; else if (pr.type === Prop.RoofBox) roofBoxes++;
+      else if (pr.type === Prop.DormerGabled || pr.type === Prop.DormerHipped) dormers++;
+      else if (pr.type === Prop.Turret) turrets++; else if (pr.type === Prop.Bay) bays++;
+      else if (pr.type === Prop.Figure || pr.type === Prop.Urn) figures++; else gables++;
+    }
   });
-  log(`roofs: ${pitched} pitched, ${failed} fell back to flat; ${dormers} dormers, ${chimneys} chimneys, ${roofBoxes} roof boxes (${((Date.now() - t1) / 1000).toFixed(1)} s)`);
+  log(`roofs: ${pitched} pitched, ${failed} fell back to flat; ${dormers} dormers, ${chimneys} chimneys, ${roofBoxes} roof boxes; ${gables} gables, ${turrets} turrets, ${bays} bays, ${figures} figures (${((Date.now() - t1) / 1000).toFixed(1)} s)`);
 }
 
 // ---- Bridges ----------------------------------------------------------------------------------

@@ -2,7 +2,8 @@
 // the time a tram takes to reach each point from its start, 10 s at every stop included, and a
 // phase; a tram of the run enters it every headway. Two liveries: the red and cream Tatra T3,
 // mostly as coupled pairs, and the three-section Škoda 15T, red below, white above a black window
-// band. Positions follow from the clock alone, so nothing is simulated.
+// band; since M14 with their doors, lamps, wheels and roof gear (design.md §8.8). Positions follow
+// from the clock alone, so nothing is simulated.
 
 import * as THREE from 'three';
 import { Shape, rgb, capsulePlan, inset, type Outline, type RGB } from './shapes.ts';
@@ -13,6 +14,7 @@ import { SCALE, unpackRun, type LifeMeta } from '../core/life.ts';
 
 const RED = rgb('#c8352a'), CREAM = rgb('#f2ede6'), GLASS = rgb('#1c2024'), DARK = rgb('#2e2d2b'), ROOF = rgb('#cfcbc2');
 const WHITE = rgb('#ecebe6'), GREY = rgb('#8e9296'), BLACK = rgb('#151719'), PANTO = rgb('#6f6a5c'), BELLOWS = rgb('#232323');
+const DOOR = rgb('#d8d1c4'), WHEEL = rgb('#3a3a3c'), LAMP = rgb('#fff4dc'), TAIL = rgb('#c0281c'), VENT = rgb('#b9b5ad');
 
 /** How a tram's cars hang behind its front: per car, the model and its length along the track. */
 const T3_LEN = 15.1, FT_LEN = [11.3, 8.6, 11.3];
@@ -24,6 +26,8 @@ function pantograph(s: Shape, x: number, roof: number) {
   s.beam([x - 0.7, roof + 0.12, 0], [x + 0.35, (roof + top) / 2 + 0.2, 0], 0.07, PANTO);
   s.beam([x + 0.35, (roof + top) / 2 + 0.2, 0], [x - 0.2, top - 0.05, 0], 0.06, PANTO);
   s.box(x - 0.35, top - 0.08, -0.85, x - 0.05, top, 0.85, DARK);
+  // The frame the arms stand on, and its insulators.
+  for (const z of [-0.45, 0.45]) { s.beam([x - 0.75, roof + 0.12, z], [x + 0.75, roof + 0.12, z], 0.05, PANTO); s.box(x - 0.1, roof, z - 0.08, x + 0.1, roof + 0.14, z + 0.08, VENT); }
 }
 
 /** Pillars of a window band along a car: [x0, x1] pairs, windows between them. */
@@ -35,11 +39,18 @@ function pillars(len: number, first: number, pitch: number, w: number): number[]
 
 function sidePoints(p: number[][]): number[] { return p.flat(); }
 
+/** Wheels on a bogie centred at x: two axles, a disc each side. */
+function bogie(s: Shape, x: number, w: number, axle = 1.7) {
+  s.box(x - axle / 2 - 0.55, 0.14, -w / 2 + 0.2, x + axle / 2 + 0.55, 0.5, w / 2 - 0.2, DARK);
+  for (const dx of [-axle / 2, axle / 2]) for (const z of [-w / 2 + 0.22, w / 2 - 0.22]) s.ellipsoid([x + dx, 0.36, z], [0.34, 0.34, 0.06], WHEEL, 10, 3);
+}
+
 /** A tram body: bands from the skirt to the roof; `bands` gives heights and colours, `win` the window band. */
-function body(s: Shape, plan: Outline, bands: { y0: number; y1: number; col: RGB | ((x: number, z: number) => RGB); glow?: number }[], roof: { y: number; col: RGB; inset: number; top: number }) {
+function body(s: Shape, plan: Outline, bands: { y0: number; y1: number; col: RGB | ((x: number, z: number) => RGB); glow?: number; top?: Outline }[], roof: { y: number; col: RGB; inset: number; top: number }) {
   for (const b of bands) {
     s.glow = b.glow ?? 0;
-    s.prism(plan, b.y0, b.y1, typeof b.col === 'function' ? b.col : () => b.col as RGB);
+    const col = typeof b.col === 'function' ? b.col : () => b.col as RGB;
+    if (b.top) s.band(plan, b.y0, b.top, b.y1, col); else s.prism(plan, b.y0, b.y1, col);
   }
   s.glow = 0;
   const top = inset(plan, roof.inset, roof.inset);
@@ -47,43 +58,76 @@ function body(s: Shape, plan: Outline, bands: { y0: number; y1: number; col: RGB
   s.lid(top, roof.top, roof.col, 1);
 }
 
-/** The Tatra T3: 14 m over the body, cream roof and skirt stripe, red below the windows. */
+/**
+ * The Tatra T3 (design.md §8.8, M14): 14 m over the body with rounded ends, cream skirt stripe, red
+ * below the windows, cream above and a cream roof; three folding doors on the right; the window
+ * band with its pillars; a headlight in the nose and tail lamps; bogies with their wheels; vents
+ * and the pantograph on the roof.
+ */
 function t3(): THREE.BufferGeometry {
   const s = new Shape(), L = 14, W = 2.5;
-  const pil = pillars(L, 1.6, 1.42, 0.2);
-  const plan = capsulePlan(L, W, 1.1, 0.8, sidePoints(pil));
+  const doors: number[][] = [[-5.3, -3.95], [-0.65, 0.65], [3.95, 5.3]];
+  const pil = pillars(L, 1.5, 1.42, 0.18);
+  const seams = doors.flatMap(([a, b]) => [(a + b) / 2 - 0.025, (a + b) / 2 + 0.025]);
+  const plan = capsulePlan(L, W, 1.25, 1.25, [...sidePoints(pil), ...doors.flat(), ...seams]);
+  const inDoor = (x: number, z: number) => z > W / 2 - 0.2 && doors.some(([a, b]) => x > a - 0.01 && x < b + 0.01);
+  const seam = (x: number) => doors.some(([a, b]) => Math.abs(x - (a + b) / 2) < 0.03);
   const inPillar = (x: number, z: number) => Math.abs(z) > W / 2 - 0.2 && pil.some(([a, b]) => x > a - 0.01 && x < b + 0.01);
   body(s, plan, [
-    { y0: 0.45, y1: 0.62, col: CREAM },
-    { y0: 0.62, y1: 1.32, col: RED },
-    { y0: 1.32, y1: 2.28, col: (x, z) => (inPillar(x, z) ? CREAM : GLASS), glow: 1 },
+    { y0: 0.42, y1: 0.6, col: CREAM },
+    { y0: 0.6, y1: 1.28, col: (x, z) => (inDoor(x, z) ? (seam(x) ? DARK : DOOR) : RED) },
+    { y0: 1.28, y1: 1.36, col: (x, z) => (inDoor(x, z) ? (seam(x) ? DARK : DOOR) : CREAM) },
+    { y0: 1.36, y1: 2.28, col: (x, z) => (inDoor(x, z) ? (seam(x) ? DARK : GLASS) : inPillar(x, z) ? CREAM : GLASS), glow: 1 },
     { y0: 2.28, y1: 2.72, col: CREAM },
   ], { y: 2.72, col: ROOF, inset: 0.3, top: 3.06 });
-  // The bogies under the body, set in.
-  s.box(-5.2, 0.12, -1.05, -2.6, 0.45, 1.05, DARK);
-  s.box(2.6, 0.12, -1.05, 5.2, 0.45, 1.05, DARK);
-  s.box(-1.2, 3.06, -0.7, 1.2, 3.3, 0.7, rgb('#b9b5ad'));
+  // The headlight in the nose, the tail lamps, the bogies and the wheels.
+  s.glow = 1;
+  s.ellipsoid([L / 2 + 1.12, 0.98, 0], [0.13, 0.2, 0.2], LAMP, 8, 3);
+  for (const z of [-0.8, 0.8]) s.box(-L / 2 - 1.2, 0.9, z - 0.1, -L / 2 - 1.05, 1.05, z + 0.1, TAIL);
+  s.glow = 0;
+  bogie(s, -3.9, W); bogie(s, 3.9, W);
+  // Vents and the resistor box along the roof; the pantograph forward of the middle.
+  s.box(-1.2, 3.06, -0.7, 1.2, 3.3, 0.7, VENT);
+  for (const x of [-4.6, -3.2, 2.6, 4.0]) s.box(x - 0.35, 3.06, -0.45, x + 0.35, 3.18, 0.45, VENT);
   pantograph(s, -0.2, 3.3);
   return s.geometry();
 }
 
-/** A section of the 15T: 'front' has the cab and the rounded nose, 'rear' the rounded tail. */
+/**
+ * A section of the Škoda 15T: 'front' has the cab under a raked windscreen and the rounded nose,
+ * 'rear' the rounded tail; red below, white above a black window band with the doors in it, the
+ * roof's equipment boxes, the bellows to the next section, wheels under each.
+ */
 function ft(kind: 'front' | 'mid' | 'rear'): THREE.BufferGeometry {
   const s = new Shape(), L = kind === 'mid' ? FT_LEN[1] - 0.6 : FT_LEN[0] - 0.6, W = 2.46;
+  const doors: number[][] = kind === 'mid' ? [[-3.3, -1.7], [1.7, 3.3]] : kind === 'front' ? [[-2.6, -1.0], [-L / 2 + 0.9, -L / 2 + 2.5]] : [[1.0, 2.6], [L / 2 - 2.5, L / 2 - 0.9]];
   const pil = pillars(L, 1.2, 1.6, 0.14);
+  const seams = doors.flatMap(([a, b]) => [(a + b) / 2 - 0.02, (a + b) / 2 + 0.02]);
   const nose = kind === 'front' ? 1.0 : 0.05, tail = kind === 'rear' ? 0.9 : 0.05;
-  const plan = capsulePlan(L, W, nose, tail, sidePoints(pil));
+  const sides = [...sidePoints(pil), ...doors.flat(), ...seams];
+  const plan = capsulePlan(L, W, nose, tail, sides);
+  // The window band's top ring pulls the nose back: the windscreen rakes.
+  const raked = capsulePlan(L, W, kind === 'front' ? nose - 0.45 : nose, kind === 'rear' ? tail - 0.4 : tail, sides);
+  const inDoor = (x: number, z: number) => z > W / 2 - 0.2 && doors.some(([a, b]) => x > a - 0.01 && x < b + 0.01);
+  const seam = (x: number) => doors.some(([a, b]) => Math.abs(x - (a + b) / 2) < 0.03);
   const inPillar = (x: number, z: number) => Math.abs(z) > W / 2 - 0.2 && pil.some(([a, b]) => x > a - 0.01 && x < b + 0.01);
+  const atEnd = (x: number) => (kind === 'front' && x > L / 2 - 0.3) || (kind === 'rear' && x < -L / 2 + 0.3);
   body(s, plan, [
-    { y0: 0.3, y1: 1.02, col: RED },
+    { y0: 0.3, y1: 1.02, col: (x, z) => (inDoor(x, z) ? (seam(x) ? DARK : WHITE) : RED) },
     { y0: 1.02, y1: 1.08, col: WHITE },
-    { y0: 1.08, y1: 2.3, col: (x, z) => (inPillar(x, z) ? BLACK : GLASS), glow: 1 },
-    { y0: 2.3, y1: 2.9, col: WHITE },
+    { y0: 1.08, y1: 2.3, col: (x, z) => (inDoor(x, z) ? (seam(x) ? DARK : GLASS) : inPillar(x, z) && !atEnd(x) ? BLACK : GLASS), glow: 1, top: raked },
+    { y0: 2.3, y1: 2.9, col: WHITE, top: raked },
   ], { y: 2.9, col: GREY, inset: 0.25, top: 3.15 });
   // Equipment on the roof, and the bellows to the next section.
   s.box(-L / 2 + 1.2, 3.15, -0.8, L / 2 - 1.2, 3.5, 0.8, GREY);
+  for (const x of [-L / 2 + 2.0, L / 2 - 2.0]) s.box(x - 0.5, 3.5, -0.6, x + 0.5, 3.62, 0.6, VENT);
   if (kind !== 'rear') s.box(-L / 2 - 0.65, 0.4, -1.12, -L / 2 + 0.05, 2.9, 1.12, BELLOWS);
   if (kind === 'mid') pantograph(s, 0, 3.5);
+  s.glow = 1;
+  if (kind === 'front') for (const z of [-0.72, 0.72]) s.ellipsoid([L / 2 + 0.95, 0.75, z], [0.1, 0.14, 0.22], LAMP, 8, 3);
+  if (kind === 'rear') for (const z of [-0.72, 0.72]) s.box(-L / 2 - 0.9, 0.7, z - 0.12, -L / 2 - 0.78, 0.9, z + 0.12, TAIL);
+  s.glow = 0;
+  bogie(s, kind === 'mid' ? 0 : kind === 'front' ? 1.6 : -1.6, W, 1.8);
   return s.geometry();
 }
 

@@ -6,7 +6,7 @@ import { roofModel, meshRoof, type Roof, type RoofModel, type RoofSpec, type Sha
 import { placeProps, flatRoofBoxes, rng, type PropRec } from './props.ts';
 import { RULES, District, roofColour, wallColour, parseColour, LANDMARK_COLOURS, type DistrictId } from './districts.ts';
 import { parseLength, parseNumber, pointInPolygon, type Polygon, type Ring, type Tags } from './osm.ts';
-import { STYLES, Style, BFlag, EFlag } from '../../src/core/buildings.ts';
+import { STYLES, Style, BFlag, EFlag, grid } from '../../src/core/buildings.ts';
 
 export interface PlanInput {
   key: string; part: boolean; tags: Tags; area: number; cx: number; poly: Polygon;
@@ -16,6 +16,8 @@ export interface PlanInput {
   gmin: number; gref: number;
   district: DistrictId;
   edges: Uint8Array;
+  /** Within about 75 m of the river: the embankment fronts (M14). */
+  river?: boolean;
 }
 
 export interface PlanOutput {
@@ -272,7 +274,9 @@ export function planBuilding(b: PlanInput): PlanOutput {
       dormers: HOUSE.has(type) ? 0.4 : rules.dormers,
       chimneys: (HOUSE.has(type) ? 1 : rules.chimneys) * size,
       partyChimney: rules.partyChimney,
-    }, (e) => (edges[e] & EFlag.Party) !== 0, (v) => nextVertex(rings, v), seed);
+    }, (e) => (edges[e] & EFlag.Party) !== 0, (v) => nextVertex(rings, v), seed,
+    // The fronts' gables, turrets, bays and figures (M14), on the buildings that are not parts.
+    b.part ? undefined : { style, river: !!b.river, gnd: b.gref, eaveRel: eave, sh: grid(20, eave, style).sh });
   } else if (flat && !b.part && (style === Style.Modern || flatType)) {
     out.props = flatRoofBoxes(rings, b.area, out.eave, (x, z) => pointInPolygon(x, z, b.poly), seed);
   }
