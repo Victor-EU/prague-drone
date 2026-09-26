@@ -1,5 +1,6 @@
 // Street furniture from tools/build-world.ts (design.md §8.3): the tram rails set into the streets,
-// the lamp posts of the OSM lamp register, and the trams' overhead wire on its poles (§8.8),
+// the lamp posts of the OSM lamp register (in the old town's streets, the lanterns on brackets on
+// the walls, M10), and the trams' overhead wire on its poles (§8.8),
 // grouped by kilometre tile and drawn only near the camera, where they are more than a pixel wide.
 
 import * as THREE from 'three';
@@ -22,6 +23,7 @@ export class Streets {
     const starts = pack.arrays.railStart as Uint32Array;
     const rail = pack.arrays.rail as Float32Array;
     const lamps = pack.arrays.lamp as Float32Array;
+    const wallLamps = (pack.arrays.wallLamp as Float32Array | undefined) ?? new Float32Array(0);
 
     // Rails: two steel strips per track, in chunks of up to 300 m sorted into tiles.
     const railMat = patchLit(new THREE.MeshStandardMaterial({ color: '#8d8b86', metalness: 0.45, roughness: 0.42 }));
@@ -121,33 +123,62 @@ export class Streets {
       }
     }
 
-    // Lamp posts: a pole and a lantern, cast iron dark green.
-    const pole = new THREE.BoxGeometry(0.12, 4.3, 0.12).translate(0, 2.15, 0);
-    const lantern = new THREE.BoxGeometry(0.34, 0.55, 0.34).translate(0, 4.5, 0);
-    const cap = new THREE.ConeGeometry(0.28, 0.25, 4).rotateY(Math.PI / 4).translate(0, 4.9, 0);
-    const lampGeom = mergeBoxes([pole, lantern, cap]);
-    const lampMat = patchLit(new THREE.MeshStandardMaterial({ color: '#2c3430', metalness: 0.3, roughness: 0.6 }));
+    // Lamp posts: a pole and a lantern, cast iron dark green, the lantern's panes pale (8777):
+    // four of them, wider at the top, under a cap and a finial.
+    const IRON = '#2c3430', PANE = '#b3ae9f';
+    const lantern = (y: number) => [
+      coloured(new THREE.CylinderGeometry(0.2, 0.12, 0.46, 4).rotateY(Math.PI / 4).translate(0, y, 0), PANE),
+      coloured(new THREE.CylinderGeometry(0.045, 0.045, 0.1, 4).translate(0, y - 0.28, 0), IRON),
+      coloured(new THREE.ConeGeometry(0.27, 0.22, 4).rotateY(Math.PI / 4).translate(0, y + 0.34, 0), IRON),
+      coloured(new THREE.BoxGeometry(0.3, 0.035, 0.3).translate(0, y + 0.23, 0), IRON),
+      coloured(new THREE.ConeGeometry(0.04, 0.16, 4).translate(0, y + 0.53, 0), IRON),
+    ];
+    const lampGeom = mergeBoxes([
+      coloured(new THREE.CylinderGeometry(0.06, 0.1, 4.1, 6).translate(0, 2.05, 0), IRON),
+      coloured(new THREE.CylinderGeometry(0.14, 0.16, 0.7, 6).translate(0, 0.35, 0), IRON),
+      ...lantern(4.4),
+    ]);
+    // On a wall: the lantern 0.8 m out from it (at the instance's origin), under an arm with a stay
+    // and a plate on the wall (-z is toward the wall).
+    const arm = 0.8;
+    const wallGeom = mergeBoxes([
+      ...lantern(4.4),
+      coloured(new THREE.BoxGeometry(0.05, 0.05, arm).translate(0, 4.98, -arm / 2), IRON),
+      coloured(new THREE.BoxGeometry(0.04, 0.04, Math.hypot(arm, 0.5)).rotateX(-Math.atan2(0.5, arm)).translate(0, 4.73, -arm / 2 - 0.05), IRON),
+      coloured(new THREE.BoxGeometry(0.16, 0.7, 0.04).translate(0, 4.75, -arm), IRON),
+    ]);
+    const lampMat = patchLit(new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.3, roughness: 0.55 }));
     const lampTiles = new Map<string, number[]>();
     for (let i = 0; i < lamps.length; i += 3) {
       const key = `${Math.floor(lamps[i] / TILE)},${Math.floor(lamps[i + 2] / TILE)}`;
-      (lampTiles.get(key) ?? lampTiles.set(key, []).get(key)!).push(lamps[i], lamps[i + 1], lamps[i + 2]);
+      (lampTiles.get(key) ?? lampTiles.set(key, []).get(key)!).push(lamps[i], lamps[i + 1], lamps[i + 2], NaN);
     }
-    const m = new THREE.Matrix4();
-    for (const list of lampTiles.values()) {
-      const n = list.length / 3;
-      const mesh = new THREE.InstancedMesh(lampGeom, lampMat, n);
-      const sphere = new THREE.Sphere();
-      const box = new THREE.Box3();
-      for (let i = 0; i < n; i++) {
-        m.makeTranslation(list[i * 3], list[i * 3 + 1], list[i * 3 + 2]);
-        mesh.setMatrixAt(i, m);
-        box.expandByPoint(new THREE.Vector3(list[i * 3], list[i * 3 + 1], list[i * 3 + 2]));
+    for (let i = 0; i < wallLamps.length; i += 4) {
+      const key = `${Math.floor(wallLamps[i] / TILE)},${Math.floor(wallLamps[i + 2] / TILE)}`;
+      (lampTiles.get(key) ?? lampTiles.set(key, []).get(key)!).push(wallLamps[i], wallLamps[i + 1], wallLamps[i + 2], wallLamps[i + 3]);
+    }
+    const m = new THREE.Matrix4(), rot = new THREE.Matrix4();
+    for (const all of lampTiles.values()) {
+      for (const onWall of [false, true]) {
+        const list: number[] = [];
+        for (let i = 0; i < all.length; i += 4) if (Number.isNaN(all[i + 3]) !== onWall) list.push(all[i], all[i + 1], all[i + 2], all[i + 3]);
+        const n = list.length / 4;
+        if (!n) continue;
+        const mesh = new THREE.InstancedMesh(onWall ? wallGeom : lampGeom, lampMat, n);
+        const sphere = new THREE.Sphere();
+        const box = new THREE.Box3();
+        for (let i = 0; i < n; i++) {
+          m.makeTranslation(list[i * 4], list[i * 4 + 1], list[i * 4 + 2]);
+          if (onWall) m.multiply(rot.makeRotationY(list[i * 4 + 3]));
+          mesh.setMatrixAt(i, m);
+          box.expandByPoint(new THREE.Vector3(list[i * 4], list[i * 4 + 1], list[i * 4 + 2]));
+        }
+        box.getBoundingSphere(sphere);
+        mesh.computeBoundingSphere();
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        this.add(mesh, sphere);
       }
-      box.getBoundingSphere(sphere);
-      mesh.computeBoundingSphere();
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      this.add(mesh, sphere);
     }
   }
 
@@ -171,16 +202,29 @@ function stay(): THREE.BufferGeometry {
   return new THREE.BoxGeometry(len, 0.06, 0.06).rotateZ(Math.atan2(1.2, 2.6)).translate(1.3, 5.8, 0);
 }
 
-/** Merges non-indexed copies of simple geometries (position and normal only). */
+/** Merges non-indexed copies of simple geometries (position and normal, and colour where all have it). */
 function mergeBoxes(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
-  const pos: number[] = [], nor: number[] = [];
+  const pos: number[] = [], nor: number[] = [], col: number[] = [];
   for (const g of parts) {
     const ng = g.index ? g.toNonIndexed() : g;
     pos.push(...(ng.getAttribute('position').array as Float32Array));
     nor.push(...(ng.getAttribute('normal').array as Float32Array));
+    const c = ng.getAttribute('color');
+    if (c) col.push(...(c.array as Float32Array));
   }
   const out = new THREE.BufferGeometry();
   out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   out.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  if (col.length === pos.length) out.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   return out;
+}
+
+/** A geometry with one colour (sRGB) on every vertex. */
+function coloured(g: THREE.BufferGeometry, hex: string): THREE.BufferGeometry {
+  const ng = g.index ? g.toNonIndexed() : g;
+  const c = new THREE.Color(hex), n = ng.getAttribute('position').count;
+  const a = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; }
+  ng.setAttribute('color', new THREE.Float32BufferAttribute(a, 3));
+  return ng;
 }

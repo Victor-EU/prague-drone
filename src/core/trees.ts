@@ -12,6 +12,8 @@ export const Kind = {
   Conifer: 3,
   /** Rose bushes in the beds of the Petřín rose garden and the city's flower beds, in bloom. */
   Rose: 4,
+  /** Bushes overgrowing the Čertovka's banks, their crowns hanging over the water (9204). */
+  Shrub: 5,
 } as const;
 export type TreeKind = (typeof Kind)[keyof typeof Kind];
 

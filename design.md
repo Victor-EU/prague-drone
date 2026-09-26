@@ -365,6 +365,8 @@ Added in M5: the gloriette at the top of the Schönborn garden (`tools/landmarks
 
 Vyšehrad's ramparts are retaining walls 10 to 15 m high, which the 5 m terrain grid smears into slopes. Each wall on OSM's line (`barrier=city_wall`) is built as a solid rampart: a battered brick face, a parapet, and the grassed walk behind it, 14.5 m deep. The build lowers the terrain at the foot of the face and for 7 m behind it, under the walk, so no slope of the grid lies in front of the brick.
 
+Changed in M10, against 8440: Legion Bridge's arch rings are pale granite voussoirs, about 0.6 m on the soffit and 1.1 m deep, cut radially round each arch, two tones alternating, each stone its own shade and every other one reaching a little higher; the joints are a hair's gap onto the darker face behind. The piers' ashlar is warmer, the soffits darker. Palacký Bridge keeps its vertical slices of red and grey.
+
 ### 7.2 Tier 2: the photographed quarters
 
 Districts built from OSM footprints with real roof forms, district material rules, and procedural detail. Districts: Malá Strana, Kampa, Old Town, Josefov, Hradčany (the Castle district on the ridge), Vyšehrad and Podskalí, New Town along the river (Rašín, Masaryk, Smetana embankments), the Smíchov bank opposite Petřín, Wenceslas Square.
@@ -415,14 +417,25 @@ Built in M9, the details of the close-ups (8777, 8082, 8884), modelled and appli
 
 - **Two tones.** Prague's plaster comes in two colours: the field, and the trim on the window surrounds, the corner strips (lesenes), the cornice, the string course and the plinth. The trim is either paler (white and cream on ochre and yellow, 8884) or deeper and warmer (salmon on pale pink, 8777; red-orange on ochre, 8082), or the same colour in relief; chosen per building.
 - **Windows** are white-painted casements with a cross, their glass taking the sky, set in a surround with an apron panel under the sill; on the first floor of baroque, Old Town and palace fronts a hood above, segmental or triangular by building. From a distance a window averages to a grey with its frame in it, not a black hole.
-- **Ground floors**: the 19th-century blocks have a rusticated base; the plain ground-floor windows take the same frames and surrounds. Round-arched windows and portals are not built.
+- **Ground floors**: the 19th-century blocks have a rusticated base; the plain ground-floor windows take the same frames and surrounds. Round-arched windows and portals came with M10 (below).
 - Relief is drawn as light and shadow in the shader, a lit edge over a line of shadow under each projection, as the cornice already is. The details are drawn within about 50 m and fade out by 150 m; beyond that a window is its glass with a fifth of frame in it, and the trim stays on the lesenes, the cornice and the string course, which are big enough to show from the drone.
+
+Built in M10, the rest of what 8777 and 8082 show, in the same way (drawn in the shader, within about 50 m, fading out by 150 m, except the shutters):
+
+- **Portals.** One door to a street front, in the middle of a rich one, elsewhere at a column chosen by the building, on nine fronts in ten. Round-headed with a keystone on most baroque and palace fronts, straight under a cornice on the rest, in a frame of stone (the trim toward grey sandstone on the rich fronts); the leaves painted wood, dark brown, dark green or oxblood, with raised panels; a fanlight with radial bars over a round head, a transom light over a straight one.
+- **Round-headed windows** on two thirds of the rich fronts' ground floors, a fan of bars in the head, the surround following the arch.
+- **Stucco** in relief, lit from above (a shape read twice, a few centimetres apart, gives its lit top edge and the shadow under it): a cartouche filling each apron of the baroque and palace fronts (the Old Town's first floor only), a framed shield between volutes with a garland; keystones over the upper windows of the rich fronts; ears at the top corners of their surrounds; a shell in each segmental or triangular pediment; on some first floors a wreath on one pier.
+- **Balconies**: on the 19th-century blocks, the middle windows of every upper floor but the top, on three blocks in five; on most palaces and some baroque fronts, the window over the portal. A slab on two consoles with its shadow on the wall, an iron railing of balusters, the window a door down to the slab.
+- **Shutters** on about one plain house or villa in eight, not on the core's baroque and Old Town fronts, which the photographs show without them: two louvred leaves beside each window, in faded green, brown, grey-green or oxblood. They are big enough to show from the drone, so they are drawn at every distance, box-filtered.
+- Nothing is drawn below a front's ground floor, where a street falls away along it; there the wall counts as at street level for the lamps' pools, which had left it black at night.
 
 ### 8.3 Streets and squares
 
 Cobble texture in the core, asphalt elsewhere, tram rails inlaid where tram lines run, lamp posts as instanced props on embankments and bridges. Old Town Square, Malostranské náměstí, Kampa and the embankments get their own paving patterns. Náplavka has the barrel-vaulted cellar doors along the embankment wall and moored boats.
 
 As built in M2: the ground shader draws small setts on cobbled streets, larger setts with a lighter granite grid on squares and pedestrian areas, grain on asphalt and gravel, each fading to its average with distance. Tram rails are steel strips on 242 km of OSM tram track, off the bridges until M4 builds the bridges; 5,750 lamp posts stand where OSM's lamp register puts them, on the ground or on a bridge deck. Both are drawn within about a kilometre of the camera. Náplavka's cellar doors and boats come with the river and its embankment walls (M4).
+
+Built in M10, from 8777 and 8082: in the old town's streets (Malá Strana, Hradčany, the Old Town, Josefov) a lamp of OSM's register that stands within 3 m of a house hangs from a bracket on its wall, as Prague's lanterns in narrow streets do: 164 of them. The lantern is 0.8 m out from the wall under an iron arm with a stay and a plate. Every lantern, on a post or on a wall, is now the four-paned Prague kind, wider at the top, under a cap and a finial, its panes pale; the posts are tapered cast iron on a base.
 
 ### 8.4 Terrain and vegetation
 
@@ -458,6 +471,12 @@ Changed in M8: the sky's light inside and under a crown never falls below 30% of
 
 Changed in M9, the trees close up, against 8385, 8884 and 9204, where a near crown was a smooth ball with camouflage blotches and the photographs show leaves, lit clusters and sky between them at the edge. Within 50 m a crown now carries leaf clusters: small cards scattered over its lobes where no other lobe covers them, each cut into nine pointed leaves in the shader, the ones turned up at the crown's top lighter and yellower; the lobes stay as the mass inside. Shadows and the mirror keep the simplest crowns. The leaf noise is read along turned axes (along the world's, it showed as square blocks), the two-metre clumps count half as much close up, where the leaves carry the texture, and cut deeper lobes into the outline.
 
+Changed in M10, the Čertovka's banks (9204) and the roses close up (8722):
+
+- **The Čertovka** (below, §8.5) is lined with bushes: a sixth kind, shrub, placed at build time every 2.3 m along both banks of the mill race wherever no building stands on the water, 512 of them, 2.6 to 4.8 m tall and 1.6 to 2.6 m across, whose crowns reach the ground and hang a metre and a half down the bank toward the water. They take the leaf clusters near and a darker foliage.
+- **Roses close up.** Within 12 m of the camera the blooms on the rose bushes are modelled (`src/world/roses.ts`): seven rings of cupped petals, the heart closed in a spiral, the outer petals opening with their tips rolled back to a point, each petal its own shade; on a stem with sepals and two leaves; about twenty to a square metre of a bush's top and outer sides, turned up more than out, in full within 3 m and simpler beyond. Petals take light through them. The painted blooms thin out within 8 m, where the modelled ones stand. Rose bushes now carry leaf clusters too, leaflets of a few centimetres. The drone never comes within 15 m of the ground, so on the route none of this is drawn; it is for 8722 and for the look of the garden up close.
+- **The coral roses** are orange-red, the colour of 8722's, a deeper red than the salmon they were; red, pink and white are as before.
+
 ### 8.5 The river
 
 - Surface mesh follows the OSM water polygon; flow direction south to north at 0.5 m/s in the shader; ripple normal map tiled at two scales.
@@ -478,6 +497,8 @@ As built in M4 (`src/world/water.ts`, `src/render/reflection.ts`, `tools/lib/riv
 Changed in M8, against 8683, 8694, 8704, 8849 and 8490: the water read grey seen edge on and navy seen from above, where the photographs show sky blue and grey-blue. The ripples now tilt the facets both ways: the sky is taken at the reflected ray, 7° and 17° above it, and halfway down toward the horizon, weighted by the angle, since edge on the eye sees mostly the facets turned toward it (the blue above the pale horizon) and from above those turned away (the paler sky toward the horizon). And the reflection is scaled to 55%, not three quarters: seen edge on, rippled water in the photographs reflects about a tenth of the sky's brightness, not half.
 
 Also in M8, the moored boats that OSM maps as buildings (houseboats, ships, anything floating), restaurants and botels along the quays, are low flat-topped cabins with a row of windows. By the rules for houses they had tiled roofs and stood in the river as town houses (8683).
+
+Changed in M10, against 9204: the Čertovka's banks are not the river's embankments. Where OSM's centreline of the mill race runs within 16 m, a bank is an old rubble wall dark with damp and moss standing at the water's edge (0.4 m out, not 2 m, as the canal is narrow), with no parapet or walk, and dark ground on top under the bushes of §8.4, which hang over the water.
 
 ### 8.6 Sky, sun, clouds
 
@@ -739,6 +760,8 @@ Added in M8: viewpoints for the last eleven hero frames, so all thirty are on th
 
 Changed in M9: two of the guessed views moved to where their photographs' content is. 9204 looked along the Čertovka between houses; it now stands over the canal's tree-lined stretch beside Kampa park, 5 m above the water, looking up the canal toward the mill. 8440 looked north at Legion Bridge with the Castle behind it; the photograph has the arches next to Střelecký island and a wooded slope behind them, so it now looks west-north-west from the east bank 90 m south of the bridge, with the photograph's 83 mm lens, 8 m above the water.
 
+Changed in M10: 8722 stands among the rose beds 0.65 m above the ground, a few decimetres from a bush's blooms, with the photograph's 64 mm lens, looking west at them against the sky. A viewpoint may set the camera's near plane (`near`, 0.05 m for 8722; the app's is 3 m), which the reversed float depth buffer allows without loss of precision; the crowns' cut near the lens follows it.
+
 ### 12.2 Motion tests
 
 - Fly the full auto route at 1× and 2× with no hitches over 33 ms.
@@ -794,6 +817,7 @@ Each milestone ends with a build the user can fly. Effort is the implementer's; 
 | M7 | Interface, loading, fast mode, the blue-hour hold, polish, lite preset | Motion tests pass; loading under 8 s; 30 fps floor on integrated graphics |
 | M8 | LUT refinement against all hero frames, final side-by-side sheet | Every hero pair passes all three questions |
 | M9 | Details from the close-ups (§8.2, §8.1, §8.4): the architecture, roofs and greens the close-up photographs show, modelled and applied across the city | The close-ups (8082, 8777, 8884, 9204, 8440, 8722) read as the same kind of place at a glance; no pair of the M8 sheet gets worse |
+| M10 | The rest of the close-ups' details (§8.2, §8.3, §7.1, §8.5, §8.4): round-arched ground-floor windows, portals, stucco ornament, shutters, balconies and wall lanterns on the old fronts; Legion Bridge's pale granite arch rings; the Čertovka's dark, overgrown banks; roses close enough to show their blooms | 8777, 8082, 8440, 9204 and 8722 read as their photographs' kind of place at a glance, and 8722 shows single blooms; no pair of the M9 sheet gets worse; no measurable cost on the route |
 
 ### Progress
 
@@ -961,6 +985,26 @@ Known gaps after M9:
 - **Legion Bridge** lacks the pale granite arch rings of 8440; the Čertovka's banks are the river's pale embankment walls, where 9204's are dark and overgrown.
 - **8722's roses** are still beyond the world: the camera cannot come nearer than 3 m.
 - **The verdicts** on the sheet are still the user's, for M8 and M9 alike.
+
+**M10, built 2026-09-26.** The rest of the close-ups' details, modelled and applied across the city like M9's (§14):
+
+- **Facades** (§8.2): portals with panelled doors, round-headed with a keystone or straight under a cornice; round-headed ground-floor windows with a fan of bars; stucco in relief (cartouches in the aprons, keystones, eared surrounds, shells in the pediments, a wreath on some first floors); balconies with iron railings on the 19th-century blocks and over the palaces' portals; shutters on some plain houses and villas.
+- **Lanterns** (§8.3): 164 of OSM's lamps in the old town's streets hang on brackets on the walls they stand against; every lantern is the four-paned Prague kind.
+- **Legion Bridge** (§7.1): radial voussoirs of pale granite round every arch, warmer piers (8440).
+- **The Čertovka** (§8.5, §8.4): dark rubble walls at the water's edge instead of the river's embankments, and 512 bushes along both banks hanging over the water (9204).
+- **Roses** (§8.4): blooms modelled within 12 m of the camera, leaf clusters on the bushes, the coral variety orange-red; 8722 re-placed among the beds with a near plane of 5 cm (§12.1), and it now shows single blooms against the sky.
+- **Found and fixed**: on a street that falls away along a front, the storey below the ground floor took the ground floor's door and windows, and was black at night.
+- `?detail=0` now leaves the facade details out of the shader altogether, so the benchmark also measures what their code costs where it is not drawn.
+
+Measured with the synced benchmark at 2048 × 1536 in seven alternating rounds, details on and compiled out: 16.1 against 15.8 ms a frame on average over four rounds, 16.4 against 15.6 over three. All the facade details of M9 and M10 together cost about 0.4 ms a frame (2 to 3%), about the size of the run-to-run noise; M9's measurement, with the details switched off by a uniform, could not see their code's own cost. The world build takes 40 s. On the sheet, 8722, 9204 and 8440 changed as intended, 8777 and 8082 gained their ornaments, and no other pair changed beyond leaf sway and ripples; the shutters first drawn on 8884's white house were taken off the baroque fronts.
+
+Known gaps after M10:
+
+- **The roses** are smooth, flatly shaded petals, nearer a painted rose than a photographed one; the bush behind them is still a mass of lobes; there is no depth of field, where the photograph's background is soft.
+- **9204**: a corner of the canal wall stands as a hard block in the shade at the left; the mill's arches at the canal's end are not modelled.
+- **8082 and 8777** still stand where the world's street is wider and brighter than the photographs'; no lamp of OSM's stands in 8777's frame, so its lantern post is not there.
+- **Stucco** is relief drawn on the wall, flat seen along it; no statues on the fronts.
+- **The verdicts** on the sheet are still the user's, for M8 to M10.
 
 ---
 

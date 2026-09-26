@@ -96,7 +96,12 @@ export class World implements Ground {
     this.streets = new Streets(streets);
     this.landmarks = new Landmarks(landmarks, this.buildings.material);
     reflects(this.landmarks.group);
-    this.lights = new CityLights(renderer, streets.arrays.lamp as Float32Array, ((landmarks.meta as { lights?: number[] }).lights ?? []));
+    // The lanterns on the walls light the street as the posts do.
+    const posts = streets.arrays.lamp as Float32Array, onWalls = (streets.arrays.wallLamp as Float32Array | undefined) ?? new Float32Array(0);
+    const lamps = new Float32Array(posts.length + (onWalls.length / 4) * 3);
+    lamps.set(posts);
+    for (let i = 0, o = posts.length; i < onWalls.length; i += 4, o += 3) lamps.set(onWalls.subarray(i, i + 3), o);
+    this.lights = new CityLights(renderer, lamps, ((landmarks.meta as { lights?: number[] }).lights ?? []));
     await Promise.all([add(this.streets.group), add(this.landmarks.group), add(this.lights.points)]);
     const trees = await rest.trees;
     // The trees of the canopy model (src/world/trees.ts).

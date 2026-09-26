@@ -69,8 +69,12 @@ function axisOf(site: Site, key: string, clip?: [number, number]): Axis {
 
 interface Style {
   face: Mat; ring: Mat; pier: Mat; coping: Mat;
-  /** Voussoirs alternating with the ring stone (Palacký). */
+  /** Voussoirs alternating with the ring stone (Palacký, Legion). */
   ring2?: Mat;
+  /** Radial voussoirs of about this length on the soffit, and the ring's depth (Legion); else vertical slices 0.9 m deep. */
+  voussoir?: number; band?: number;
+  /** The arches' underside, where it differs from the ring. */
+  soffit?: Mat;
   road: Mat; walk: Mat;
   /** 'segment': circular arcs; 'ellipse': flatter at the crown; 'steel': ribs and posts; 'truss': girders above the deck. */
   arch: 'segment' | 'ellipse' | 'steel' | 'truss';
@@ -201,6 +205,7 @@ function archBridge(site: Site, k: Kit, d: Kit, key: string, st: Style, clip?: [
   const girder = steel ? 1.5 : 0.9; // the deck's own depth over the crown
   const parH = st.parapet === 'rail' ? 0 : st.parapet === 'balustrade' ? 1.0 : 1.1;
 
+  const radial = (h: Span) => !!st.voussoir && h.kind === 'segment';
   // Stations: every 1.5 m under an arch, where the soffit curves; every 5 m elsewhere.
   const cuts = new Set<number>();
   for (const h of spans) {
@@ -225,14 +230,14 @@ function archBridge(site: Site, k: Kit, d: Kit, key: string, st: Style, clip?: [
         // The arch ring standing proud of the face; Palacký's alternates its stones.
         const band = 0.9, o = t + Math.sign(t) * 0.1;
         const m = st.ring2 && Math.floor((s0 - h.a) / 1.4) % 2 ? st.ring2 : st.ring;
-        k.poly([P3(s0, o, B0), P3(s1, o, B1), P3(s1, o, Math.min(B1 + band, d1)), P3(s0, o, Math.min(B0 + band, d0))], m, { normal: side(t) });
-        k.poly([P3(s0, t, B0), P3(s1, t, B1), P3(s1, o, B1), P3(s0, o, B0)], m, { normal: [0, -1, 0] });
+        if (!radial(h)) k.poly([P3(s0, o, B0), P3(s1, o, B1), P3(s1, o, Math.min(B1 + band, d1)), P3(s0, o, Math.min(B0 + band, d0))], m, { normal: side(t) });
+        k.poly([P3(s0, t, B0), P3(s1, t, B1), P3(s1, o, B1), P3(s0, o, B0)], radial(h) ? st.soffit ?? st.ring : m, { normal: [0, -1, 0] });
       }
     }
     // Underside.
     if (h) {
       const y0 = steel ? d0 - girder : B0, y1 = steel ? d1 - girder : B1;
-      k.poly([P3(s0, -H, y0), P3(s0, H, y0), P3(s1, H, y1), P3(s1, -H, y1)], steel ? STEEL : st.ring, { normal: [0, -1, 0] });
+      k.poly([P3(s0, -H, y0), P3(s0, H, y0), P3(s1, H, y1), P3(s1, -H, y1)], steel ? STEEL : st.soffit ?? st.ring, { normal: [0, -1, 0] });
     }
     // Deck: road, raised walks, parapets.
     const walkW = Math.min(3.2, H * 0.28), inner = H - (parH ? 0.45 : 0.1);
@@ -266,6 +271,34 @@ function archBridge(site: Site, k: Kit, d: Kit, key: string, st: Style, clip?: [
   for (const h of spans)
     for (const [s, dir] of [[h.a, 1], [h.b, -1]] as const)
       k.poly([P3(s, -H, foot(s)), P3(s, H, foot(s)), P3(s, H, h.spring), P3(s, -H, h.spring)], st.pier, { normal: [A.D[0] * dir, 0, A.D[1] * dir] });
+
+  // Radial voussoirs (8440): pale granite stones round each arch, two tones alternating and each
+  // its own shade, the joints a hair's gap onto the darker face behind; the ring's top stays under
+  // the string course.
+  for (const h of spans) {
+    if (!radial(h) || steel) continue;
+    const w = h.b - h.a, m = (h.a + h.b) / 2;
+    const R = (w * w / 4 + h.rise * h.rise) / (2 * h.rise), yc = h.spring + h.rise - R;
+    const th = Math.asin(Math.min(1, w / 2 / R)), band = st.band ?? 1.1;
+    const n = Math.max(8, Math.round((2 * th * R) / st.voussoir!)), gap = 0.03 / R;
+    const at = (a: number, r: number, t: number) => {
+      const s = m + r * Math.sin(a);
+      return P3(s, t, Math.min(yc + r * Math.cos(a), deck(s) - 0.55));
+    };
+    for (let q = 0; q < n; q++) {
+      const a0 = -th + (2 * th * q) / n + gap, a1 = -th + (2 * th * (q + 1)) / n - gap, am = (a0 + a1) / 2;
+      // Every other stone reaches a little higher, as dressed voussoirs do.
+      const r1 = R + band * (q % 2 ? 1 : 0.86);
+      const mq = st.ring2 && q % 2 ? st.ring2 : st.ring;
+      const tone = 0.93 + 0.12 * (((q * 7919 + k.seed * 31) % 97) / 97);
+      for (const t of [-H, H]) {
+        const o = t + Math.sign(t) * 0.1;
+        k.poly([at(a0, R, o), at(a1, R, o), at(a1, r1, o), at(a0, r1, o)], mq, { normal: side(t), shade: tone });
+        // The stone's top, where it stands proud of the face.
+        k.poly([at(a0, r1, t), at(a1, r1, t), at(a1, r1, o), at(a0, r1, o)], mq, { normal: [Math.sin(am) * A.D[0], Math.cos(am), Math.sin(am) * A.D[1]], shade: tone });
+      }
+    }
+  }
 
   // Open spandrels: a row of dark openings over each arch, between the ring and the deck.
   if (st.open)
@@ -352,8 +385,11 @@ function archBridge(site: Site, k: Kit, d: Kit, key: string, st: Style, clip?: [
 
 // ---- The bridges -------------------------------------------------------------------------------
 
+// Changed in M10 (8440): the arch rings pale granite voussoirs, the piers' ashlar warmer.
 const legion: Style = {
-  face: GRANITE, ring: shade(GRANITE, 0.92), pier: shade(GRANITE, 0.9), coping: mat('#8a857c', Surface.Stone, Stone.Ashlar, 0.3),
+  face: mat('#77716a', Surface.Stone, Stone.Ashlar, 0.5), ring: mat('#b9b3a7', Surface.Stone, Stone.Render, 0.25), ring2: mat('#a39d92', Surface.Stone, Stone.Render, 0.3),
+  voussoir: 0.62, band: 1.15, soffit: shade(GRANITE, 0.9),
+  pier: mat('#85766a', Surface.Stone, Stone.Ashlar, 0.5), coping: mat('#8a857c', Surface.Stone, Stone.Ashlar, 0.3),
   road: ASPHALT, walk: WALK, arch: 'segment', rise: 0.17, pierT: 4.6, cut: 3.4, cutwater: 'round', parapet: 'solid',
   arches: [3, 0, 6], land: [], clear: 6.3, lamp: 'candelabra',
 };

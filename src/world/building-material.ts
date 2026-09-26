@@ -2,9 +2,10 @@
 // plus the surfaces of design.md §8.1 and §8.2 drawn in the shader: window grids by facade style,
 // cornices and ground floors on walls; tile courses, weathering and north-slope lichen on roofs;
 // dark tops on chimneys, a window in each dormer; and for the landmarks (tools/landmarks/) stone
-// courses blackened in patches, slate, copper and gold, traceried windows and dark openings. Every
-// pattern is box-filtered by its own screen footprint, so at a distance it fades to its average
-// instead of shimmering.
+// courses blackened in patches, slate, copper and gold, traceried windows and dark openings. Near,
+// the close-ups' details (M9, M10): two-tone trim, casements, hoods, portals, round-headed windows,
+// stucco in relief, balconies and shutters. Every pattern is box-filtered by its own screen
+// footprint, so at a distance it fades to its average instead of shimmering.
 
 import * as THREE from 'three';
 import { patchLit } from '../sky/lit.ts';
@@ -35,6 +36,50 @@ float praStep(float e, float x, float w) { return clamp((x - e) / max(w, 1e-4) +
 // The box-filtered coverage of the rectangle [lo, hi] at p, for a footprint w.
 float praBox(vec2 p, vec2 lo, vec2 hi, vec2 w) {
   return (praStep(lo.x, p.x, w.x) - praStep(hi.x, p.x, w.x)) * (praStep(lo.y, p.y, w.y) - praStep(hi.y, p.y, w.y));
+}
+// The coverage of an ellipse centred at c with radii r (by an approximate distance).
+float praEll(vec2 p, vec2 c, vec2 r, vec2 w) {
+  float d = (length((p - c) / r) - 1.0) * min(r.x, r.y);
+  return 1.0 - clamp(d / max(max(w.x, w.y), 1e-4) + 0.5, 0.0, 1.0);
+}
+// An opening with a round head: a rectangle from y0 up to its spring ys, under a half disc of
+// radius hw centred at (0, ys).
+float praArch(vec2 p, float hw, float y0, float ys, vec2 w) {
+  float disc = praEll(p, vec2(0.0, ys), vec2(hw), w) * praStep(ys, p.y, w.y);
+  return clamp(praBox(p, vec2(-hw, y0), vec2(hw, ys), w) + disc, 0.0, 1.0);
+}
+// A thin line through the origin across n, for glazing bars.
+float praBar(vec2 q, vec2 n, float hw, vec2 w) {
+  float d = dot(q, n);
+  return praStep(-hw, d, max(w.x, w.y)) - praStep(hw, d, max(w.x, w.y));
+}
+// Stucco (8777), each as a coverage; drawn in relief by reading it twice, a few centimetres apart.
+// A cartouche filling an apron hw either side: a framed shield, a volute at each end, and a
+// garland sagging between them.
+float praCartouche(vec2 q, float hw, vec2 w) {
+  vec2 k = vec2(abs(q.x), q.y);
+  float s = praEll(q, vec2(0.0), vec2(0.19, 0.13), w);
+  s = max(s, praEll(q, vec2(0.0), vec2(0.27, 0.18), w) - praEll(q, vec2(0.0), vec2(0.235, 0.15), w));
+  float vx = hw - 0.11;
+  s = max(s, praEll(k, vec2(vx, 0.02), vec2(0.095), w) - praEll(k, vec2(vx, 0.02), vec2(0.042), w));
+  float t = (k.x - 0.25) / max(vx - 0.33, 0.05), yg = 0.03 - 0.1 * sin(3.1416 * clamp(t, 0.0, 1.0));
+  s = max(s, step(0.0, t) * step(t, 1.0) * (praStep(yg - 0.022, k.y, w.y) - praStep(yg + 0.022, k.y, w.y)));
+  return s;
+}
+// A wreath of leaves, 0.7 m across.
+float praWreath(vec2 q, vec2 w) {
+  float t = 0.055 + 0.025 * cos(atan(q.y, q.x) * 14.0);
+  return clamp(praEll(q, vec2(0.0), vec2(0.3 + t), w) - praEll(q, vec2(0.0), vec2(0.3 - t), w), 0.0, 1.0);
+}
+// A shell in a pediment: a fan with flutes.
+float praShell(vec2 q, vec2 w) {
+  return praEll(q, vec2(0.0), vec2(0.21, 0.17), w) * praStep(0.0, q.y, w.y) * (0.72 + 0.28 * cos(atan(q.y, q.x) * 11.0));
+}
+// Where the balconies are: on the 19th-century blocks the middle windows of the upper floors but
+// the top; on the rich fronts the window over the portal, on most palaces and some others.
+bool praBalcony(int style, bool rich, bool portal, float fl, float col, float n, float nS, float dcol, float hb) {
+  if (style == ${Style.Block}) return hb < 0.6 && abs(col - 0.5 * (n - 1.0)) < 0.6 && fl > 0.5 && fl < nS - 1.5;
+  return rich && portal && fl > 0.5 && fl < 1.5 && col == dcol && hb < (style == ${Style.Palace} ? 0.8 : 0.45);
 }
 `;
 
@@ -119,28 +164,71 @@ float praAbove = -1.0;
       // White casements; the modern fronts' frames are dark metal. From afar a window is glass
       // with its frame in it, a grey, not a black hole.
       vec3 frameC = orn ? vec3(0.78, 0.76, 0.7) : vec3(0.08, 0.085, 0.09);
+      // Painted over everything at the end: doors and balcony railings (M10).
+      vec3 ovC = vec3(0.0);
+      float ovA = 0.0;
+      #ifndef PRA_NO_DETAIL
       if (near > 0.0) {
         // Metres from the window's axis, and above the storey's floor.
         vec2 p = vec2((fract(cc) - 0.5) * span, fract(r) * sh), w2 = vec2(wu, wv);
-        float fl = floor(r);
+        float fl = floor(r), col = floor(cc);
         bool gf = fl < 0.5;
+        // Nothing below the ground floor, where a street falls away along a front.
+        float mCell = near * inside * step(0.0, fl) * step(fl, nS - 1.0);
         // The ground floor's plain windows take the same frames; shopfronts do not.
-        float m = near * inside * (gf ? (B.y > 0.5 ? 0.0 : 1.0) : step(fl, nS - 1.0));
+        float m = mCell * (gf && B.y > 0.5 ? 0.0 : 1.0);
         float W = A.y, y0 = gf ? 0.3 * sh : A.w, y1 = gf ? min(0.88 * sh, 0.3 * sh + A.z) : min(A.w + A.z, 0.9 * sh);
         float sw = rich ? 0.17 : 0.12;
-        float rect = praBox(p, vec2(-0.5 * W, y0), vec2(0.5 * W, y1), w2);
-        float sur = praBox(p, vec2(-0.5 * W - sw, y0 - sw), vec2(0.5 * W + sw, y1 + sw), w2) - rect;
+        // The portal (8777, 8082): one door to a street front, in the middle of a rich one.
+        float hd = praHash(vec2(seed * 2.3, L * 0.37)), hb = praHash(vec2(seed * 6.1, 1.7));
+        bool portal = party < 0.5 && top > 3.0 && hd < 0.9 && span > 1.9;
+        float dcol = rich && n >= 3.0 ? floor(n * 0.5) : floor(hd / 0.9 * n);
+        bool door = portal && gf && col == dcol;
+        bool balc = praBalcony(style, rich, portal, fl, col, n, nS, dcol, hb);
+        bool balcUp = praBalcony(style, rich, portal, fl + 1.0, col, n, nS, dcol, hb);
+        // Round-headed windows on the rich fronts' ground floors (8777).
+        bool arch = rich && gf && B.y < 0.5 && !door && praHash(vec2(seed * 1.7, 5.3)) < 0.65;
+        float ys = arch ? y1 - 0.5 * W : y1;
+        float yb = 0.12; // a balcony's floor above the storey's
+        float rect = arch ? praArch(p, 0.5 * W, y0, ys, w2) : praBox(p, vec2(-0.5 * W, y0), vec2(0.5 * W, y1), w2);
+        float sur = (arch ? praArch(p, 0.5 * W + sw, y0 - sw, ys, w2) : praBox(p, vec2(-0.5 * W - sw, y0 - sw), vec2(0.5 * W + sw, y1 + sw), w2)) - rect;
+        // Ears at the top corners of the surrounds on the rich fronts' upper windows.
+        if (rich && !gf) sur += praBox(vec2(abs(p.x), p.y), vec2(0.5 * W + sw, y1 + sw - 0.17), vec2(0.5 * W + sw + 0.08, y1 + sw), w2);
         // The sill: a lit ledge with its shadow under it; the rich fronts an apron panel below.
-        float sill = praBox(p, vec2(-0.5 * W - sw - 0.06, y0 - sw - 0.07), vec2(0.5 * W + sw + 0.06, y0 - sw + 0.01), w2);
-        float sillSh = praBox(p, vec2(-0.5 * W - sw, y0 - sw - 0.16), vec2(0.5 * W + sw, y0 - sw - 0.07), w2);
-        float apron = rich && !gf ? praBox(p, vec2(-0.5 * W + 0.05, y0 - sw - 0.62), vec2(0.5 * W - 0.05, y0 - sw - 0.22), w2) : 0.0;
+        float noSill = balc ? 0.0 : 1.0;
+        float sill = praBox(p, vec2(-0.5 * W - sw - 0.06, y0 - sw - 0.07), vec2(0.5 * W + sw + 0.06, y0 - sw + 0.01), w2) * noSill;
+        float sillSh = praBox(p, vec2(-0.5 * W - sw, y0 - sw - 0.16), vec2(0.5 * W + sw, y0 - sw - 0.07), w2) * noSill;
+        float apron = rich && !gf ? praBox(p, vec2(-0.5 * W + 0.05, y0 - sw - 0.62), vec2(0.5 * W - 0.05, y0 - sw - 0.22), w2) * noSill : 0.0;
+        if (door) { sur = 0.0; sill = 0.0; sillSh = 0.0; }
         c = mix(c, trim, clamp(sur + 0.55 * apron, 0.0, 1.0) * m);
         c = mix(c, trim * 1.15, sill * m);
         c *= 1.0 - 0.35 * sillSh * m;
+        // Stucco in relief, lit from above: a cartouche in the apron of the baroque and palace
+        // fronts (the Old Town's first floor only), a keystone over the upper windows of the rich
+        // fronts, a wreath on one pier of the first floor; a shell in its pediments (below).
+        vec2 up = vec2(0.0, 0.03);
+        float st0 = 0.0, st1 = 0.0;
+        if (rich && !gf && apron > 0.0 && (style != ${Style.OldTown} || fl < 1.5)) {
+          vec2 q = p - vec2(0.0, y0 - sw - 0.42);
+          st0 = praCartouche(q, 0.5 * W - 0.05, w2); st1 = praCartouche(q + up, 0.5 * W - 0.05, w2);
+        }
+        if (rich && fl > 1.5 && !balc) {
+          st0 = max(st0, praBox(p, vec2(-0.1, y1), vec2(0.1, y1 + sw + 0.12), w2));
+          st1 = max(st1, praBox(p + up, vec2(-0.1, y1), vec2(0.1, y1 + sw + 0.12), w2));
+        }
+        float hk = praHash(vec2(seed * 3.1, 9.2));
+        if (rich && fl > 0.5 && fl < 1.5) {
+          float pc = floor(praHash(vec2(seed * 8.7, 3.3)) * max(n - 1.0, 1.0));
+          if (praHash(vec2(seed * 5.5, 7.1)) < 0.4 && n > 1.5 && span - W > 1.1 && (col == pc || col == pc + 1.0)) {
+            vec2 q = p - vec2((col == pc ? 0.5 : -0.5) * span, 0.5 * (y0 + y1));
+            st0 = max(st0, praWreath(q, w2)); st1 = max(st1, praWreath(q + up, w2));
+          }
+        }
+        c = mix(c, trim * 1.1, st0 * m);
+        c *= 1.0 + (0.3 * st0 * (1.0 - st1) - 0.4 * (1.0 - st0) * st1) * m;
         // A hood over the window: on the first floor of the rich fronts segmental, triangular or
         // straight by building; over every upper window but the top row of the blocks, straight.
-        if ((rich && fl > 0.5 && fl < 1.5) || (style == ${Style.Block} && fl > 0.5 && fl < nS - 1.5)) {
-          float hk = praHash(vec2(seed * 3.1, 9.2));
+        if (((rich && fl > 0.5 && fl < 1.5) || (style == ${Style.Block} && fl > 0.5 && fl < nS - 1.5)) && !balc) {
           float yt = y1 + sw + 0.05, hwH = 0.5 * W + sw + 0.1;
           float xx = clamp(abs(p.x) / hwH, 0.0, 1.0);
           float rise = style == ${Style.Block} || hk < 0.34 ? 0.0 : hk < 0.67 ? 0.26 * sqrt(1.0 - xx * xx) : 0.34 * (1.0 - xx);
@@ -149,17 +237,110 @@ float praAbove = -1.0;
           float hoodSh = praBox(p, vec2(-hwH + 0.05, yt - 0.08), vec2(hwH - 0.05, yt), w2);
           c = mix(c, trim * 1.12, hood * m);
           c *= 1.0 - 0.4 * hoodSh * m;
+          // In a segmental or triangular pediment, a shell in relief.
+          if (rich && hk >= 0.34) {
+            vec2 q = p - vec2(0.0, yt + 0.03);
+            float s0 = praShell(q, w2), s1 = praShell(q + up, w2);
+            c *= 1.0 + (0.3 * s0 * (1.0 - s1) - 0.4 * (1.0 - s0) * s1 + 0.08 * s0) * m;
+          }
         }
-        // The casement: a frame, a mullion and a transom two thirds up; the upper panes take more sky.
-        float fw = 0.07, yT = y0 + 0.66 * (y1 - y0);
-        float panes = praBox(p, vec2(-0.5 * W + fw, y0 + fw), vec2(0.5 * W - fw, y1 - fw), w2);
+        // The window: a casement with a frame, a mullion and a transom two thirds up, the upper
+        // panes taking more sky; a round head has its fan of bars; a balcony's window is a door
+        // down to the balcony's floor, panelled below the sill.
+        float fw = 0.07, yT = arch ? ys : y0 + 0.66 * (y1 - y0);
+        float open = rect, panes;
+        if (arch) panes = praArch(p, 0.5 * W - fw, y0 + fw, ys, w2);
+        else panes = praBox(p, vec2(-0.5 * W + fw, y0 + fw), vec2(0.5 * W - fw, y1 - fw), w2);
+        if (balc) open = max(open, praBox(p, vec2(-0.5 * W, yb), vec2(0.5 * W, y0), w2));
         float bars = max(praBox(p, vec2(-0.035, y0), vec2(0.035, y1), w2), praBox(p, vec2(-0.5 * W, yT - 0.035), vec2(0.5 * W, yT + 0.035), w2));
-        frame = clamp(rect - panes * (1.0 - bars), 0.0, 1.0) * m;
+        if (arch) {
+          vec2 qf = p - vec2(0.0, ys);
+          bars = max(bars, max(praBar(qf, vec2(-0.7071, 0.7071), 0.03, w2), praBar(qf, vec2(0.7071, 0.7071), 0.03, w2)) * praStep(ys, p.y, wv));
+        }
+        if (!door) {
+          frame = clamp(open - panes * (1.0 - bars), 0.0, 1.0) * m;
+          win = mix(win, open, m);
+        }
         glass += vec3(0.03, 0.035, 0.04) * praStep(yT, p.y, wv) * m;
+        // Balconies: a slab on two consoles, its shadow on the wall under it, an iron railing.
+        for (int k = 0; k < 2; k++) {
+          if (k == 0 ? !balc : !balcUp) continue;
+          vec2 q = p - vec2(0.0, float(k) * sh);
+          float bw = 0.5 * W + 0.45;
+          float slab = praBox(q, vec2(-bw, yb - 0.16), vec2(bw, yb), w2);
+          float cons = praBox(vec2(abs(q.x), q.y), vec2(bw - 0.3, yb - 0.5), vec2(bw - 0.14, yb - 0.16), w2);
+          float under = praBox(q, vec2(-bw + 0.06, yb - 0.55), vec2(bw - 0.06, yb - 0.16), w2);
+          c *= 1.0 - 0.45 * under * (1.0 - cons) * mCell;
+          c = mix(c, trim * 0.92, cons * mCell);
+          c = mix(c, trim * 1.15, slab * mCell);
+          if (k == 0) {
+            float rails = max(praBox(q, vec2(-bw, yb + 0.9), vec2(bw, yb + 0.95), w2), praBox(q, vec2(-bw, yb + 0.03), vec2(bw, yb + 0.07), w2));
+            float bal = praPulse((q.x + bw) / 0.11, 0.0, 0.2, wu / 0.11) * praBox(q, vec2(-bw, yb), vec2(bw, yb + 0.92), w2);
+            ovC = vec3(0.025, 0.028, 0.028);
+            ovA = max(ovA, max(rails, bal) * mCell);
+          }
+        }
+        if (door) {
+          // The portal: a stone frame round the opening, round-headed on most baroque and palace
+          // fronts with a keystone, straight under a cornice on the rest; the leaves dark painted
+          // wood with raised panels; a fanlight or a transom light of glass above them.
+          float Wd = min(rich ? 1.7 : 1.3, span - 0.7), Hd = min(sh - 0.7, rich ? 3.1 : 2.6);
+          bool roundTop = style == ${Style.Baroque} || style == ${Style.Palace} ? hd < 0.6 : hd < 0.25;
+          float ps = rich ? 0.3 : 0.18;
+          float yS = roundTop ? Hd - 0.5 * Wd : Hd - 0.5;
+          float hole = roundTop ? praArch(p, 0.5 * Wd, 0.0, yS, w2) : praBox(p, vec2(-0.5 * Wd, 0.0), vec2(0.5 * Wd, Hd), w2);
+          float dfr = (roundTop ? praArch(p, 0.5 * Wd + ps, 0.0, yS, w2) : praBox(p, vec2(-0.5 * Wd - ps, 0.0), vec2(0.5 * Wd + ps, Hd + ps), w2)) - hole;
+          vec3 stoneC = rich ? mix(trim, vec3(0.6, 0.58, 0.53), 0.5) : trim * 1.05;
+          c = mix(c, stoneC, dfr * mCell);
+          if (roundTop) {
+            float key = praBox(p, vec2(-0.13, Hd - 0.08), vec2(0.13, Hd + ps + 0.1), w2);
+            c = mix(c, stoneC * 1.12, key * mCell);
+          } else if (rich) {
+            float cor = praBox(p, vec2(-0.5 * Wd - ps - 0.15, Hd + ps), vec2(0.5 * Wd + ps + 0.15, Hd + ps + 0.17), w2);
+            c = mix(c, stoneC * 1.12, cor * mCell);
+            c *= 1.0 - 0.4 * praBox(p, vec2(-0.5 * Wd - ps - 0.1, Hd + ps - 0.08), vec2(0.5 * Wd + ps + 0.1, Hd + ps), w2) * mCell * (1.0 - cor);
+          }
+          // Glass above the leaves, with bars.
+          float fan = clamp(hole - praBox(p, vec2(-0.5 * Wd, 0.0), vec2(0.5 * Wd, yS + 0.04), w2), 0.0, 1.0);
+          vec2 qf = p - vec2(0.0, yS);
+          float fb = roundTop
+            ? max(max(praBar(qf, vec2(-0.7071, 0.7071), 0.025, w2), praBar(qf, vec2(0.7071, 0.7071), 0.025, w2)), praBar(qf, vec2(1.0, 0.0), 0.025, w2))
+            : praBar(qf, vec2(1.0, 0.0), 0.025, w2);
+          fb = max(fb, fan - (roundTop ? praEll(p, vec2(0.0, yS), vec2(0.5 * Wd - 0.06), w2) : praBox(p, vec2(-0.5 * Wd + 0.06, yS + 0.1), vec2(0.5 * Wd - 0.06, Hd - 0.06), w2)));
+          frame = clamp(fan * fb, 0.0, 1.0) * mCell;
+          win = mix(win, fan, mCell);
+          frameC = vec3(0.06, 0.05, 0.04);
+          // The leaves.
+          float leaves = praBox(p, vec2(-0.5 * Wd, 0.0), vec2(0.5 * Wd, yS + 0.04), w2);
+          float hw2 = 0.5 * Wd;
+          vec2 a2 = vec2(abs(p.x), p.y);
+          float pan = praBox(a2, vec2(0.1, 0.25), vec2(hw2 - 0.1, 0.4 * yS), w2) + praBox(a2, vec2(0.1, 0.48 * yS), vec2(hw2 - 0.1, yS - 0.14), w2);
+          float panU = praBox(a2 + up, vec2(0.1, 0.25), vec2(hw2 - 0.1, 0.4 * yS), w2) + praBox(a2 + up, vec2(0.1, 0.48 * yS), vec2(hw2 - 0.1, yS - 0.14), w2);
+          float wk = praHash(vec2(seed * 9.1, 0.7));
+          vec3 wood = wk < 0.5 ? vec3(0.07, 0.038, 0.022) : wk < 0.75 ? vec3(0.028, 0.055, 0.038) : vec3(0.1, 0.03, 0.022);
+          wood *= 1.0 + 0.5 * pan * (1.0 - panU) - 0.4 * (1.0 - pan) * panU;
+          wood *= 1.0 - 0.6 * praBox(p, vec2(-0.012, 0.0), vec2(0.012, yS), w2);
+          ovC = wood;
+          ovA = leaves * mCell;
+        }
       }
+      // Shutters (design.md §8.2) on some plain houses and villas, not on the core's baroque fronts,
+      // which the photographs show without: two painted leaves beside each window, louvred, in
+      // faded colours; big enough to show from the drone.
+      float shK = praHash(vec2(seed * 4.3, 2.9));
+      if (style == ${Style.House} && shK < 0.12 && party < 0.5 && 2.0 * A.y < span - 0.4) {
+        float rows = praPulse(r, a, b, wr) * upper + (B.y > 0.5 ? 0.0 : praStep(0.0, r, wr) * (1.0 - praStep(1.0, r, wr)) * praPulse(r, 0.3, min(0.88, 0.3 + A.z / sh), wr));
+        float leaf = (praPulse(cc, 0.5 + hw, 0.5 + 2.0 * hw, wc) + praPulse(cc, 0.5 - 2.0 * hw, 0.5 - hw, wc)) * inside * rows;
+        vec3 shC = shK < 0.045 ? vec3(0.1, 0.17, 0.11) : shK < 0.07 ? vec3(0.17, 0.09, 0.045) : shK < 0.095 ? vec3(0.24, 0.29, 0.23) : vec3(0.21, 0.065, 0.045);
+        float lv = v / 0.07;
+        shC *= 1.0 - 0.3 * praPulse(lv, 0.0, 0.35, max(fwidth(lv), 1e-4)) * (1.0 - smoothstep(0.3, 0.7, fwidth(lv)));
+        c = mix(c, shC, leaf);
+      }
+      #endif
       glass = mix(glass, frameC, (orn ? 0.22 : 0.12) * (1.0 - near));
       c = mix(c, glass, win);
       c = mix(c, frameC, frame * win);
+      c = mix(c, ovC, ovA);
       // At night a quarter of the windows are lit, and half the shopfronts: warm, some whiter.
       float hl = praHash(vec2(floor(cc) * 1.7 + seed * 5.3, floor(r) * 2.3 + seed));
       float lit = step(hl, r < 1.0 ? 0.4 : 0.18);
@@ -168,7 +349,9 @@ float praAbove = -1.0;
     }
     diffuseColor.rgb = c;
     praGlass = win * (1.0 - frame);
-    praAbove = v;
+    // Where a street falls away along a front, the wall below the building's ground is at the
+    // street's level for the lamps' pools, not unlit.
+    praAbove = max(v, 0.0);
   } else if (kind == ${Surface.Roof} || kind == ${Surface.DormerRoof}) {
     float u = vFacade.x, s = vFacade.y, smax = vFacade.z;
     float course = s / 0.34;
@@ -319,11 +502,14 @@ float praAbove = -1.0;
 vec3 praPoolE = praAbove >= 0.0 ? diffuseColor.rgb * praLampPool(vPraWorld, praAbove) * 0.14 : vec3(0.0);
 `;
 
-/** The close-up details of M9 (1 on, 0 off; `?detail=0` in development, to measure their cost). */
+/** The close-up details of M9 and M10 (1 on, 0 off; `?detail=0` in development, to measure their cost). */
 export const DETAIL = { value: 1 };
 
 export function buildingMaterial(): THREE.MeshStandardMaterial {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88, metalness: 0 });
+  // `?detail=0` leaves the facades' near details out of the shader altogether, so that a benchmark
+  // also measures what their code costs where it is not drawn.
+  if (import.meta.env.DEV && new URLSearchParams(location.search).get('detail') === '0') m.defines = { PRA_NO_DETAIL: '' };
   const styleA = STYLES.map((s) => new THREE.Vector4(s.cell, s.winW, s.winH, s.sill));
   const styleB = STYLES.map((s) => new THREE.Vector4(s.storey, s.ground, 0, 0));
   return patchLit(m, (shader) => {

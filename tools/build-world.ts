@@ -108,6 +108,19 @@ const waterFeatures = features(waterEls, (t) =>
   (t.natural === 'water' || t.waterway === 'riverbank') && !underground(t) && t.water !== 'wastewater',
 );
 log(`water: ${waterFeatures.length} areas`);
+// The Čertovka, the mill race between Kampa and Malá Strana (design.md §8.5, M10): its banks are
+// dark and overgrown (9204), not the river's pale embankments.
+const certovka = waterEls.filter((el) => el.type === 'way' && el.tags?.name === 'Čertovka' && !underground(el.tags ?? {})).map(lineOf);
+function certovkaDist(x: number, z: number): number {
+  let best = Infinity;
+  for (const l of certovka)
+    for (let i = 0; i + 3 < l.length; i += 2) {
+      const ax = l[i], az = l[i + 1], dx = l[i + 2] - ax, dz = l[i + 3] - az;
+      const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz || 1)));
+      best = Math.min(best, Math.hypot(ax + dx * t - x, az + dz * t - z));
+    }
+  return best;
+}
 
 // ---- Land use raster ----------------------------------------------------------------------
 
@@ -588,7 +601,7 @@ let landmarkMeshes: Built[];
     const river = waterFeatures
       .filter((f) => /^(river|canal|lock|harbour)$/.test(f.tags.water ?? '') || f.tags.waterway === 'riverbank' || f.tags.water === 'stream')
       .flatMap((f) => f.tags.water === 'stream' ? f.polygons.filter(core) : f.polygons);
-    const metres = embankments(river, { water, level, bare }, k, seen);
+    const metres = embankments(river, { water, level, bare }, k, seen, (x, z) => certovkaDist(x, z) < 16);
     landmarkMeshes.push({ id: 'embankments', main: k.finish(), detail: d.finish() });
     log(`embankments: ${(metres / 1000).toFixed(1)} km of wall, ${k.triangles} triangles`);
   }
@@ -960,21 +973,59 @@ let railPos: Float32Array;
     pos.push(...rp.slice(rs[k] * 3, rs[k + 1] * 3));
     starts.push(pos.length / 3);
   }
-  // Lamps: on the ground, or on a bridge deck.
-  const lp: number[] = [];
+  // Lamps: on the ground, or on a bridge deck; in the old town's streets, a lamp that stands
+  // against a house hangs from a bracket on its wall (8082, 8777; M10).
+  const OLD = new Set<number>([District.MalaStrana, District.Hradcany, District.StareMesto, District.Josefov]);
+  const EG = 20, edges = new Map<number, number[]>();
+  for (const b of kept) {
+    if (b.part || Math.abs(b.cx) > 2500 || Math.abs(b.cz) > 2500) continue;
+    const r = b.poly.outer, n = r.length / 2;
+    for (let i = 0; i < n; i++) {
+      const ax = r[i * 2], az = r[i * 2 + 1], bx = r[((i + 1) % n) * 2], bz = r[((i + 1) % n) * 2 + 1];
+      for (let gx = Math.floor((Math.min(ax, bx) - 3) / EG); gx <= Math.floor((Math.max(ax, bx) + 3) / EG); gx++)
+        for (let gz = Math.floor((Math.min(az, bz) - 3) / EG); gz <= Math.floor((Math.max(az, bz) + 3) / EG); gz++) {
+          const key = gx * 100000 + gz;
+          (edges.get(key) ?? edges.set(key, []).get(key)!).push(ax, az, bx, bz);
+        }
+    }
+  }
+  /** The nearest wall within 3 m: the foot of the perpendicular, and the way out from it. */
+  const wallNear = (x: number, z: number) => {
+    const list = edges.get(Math.floor(x / EG) * 100000 + Math.floor(z / EG));
+    let best = 3, out: [number, number, number, number] | null = null;
+    for (let i = 0; list && i < list.length; i += 4) {
+      const ax = list[i], az = list[i + 1], dx = list[i + 2] - ax, dz = list[i + 3] - az, L2 = dx * dx + dz * dz;
+      if (L2 < 1) continue;
+      const t = Math.max(0.05, Math.min(0.95, ((x - ax) * dx + (z - az) * dz) / L2));
+      const fx = ax + dx * t, fz = az + dz * t, d = Math.hypot(x - fx, z - fz);
+      if (d < best) {
+        best = d;
+        // Away from the wall on the lamp's side (the street's), whatever the ring's winding.
+        const L = Math.sqrt(L2);
+        let nx = -dz / L, nz = dx / L;
+        if ((x - fx) * nx + (z - fz) * nz < 0) { nx = -nx; nz = -nz; }
+        out = [fx, fz, nx, nz];
+      }
+    }
+    return out;
+  };
+  const lp: number[] = [], wl: number[] = [];
   for (const el of layer('lamps')) {
     if (el.type !== 'node' || el.lat === undefined || el.lon === undefined) continue;
     const x = lonToX(el.lon), z = latToZ(el.lat);
     if (x <= WORLD.xMin || x >= WORLD.xMax || z <= WORLD.zMin || z >= WORLD.zMax) continue;
     if (modelledDecks.some((d) => pointInPolygon(x, z, d.poly))) continue;
-    let y = ground.sample(x, z);
-    for (const d of decks) if (pointInPolygon(x, z, d.poly)) { y = d.top; break; }
+    let y = ground.sample(x, z), deck = false;
+    for (const d of decks) if (pointInPolygon(x, z, d.poly)) { y = d.top; deck = true; break; }
     if (Number.isNaN(y)) continue;
-    lp.push(x, y, z);
+    const w = !deck && OLD.has(districtAt(districts, x, z)) ? wallNear(x, z) : null;
+    // The lantern 0.8 m out from the wall, the bracket's heading as an angle.
+    if (w) wl.push(w[0] + w[2] * 0.8, ground.sample(w[0] + w[2] * 0.8, w[1] + w[3] * 0.8), w[1] + w[3] * 0.8, Math.atan2(w[2], w[3]));
+    else lp.push(x, y, z);
   }
   railPos = new Float32Array(pos);
-  streetsPack = encodePack({}, { railStart: new Uint32Array(starts), rail: railPos, lamp: new Float32Array(lp), pole: new Float32Array(poles) });
-  log(`streets: ${km.toFixed(0)} km of tram track in ${starts.length - 1} runs, ${lp.length / 3} lamps, ${poles.length / 4} wire poles`);
+  streetsPack = encodePack({}, { railStart: new Uint32Array(starts), rail: railPos, lamp: new Float32Array(lp), wallLamp: new Float32Array(wl), pole: new Float32Array(poles) });
+  log(`streets: ${km.toFixed(0)} km of tram track in ${starts.length - 1} runs, ${lp.length / 3} lamps and ${wl.length / 4} on walls, ${poles.length / 4} wire poles`);
 }
 
 // ---- City life (design.md §8.8, tools/lib/life.ts) ---------------------------------------------
@@ -1083,6 +1134,32 @@ let treesPack: Uint8Array | null = null;
             trees.push({ x: x0 + (u - 0.5) * 0.4, z: z0 + (v - 0.5) * 0.4, h: 0.8 + 0.5 * v, r: 0.42 + 0.18 * u, kind: TreeKind.Rose, seed });
           }
       }
+    // The Čertovka's banks, overgrown (9204): bushes along both sides wherever no building stands
+    // on the water, their crowns hanging over it.
+    {
+      const near = buildings.filter((b) => certovkaDist(b.cx, b.cz) < 60);
+      let shrubs = 0;
+      for (const l of certovka)
+        for (let i = 0; i + 3 < l.length; i += 2) {
+          const ax = l[i], az = l[i + 1], dx = l[i + 2] - ax, dz = l[i + 3] - az, len = Math.hypot(dx, dz);
+          if (len < 0.5) continue;
+          const nx = -dz / len, nz = dx / len;
+          for (let s = 0; s < len; s += 2.3)
+            for (const side of [-1, 1]) {
+              const px = ax + (dx * s) / len, pz = az + (dz * s) / len;
+              // The bank: out from the centreline to the first dry ground.
+              let d = 1;
+              while (d < 14 && wet(px + nx * side * d, pz + nz * side * d)) d += 0.5;
+              if (d >= 14) continue;
+              const seed = treeHash(px * 3 + side, pz * 3), u = seed / 256, v = ((seed * 131) % 256) / 256;
+              const x = px + nx * side * (d + 0.4 + 0.8 * u), z = pz + nz * side * (d + 0.4 + 0.8 * u);
+              if (near.some((b) => pointInPolygon(x, z, b.poly))) continue;
+              trees.push({ x, z, h: 2.6 + 2.2 * u, r: 1.6 + 1.0 * v, kind: TreeKind.Shrub, seed });
+              shrubs++;
+            }
+        }
+      log(`Čertovka: ${shrubs} bushes on its banks`);
+    }
     // By world tile, positions within the tile.
     const TNX = W / TILE, TNZ = D / TILE;
     const byTile: (typeof trees)[] = Array.from({ length: TNX * TNZ }, () => []);

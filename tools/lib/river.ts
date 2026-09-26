@@ -256,7 +256,7 @@ const OUT = 2, BACK = 3.5, PARAPET = 0.9, THICK = 0.5;
  * a face from below the water to the bank, a parapet, and the paved walk behind it, wide enough to
  * cover the slope the 5 m terrain grid makes there.
  */
-export function embankments(polys: Polygon[], g: RiverGrids, k: Kit, seen: (x: number, z: number) => boolean): number {
+export function embankments(polys: Polygon[], g: RiverGrids, k: Kit, seen: (x: number, z: number) => boolean, canal: (x: number, z: number) => boolean = () => false): number {
   const { bare } = g, C = bare.cell;
   const node = (x: number, z: number) => {
     const i = Math.round((x - bare.x0) / C), j = Math.round((z - bare.z0) / C);
@@ -291,7 +291,7 @@ export function embankments(polys: Polygon[], g: RiverGrids, k: Kit, seen: (x: n
         if (Number.isNaN(L)) return null;
         const B = Math.max(bare.sample(x + nx * 3, z + nz * 3), bare.sample(x + nx * 5.5, z + nz * 5.5));
         if (B - L < 0.9) return null;
-        return { x, z, nx, nz, L, B };
+        return { x, z, nx, nz, L, B, c: canal(x, z) };
       });
       // Walls along each run of valid points, the bank's height smoothed along it.
       let start = info.findIndex((q) => q === null);
@@ -301,7 +301,7 @@ export function embankments(polys: Polygon[], g: RiverGrids, k: Kit, seen: (x: n
       const flush = () => {
         if (run.length >= 2) {
           const B = run.map((_, i) => { let s = 0, c = 0; for (let d = -2; d <= 2; d++) { const q = run[i + d]; if (q) { s += q.B; c++; } } return s / c; });
-          for (let i = 0; i + 1 < run.length; i++) wallPiece(k, run[i], run[i + 1], B[i], B[i + 1]);
+          for (let i = 0; i + 1 < run.length; i++) (run[i].c && run[i + 1].c ? canalPiece : wallPiece)(k, run[i], run[i + 1], B[i], B[i + 1]);
           for (let i = 0; i + 1 < run.length; i++) metres += Math.hypot(run[i + 1].x - run[i].x, run[i + 1].z - run[i].z);
         }
         run = [];
@@ -313,6 +313,22 @@ export function embankments(polys: Polygon[], g: RiverGrids, k: Kit, seen: (x: n
 }
 
 interface Edge { x: number; z: number; nx: number; nz: number; L: number }
+
+// The Čertovka (9204, M10): old rubble walls dark with damp and moss at the water's edge, no
+// parapet and no walk; the bank above is dark ground under the bushes the world build puts there.
+const CANAL_FACE = mat('#4a4a3e', Surface.Stone, Stone.Rubble, 0.9);
+const CANAL_TOP = mat('#2e3327', Surface.Plain);
+const CANAL_OUT = 0.4;
+
+function canalPiece(k: Kit, a: Edge, b: Edge, Ba: number, Bb: number) {
+  const P = (e: Edge, d: number, y: number): V3 => [e.x + e.nx * d, y, e.z + e.nz * d];
+  const out: V3 = [-(a.nx + b.nx) / 2, 0, -(a.nz + b.nz) / 2];
+  k.ground = (a.L + b.L) / 2;
+  const lo = Math.min(a.L, b.L) - 1.2;
+  k.poly([P(a, -CANAL_OUT, lo), P(b, -CANAL_OUT, lo), P(b, -CANAL_OUT, Bb + 0.2), P(a, -CANAL_OUT, Ba + 0.2)], CANAL_FACE, { normal: out });
+  k.ground = (Ba + Bb) / 2;
+  k.poly([P(a, -CANAL_OUT, Ba + 0.2), P(b, -CANAL_OUT, Bb + 0.2), P(b, BACK, Bb), P(a, BACK, Ba)], CANAL_TOP, { normal: [0, 1, 0] });
+}
 
 function wallPiece(k: Kit, a: Edge, b: Edge, Ba: number, Bb: number) {
   const P = (e: Edge, d: number, y: number): V3 => [e.x + e.nx * d, y, e.z + e.nz * d];

@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { World } from './world/world.ts';
 import { DETAIL } from './world/building-material.ts';
+import { LENS } from './world/trees.ts';
 import { Atmosphere } from './sky/sky.ts';
 import { rollSession } from './sky/clouds.ts';
 import { TerrainShadow } from './sky/terrain-shadow.ts';
@@ -31,6 +32,8 @@ interface Viewpoint {
   weather: { seed: number; coverage: number; overcast: boolean; cirrus: number; cloudAt?: [number, number]; light?: Record<string, number> };
   /** Seconds of city life to show (trams, boats, people), so a frame always shows the same scene. */
   life?: number;
+  /** The camera's near plane, for a close-up (8722's roses); 3 m otherwise. */
+  near?: number;
 }
 // `?view=look` is a free camera for inspecting the world (set it with the nudges below).
 const LOOK: Viewpoint = { id: 'look', x: 0, north: 0, agl: 60, heading: 0, tilt: -10, focal35: 24, aspect: 1.5, clock: '17:30', weather: { seed: 1, coverage: 0.15, overcast: false, cirrus: 0 } };
@@ -39,7 +42,7 @@ const view: Viewpoint | undefined = import.meta.env.DEV && params.has('view')
   : undefined;
 if (view) {
   // Nudging a viewpoint while lining it up: /?view=8385&heading=40&tilt=-9 (tools/compare.ts id@heading=40,tilt=-9).
-  for (const k of ['x', 'north', 'agl', 'y', 'heading', 'tilt', 'focal35', 'aspect'] as const) if (params.has(k)) view[k] = Number(params.get(k));
+  for (const k of ['x', 'north', 'agl', 'y', 'heading', 'tilt', 'focal35', 'aspect', 'near'] as const) if (params.has(k)) view[k] = Number(params.get(k));
   // A height above ground is ambiguous over water and on bridges: `y` gives the eye's height instead.
   if (params.has('agl')) delete view.y;
   if (params.has('vclock')) view.clock = params.get('vclock')!;
@@ -63,6 +66,11 @@ renderer.info.autoReset = false;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(50, 1, 3, 60000);
+if (view?.near) {
+  // The reversed float depth keeps its precision with the near plane in close (design.md §11).
+  camera.near = view.near;
+  LENS.value = view.near + 0.15;
+}
 
 // The cover (design.md §10.2): the loading screen, then the first view under the title, until a
 // click or a key. Development URLs that place the drone skip it.
