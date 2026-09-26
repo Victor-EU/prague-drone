@@ -18,6 +18,8 @@ export interface PlanInput {
   edges: Uint8Array;
   /** Within about 75 m of the river: the embankment fronts (M14). */
   river?: boolean;
+  /** For a part: its outline's tagged storeys and height, which an untagged part inherits (M15). */
+  outlineLevels?: number; outlineHeight?: number;
 }
 
 export interface PlanOutput {
@@ -71,7 +73,9 @@ const FLAT_TYPES = new Set(['industrial', 'warehouse', 'retail', 'commercial', '
 /** The old town's districts, and the kinds of building whose single storey there is the import's error. */
 const OLD_TOWN = new Set<number>([District.MalaStrana, District.Hradcany, District.StareMesto, District.Josefov]);
 const TOWN_TYPES = new Set(['residential', 'apartments', 'hotel', 'office']);
-const CHURCH = new Set(['church', 'cathedral', 'chapel', 'basilica', 'monastery']);
+// Monasteries are not here: their wings are palaces (windows in rows, ordinary roofs), only their
+// basilicas are churches, and those the church generator builds (tools/landmarks/churches.ts, M15).
+const CHURCH = new Set(['church', 'cathedral', 'chapel', 'basilica', 'synagogue', 'temple']);
 /** Boats moored for good (restaurants, botels), which OSM maps as buildings. */
 const BOATS = new Set(['houseboat', 'ship']);
 /** Where a copper roof is at home when untagged (design.md §8.1, rule 5: churches, palaces). */
@@ -174,7 +178,10 @@ export function planBuilding(b: PlanInput): PlanOutput {
   // Facade style and storeys.
   const startYear = parseNumber((t.start_date ?? '').slice(0, 4));
   const small = SMALL.has(type);
-  const flatType = FLAT_TYPES.has(type);
+  // In the old town a "retail", "commercial" or "transportation" building of two storeys or more is a
+  // town house with a shop or a ticket hall, not a flat-roofed blank shed (8809, 8942: the building by the
+  // Lesser Town bridge end, M15).
+  const flatType = FLAT_TYPES.has(type) && !(OLD_TOWN.has(b.district) && (parseNumber(t['building:levels']) ?? 0) >= 2 && !/industrial|warehouse|hangar|parking|garage|stadium|storage|silo|manufacture/.test(type));
   const church = CHURCH.has(type);
   let style = rules.style;
   if (small || flatType || church) style = Style.Blank;
@@ -183,7 +190,8 @@ export function planBuilding(b: PlanInput): PlanOutput {
   // The cadastral import (RUIAN) gives hundreds of the old town's houses one storey, blocks of 4 to
   // 25 flats among them; such a storey count is taken as missing (design.md §8.1, M11: 8082, 8777).
   if (levels === 1 && OLD_TOWN.has(b.district) && !b.part && b.area > 100 && (TOWN_TYPES.has(type) || (parseNumber(t['building:flats']) ?? 0) >= 2)) levels = undefined;
-  const height = parseLength(t.height);
+  if (levels === undefined && b.part && b.outlineHeight === undefined) levels = b.outlineLevels;
+  const height = parseLength(t.height) ?? (b.part && levels === undefined ? b.outlineHeight : undefined);
   const roofHTag = parseLength(t['roof:height']);
   const roofLevels = parseNumber(t['roof:levels']);
   const modern = (startYear !== undefined && startYear >= 1950) || (levels !== undefined && levels >= 8);

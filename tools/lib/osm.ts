@@ -165,3 +165,43 @@ export function parseNumber(v: string | undefined): number | undefined {
   const n = parseFloat(v.replace(',', '.'));
   return isFinite(n) ? n : undefined;
 }
+
+/**
+ * Merges edges shorter than half a metre and drops points within 0.25 m of the line through
+ * their neighbours: what the straight skeleton and the tiles want of an OSM ring.
+ */
+export function simplifyRing(r: Ring): Ring {
+  let pts = r;
+  for (let guard = 0; guard < 64 && pts.length > 6; guard++) {
+    const n = pts.length / 2;
+    let shortest = -1, len = 0.5;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n, l = Math.hypot(pts[j * 2] - pts[i * 2], pts[j * 2 + 1] - pts[i * 2 + 1]);
+      if (l < len) { len = l; shortest = i; }
+    }
+    if (shortest < 0) break;
+    const i = shortest, j = (i + 1) % n;
+    const mx = (pts[i * 2] + pts[j * 2]) / 2, mz = (pts[i * 2 + 1] + pts[j * 2 + 1]) / 2;
+    const out: number[] = [];
+    for (let k = 0; k < n; k++) {
+      if (k === j) continue;
+      if (k === i) out.push(mx, mz); else out.push(pts[k * 2], pts[k * 2 + 1]);
+    }
+    pts = out;
+  }
+  for (let pass = 0; pass < 2; pass++) {
+    const n = pts.length / 2;
+    if (n <= 3) return pts;
+    const out: number[] = [];
+    for (let i = 0; i < n; i++) {
+      const px = pts[((i + n - 1) % n) * 2], pz = pts[((i + n - 1) % n) * 2 + 1];
+      const x = pts[i * 2], z = pts[i * 2 + 1];
+      const nx = pts[((i + 1) % n) * 2], nz = pts[((i + 1) % n) * 2 + 1];
+      const ex = nx - px, ez = nz - pz, len = Math.hypot(ex, ez);
+      const dist = len < 1e-6 ? Math.hypot(x - px, z - pz) : Math.abs((x - px) * ez - (z - pz) * ex) / len;
+      if (dist > 0.25 || out.length / 2 + (n - i) <= 3) out.push(x, z);
+    }
+    pts = out;
+  }
+  return pts;
+}

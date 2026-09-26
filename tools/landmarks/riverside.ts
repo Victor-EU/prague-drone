@@ -49,6 +49,35 @@ export const nationalTheatre: Model = {
     buildParts(site, k, ['way/481972519', 'way/481972520', 'way/565056632', 'way/565056633'], g, { wall: SAND, roof: () => COPPER });
     k.place(0, g, 0, 90); k.ground = g;
     k.prism(ringOf(site, 'way/7649971'), -2, 22, SAND, mat('#6d6f6a', Surface.FlatRoof), { windows: true, eave: g + 22 });
+    // The loggia on the front to Národní (M15): five round arches on columns over the arcade of the entrance.
+    {
+      const ring = ringOf(site, 'way/7649971');
+      let best: { a: V2; b: V2; n: V2; len: number } | null = null;
+      let area = 0;
+      for (let i = 0; i < ring.length; i++) { const j = (i + 1) % ring.length; area += ring[i][0] * ring[j][1] - ring[j][0] * ring[i][1]; }
+      const sg = Math.sign(area) || 1;
+      for (let i = 0; i < ring.length; i++) {
+        const a = ring[i], b = ring[(i + 1) % ring.length], dx = b[0] - a[0], dz = b[1] - a[1], len = Math.hypot(dx, dz);
+        const n: V2 = [(sg * dz) / len, (-sg * dx) / len];
+        if (n[1] < -0.7 && (!best || len > best.len)) best = { a, b, n, len };
+      }
+      if (best) {
+        const { a, b, n } = best, u: V3 = [n[1], 0, -n[0]], mid: V3 = [(a[0] + b[0]) / 2, 0, (a[1] + b[1]) / 2];
+        for (let q = -2; q <= 2; q++) {
+          k.plate(mid, u, [0, 1, 0], arch(4.2, 9.2, 'round').map(([x, y]) => [x, y + 8.6] as V2), OPENING, 0.06);
+          k.plate(mid, u, [0, 1, 0], arch(3.6, 6.2, 'round').map(([x, y]) => [x, y + 0.8] as V2), OPENING, 0.06);
+          const cx = mid[0] + u[0] * (q * 5.2 + 2.6) + n[0] * 0.9, cz = mid[2] + u[2] * (q * 5.2 + 2.6) + n[1] * 0.9;
+          if (q < 2) column(k, cx, cz, 8.6, 17.4, 0.55, SAND_STONE, { order: 'corinthian', sides: 10 });
+          mid[0] += 0; // the arches are spaced by q below
+        }
+        for (let q = -2; q <= 2; q++) {
+          const o: V3 = [mid[0] + u[0] * q * 5.2, 0, mid[2] + u[2] * q * 5.2];
+          k.plate(o, u, [0, 1, 0], arch(4.2, 9.2, 'round').map(([x, y]) => [x, y + 8.6] as V2), OPENING, 0.07);
+          k.plate(o, u, [0, 1, 0], arch(3.6, 6.2, 'round').map(([x, y]) => [x, y + 0.8] as V2), OPENING, 0.07);
+        }
+        balustrade(d, [[mid[0] + u[0] * -13, 8.6, mid[2] + u[2] * -13], [mid[0] + u[0] * 13, 8.6, mid[2] + u[2] * 13]].map(([x, y, z]) => [x + n[0] * 1.2, y, z + n[1] * 1.2] as V3), SAND_STONE, { h: 1.1, w: 0.28, step: 0.36, posts: true });
+      }
+    }
     k.prism(offsetRing(ringOf(site, 'way/7649971'), 0.5), 21.2, 22.3, SAND_STONE, SAND_STONE);
     // The auditorium's roof: a dark vault rising from the cornice, a gilded band and the crown.
     const au = orientedRect(site.feature('way/454893462')!.polygons[0].outer);
@@ -198,6 +227,23 @@ export const rudolfinum: Model = {
         const x = ax + ((bx - ax) * q) / n, z = az + ((bz - az) * q) / n, l = Math.hypot(x - cx, z - cz) || 1;
         d.box(x, z, 0.8, 0.8, 18, 19.1, STONE);
         statue(d, [x, 19.1, z], [(x - cx) / l, (z - cz) / l], 2.4, mat('#b9a887', Surface.Stone, Stone.Render, 0.3), 'single', 200 + i * 7 + q);
+      }
+    }
+    // The fronts (M15): round arches along the ground floor and, above, the windows of the
+    // upper storey between columns, on every face long enough.
+    for (let i = 0; i < main.length; i++) {
+      const [ax, az] = main[i], [bx, bz] = main[(i + 1) % main.length];
+      const len = Math.hypot(bx - ax, bz - az);
+      if (len < 20) continue;
+      let area = 0;
+      for (let q = 0; q < main.length; q++) { const j = (q + 1) % main.length; area += main[q][0] * main[j][1] - main[j][0] * main[q][1]; }
+      const sg = Math.sign(area) || 1, n: V2 = [(sg * (bz - az)) / len, (-sg * (bx - ax)) / len], u: V3 = [n[1], 0, -n[0]];
+      const mid: V3 = [(ax + bx) / 2, 0, (az + bz) / 2], count = Math.floor((len - 4) / 5.6), pitch = (len - 4) / count;
+      for (let q = 0; q < count; q++) {
+        const off = (q - (count - 1) / 2) * pitch;
+        k.plate([mid[0] + u[0] * off, 0, mid[2] + u[2] * off], u, [0, 1, 0], arch(2.6, 4.6, 'round').map(([x, y]) => [x, y + 1.0] as V2), OPENING, 0.06);
+        traceryWindow(k, f, mid, u, [0, 1, 0], off, 8.6, 2.2, 4.8, STONE, WINDOW, { kind: 'round', lights: 1, proud: 0.12, depth: 0.24 });
+        if (q + 1 < count) column(k, mid[0] + u[0] * (off + pitch / 2) + n[0] * 0.5, mid[2] + u[2] * (off + pitch / 2) + n[1] * 0.5, 7.4, 15.6, 0.45, STONE, { order: 'corinthian', sides: 10 });
       }
     }
     k.light([out.cx, 10, out.cz], 1);

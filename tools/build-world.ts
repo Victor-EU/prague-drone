@@ -22,7 +22,7 @@ import { WORLD, TILE, HORIZON, DATUM, xToLon, zToLat, lonToX, latToZ } from '../
 import { Ground, GROUND_COLOURS, CANOPY_SHIFT, CANOPY_MASK } from '../src/core/landuse.ts';
 import { encodePack, type Typed } from '../src/core/pack.ts';
 import {
-  loadLayer, layerExists, features, lineOf, parseLength, parseNumber, pointInPolygon, pointInRing, signedArea,
+  loadLayer, layerExists, features, lineOf, parseLength, parseNumber, pointInPolygon, pointInRing, signedArea, simplifyRing,
   type Polygon, type Ring, type Tags, type Feature,
 } from './lib/osm.ts';
 import { Grid, scanPolygon, scanLine, polygonRings } from './lib/raster.ts';
@@ -437,41 +437,7 @@ function centroid(r: Ring): [number, number] {
  * vertices (0.25 m tolerance). The small steps OSM outlines carry are invisible from the air and
  * make the roofs' straight skeletons degenerate.
  */
-function simplify(r: Ring): Ring {
-  let pts = r;
-  for (let guard = 0; guard < 64 && pts.length > 6; guard++) {
-    const n = pts.length / 2;
-    let shortest = -1, len = 0.5;
-    for (let i = 0; i < n; i++) {
-      const j = (i + 1) % n, l = Math.hypot(pts[j * 2] - pts[i * 2], pts[j * 2 + 1] - pts[i * 2 + 1]);
-      if (l < len) { len = l; shortest = i; }
-    }
-    if (shortest < 0) break;
-    const i = shortest, j = (i + 1) % n;
-    const mx = (pts[i * 2] + pts[j * 2]) / 2, mz = (pts[i * 2 + 1] + pts[j * 2 + 1]) / 2;
-    const out: number[] = [];
-    for (let k = 0; k < n; k++) {
-      if (k === j) continue;
-      if (k === i) out.push(mx, mz); else out.push(pts[k * 2], pts[k * 2 + 1]);
-    }
-    pts = out;
-  }
-  for (let pass = 0; pass < 2; pass++) {
-    const n = pts.length / 2;
-    if (n <= 3) return pts;
-    const out: number[] = [];
-    for (let i = 0; i < n; i++) {
-      const px = pts[((i + n - 1) % n) * 2], pz = pts[((i + n - 1) % n) * 2 + 1];
-      const x = pts[i * 2], z = pts[i * 2 + 1];
-      const nx = pts[((i + 1) % n) * 2], nz = pts[((i + 1) % n) * 2 + 1];
-      const ex = nx - px, ez = nz - pz, len = Math.hypot(ex, ez);
-      const dist = len < 1e-6 ? Math.hypot(x - px, z - pz) : Math.abs((x - px) * ez - (z - pz) * ex) / len;
-      if (dist > 0.25 || out.length / 2 + (n - i) <= 3) out.push(x, z);
-    }
-    pts = out;
-  }
-  return pts;
-}
+function simplify(r: Ring): Ring { return simplifyRing(r); }
 
 /** Snaps a ring to the decimetre grid the tiles store, so roofs meet their walls exactly. */
 function quantize(r: Ring): Ring {
@@ -494,11 +460,13 @@ const featureOf = new Map<string, Feature>();
   const els = layer('buildings');
   for (const f of features(els, (t) => {
     if (underground(t) && t.location === 'underground') return false;
-    if (t['building:part'] && t['building:part'] !== 'no') return !SKIP_BUILDING.has(t['building:part']);
+    // Roof-only parts (building:part=roof) reach the landmark models (a spire drawn as a roof part, M15) but not the tiles.
+    if (t['building:part'] && t['building:part'] !== 'no') return t['building:part'] === 'roof' || !SKIP_BUILDING.has(t['building:part']);
     return !!t.building && !SKIP_BUILDING.has(t.building);
   })) {
     const part = !!f.tags['building:part'] && f.tags['building:part'] !== 'no' && !f.tags.building;
     featureOf.set(f.key, f);
+    if (f.tags['building:part'] === 'roof' && !f.tags.building) continue;
     for (const p of f.polygons) {
       const poly = { outer: quantize(simplify(p.outer)), holes: p.holes.map((h) => quantize(simplify(h))).filter((h) => h.length >= 6) };
       if (poly.outer.length < 6) continue;
@@ -543,6 +511,10 @@ const featureOf = new Map<string, Feature>();
     for (const p of inside) {
       (p as any).ground = g;
       (p as any).outline = b.key;
+      // An untagged part takes its outline's storeys and height (M15: a flat part of a one-storey house by
+      // the river stood three storeys tall and blank in 8809).
+      (p as any).outlineLevels = parseNumber(b.tags['building:levels']);
+      (p as any).outlineHeight = parseLength(b.tags.height);
       if (p.landmark < 0) p.landmark = b.landmark;
     }
   }
@@ -576,6 +548,8 @@ for (const m of MODELS)
     modelled.add(k);
   }
 const replacedKeys = new Set(MODELS.flatMap((m) => m.replaces ?? []));
+const districts = districtMaps(features(layer('districts'), (t) => t.boundary === 'cadastral'));
+log(`districts: ${districts.length} cadastral areas`);
 let landmarkMeshes: Built[];
 /** The water surface at a point, or NaN on land (the landmarks' site reports it; kept for the fronts near the river, M14). */
 let waterAt: (x: number, z: number) => number = () => NaN;
@@ -604,9 +578,14 @@ let waterAt: (x: number, z: number) => number = () => NaN;
       if (!l) throw new Error(`no landmark ${id}`);
       return { x: l.x, z: -l.north };
     },
+    features: (filter) => [...featureOf.values()].filter((f) => filter(f.tags, f.key)),
+    claimed: (key) => replacedKeys.has(key) || modelled.has(landmarkOf.get(key) ?? -1),
+    district: (x, z) => districts.find((m) => x >= m.box[0] && x <= m.box[1] && z >= m.box[2] && z <= m.box[3] && pointInPolygon(x, z, m.poly))?.name ?? '',
   };
   waterAt = site.water;
   landmarkMeshes = await buildLandmarks(site, log);
+  // What the generators' models replace (the churches, M15) joins the hand models' list.
+  for (const b of landmarkMeshes) for (const key of b.replaces ?? []) replacedKeys.add(key);
   // The embankment walls along the river and its channels, in the same pack (tools/lib/river.ts).
   {
     const k = new Kit(), d = new Kit();
@@ -655,8 +634,6 @@ let waterAt: (x: number, z: number) => number = () => NaN;
 
 // ---- Districts, party walls, roofs (design.md §7.2, §8.1, §8.2) -------------------------------
 
-const districts = districtMaps(features(layer('districts'), (t) => t.boundary === 'cadastral'));
-log(`districts: ${districts.length} cadastral areas`);
 
 function ringsOf(p: Polygon): Ring[] { return [p.outer, ...p.holes]; }
 
@@ -802,6 +779,7 @@ async function planAll(inputs: PlanInput[]): Promise<PlanOutput[]> {
     return {
       key: b.key, part: b.part, tags: b.tags, area: b.area, cx: b.cx, poly: b.poly,
       landmark: b.landmark >= 0 ? landmarks[b.landmark].id : undefined,
+      outlineLevels: (b as any).outlineLevels, outlineHeight: (b as any).outlineHeight,
       gmin: g.min, gref: g.ref, district: districtAt(districts, b.cx, b.cz), edges: b.edges,
       river: nearRiver(b.cx, b.cz),
     };

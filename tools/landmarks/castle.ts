@@ -7,13 +7,15 @@
 // grey roofs over the west and south wings, red over the Old Royal Palace, as the photographs from
 // Petřín and from across the river show (8753, 8809).
 
-import { Kit, mat, rect, ngon, arch, offsetRing, orientedRect, centreOf, type V2, type V3, type Mat } from './kit.ts';
+import { Kit, mat, rect, ngon, arch, offsetRing, orientedRect, centreOf, PROFILE, type V2, type V3, type Mat } from './kit.ts';
+import { pinnacle as crocketed, traceryWindow, balustrade } from './ornament.ts';
 import type { Model, Site } from './index.ts';
 import { Surface, Stone, Metal, Glass, Style } from '../../src/core/buildings.ts';
 
-const STONE = mat('#645c52', Surface.Stone, Stone.Ashlar, 1);
-const STONE_DARK = mat('#4f4943', Surface.Stone, Stone.Ashlar, 1);
-const TILES = mat('#5d6262', Surface.Metal, Metal.Slate);
+const STONE = mat('#6b6357', Surface.Stone, Stone.Ashlar, 1);
+const STONE_DARK = mat('#554e47', Surface.Stone, Stone.Ashlar, 1);
+const TILES = mat('#4f5456', Surface.Metal, Metal.Slate);
+const UP: V3 = [0, 1, 0];
 const SPIRE = mat('#34363a', Surface.Metal, Metal.Lead);
 const COPPER = mat('#6d9786', Surface.Metal, Metal.Copper);
 const COPPER_LANTERN = mat('#7aa292', Surface.Metal, Metal.Copper);
@@ -25,47 +27,66 @@ const PALACE = mat('#ece2cf', Surface.Wall, Style.Palace);
 const PALACE_GREY = mat('#6f7472', Surface.Roof);
 const PALACE_RED = mat('#a8664b', Surface.Roof);
 
-/** A pinnacle: a slim square shaft and a spirelet. */
-function pinnacle(k: Kit, x: number, z: number, y0: number, y1: number, w: number, top: number, m: Mat = STONE) {
-  k.box(x, z, w, w, y0, y1, m, null);
-  k.pyramid(rect(w * 1.1, w * 1.1, x, z), y1, top, m);
+/** A pinnacle: a slim square shaft, a moulded cap and a spirelet, crockets up its edges in the fine kit (M15). */
+function pinnacle(k: Kit, f: Kit, x: number, z: number, y0: number, y1: number, w: number, top: number, m: Mat = STONE) {
+  crocketed(k, f, x, z, y0, y1, top, w * 0.58, m, { sides: 4, crockets: true });
 }
 
 /** A west tower of St Vitus centred on the origin: square body, openwork octagonal spire. */
-function westTower(k: Kit, d: Kit, s: number) {
+function westTower(k: Kit, d: Kit, f: Kit, s: number) {
   const body = rect(s, s);
   k.prism(body, -3, 58, STONE, null);
-  for (const y of [22, 40]) k.prism(offsetRing(body, 0.2), y, y + 0.5, STONE_DARK, STONE_DARK);
+  for (const y of [22, 40]) k.sweep(body.map(([x, z]) => [x, y, z] as V3), PROFILE.string(0.3, 0.55), STONE_DARK, { closed: true });
+  // Corner buttresses with set-offs, pinnacled above the gallery.
   for (const [x, z] of offsetRing(body, 0.3)) {
-    k.box(x, z, 1.5, 1.5, -3, 56, STONE_DARK, null);
-    pinnacle(k, x, z, 56, 59.5, 1.3, 64);
+    const sx = Math.sign(x), sz = Math.sign(z);
+    k.box(x + sx * 0.25, z + sz * 0.25, 2.0, 2.0, -3, 30, STONE_DARK, null);
+    k.pyramid(rect(2.0, 2.0, x + sx * 0.25, z + sz * 0.25), 30, 31.2, STONE_DARK, [x, z]);
+    k.box(x, z, 1.5, 1.5, 30, 56, STONE_DARK, null);
+    pinnacle(k, f, x, z, 56, 59.5, 1.3, 64.5);
   }
   const faces: { o: V3; u: V3 }[] = [{ o: [0, 0, s / 2], u: [1, 0, 0] }, { o: [0, 0, -s / 2], u: [-1, 0, 0] }, { o: [s / 2, 0, 0], u: [0, 0, -1] }, { o: [-s / 2, 0, 0], u: [0, 0, 1] }];
-  for (const f of faces) {
-    k.plate([f.o[0], 44, f.o[2]], f.u, [0, 1, 0], arch(2.6, 11, 'pointed', 2), DARK, 0.05);
-    k.plate([f.o[0], 27, f.o[2]], f.u, [0, 1, 0], arch(2.4, 10, 'pointed', 1.8), TRACERY, 0.05);
+  for (const fc of faces) {
+    traceryWindow(k, f, fc.o, fc.u, UP, 0, 44, 2.6, 11, STONE_DARK, DARK, { lights: 2, rise: 2, proud: 0.16, depth: 0.3 });
+    traceryWindow(k, f, fc.o, fc.u, UP, 0, 27, 2.4, 10, STONE_DARK, TRACERY, { lights: 2, rise: 1.8, proud: 0.14, depth: 0.26, transom: true });
+    traceryWindow(k, f, fc.o, fc.u, UP, 0, 12, 1.6, 5, STONE_DARK, TRACERY, { lights: 1, rise: 1.2, proud: 0.12, depth: 0.22 });
   }
-  // Openwork spire: eight ribs with crockets, dark between them.
-  k.lathe(0, 0, [[s * 0.42, 58], [s * 0.3, 66], [s * 0.16, 76], [0, 84]], 8, SPIRE, { flat: true, phase: 22.5 });
+  // The gallery behind its balustrade, and the openwork spire: a slim dark core with eight
+  // crocketed ribs standing off it, lucarnes at its foot.
+  k.prism(offsetRing(body, 0.5), 56.6, 58, STONE_DARK, STONE_DARK);
+  balustrade(f, offsetRing(body, 0.45).map(([x, z]) => [x, 58, z] as V3), STONE_DARK, { h: 1.3, closed: true, posts: true, w: 0.28, step: 0.36 });
+  k.lathe(0, 0, [[s * 0.4, 58], [s * 0.36, 60], [s * 0.24, 68], [s * 0.1, 78], [0, 84]], 8, SPIRE, { flat: true, phase: 22.5 });
   for (let q = 0; q < 8; q++) {
     const a = ((q + 0.5) * Math.PI) / 4, c = Math.cos(a), sn = Math.sin(a);
-    d.beam([c * s * 0.45, 58.5, sn * s * 0.45], [c * 0.2, 83.5, sn * 0.2], 0.35, STONE_DARK);
+    k.beam([c * s * 0.47, 58.2, sn * s * 0.47], [c * 0.25, 83.6, sn * 0.25], 0.42, STONE_DARK);
+    for (const t of [0.25, 0.45, 0.65, 0.82]) {
+      const r = s * 0.47 * (1 - t) + 0.25 * t + 0.25, y = 58.2 + (83.6 - 58.2) * t;
+      f.lathe(c * r, sn * r, [[0.22, y - 0.2], [0, y + 0.55]], 4, STONE_DARK, { flat: true });
+    }
   }
-  d.ball(0, 84.4, 0, 0.35, GOLD, 6);
+  for (let q = 0; q < 4; q++) {
+    const a = (q * Math.PI) / 2;
+    k.push().at(s * 0.34 * Math.cos(a), 0, s * 0.34 * Math.sin(a), (a * 180) / Math.PI);
+    k.box(0.3, 0, 1.0, 1.4, 59.5, 61.6, STONE_DARK, null);
+    k.pyramid(rect(1.2, 1.6, 0.3, 0), 61.6, 63.4, SPIRE);
+    k.pop();
+  }
+  d.lathe(0, 0, [[0.08, 83.8], [0.06, 86.2]], 4, GOLD);
+  d.ball(0, 84.9, 0, 0.35, GOLD, 6);
 }
 
 export const castle: Model = {
   id: 'st-vitus',
   floodlit: true,
   replaces: ['relation/3367557'],
-  build(site: Site, k: Kit, d: Kit) {
-    k.seed = d.seed = 97;
+  build(site: Site, k: Kit, d: Kit, f: Kit) {
+    k.seed = d.seed = 97; f.seed = 98;
     const outline = site.feature('relation/15317899')!.polygons[0].outer;
     const r = orientedRect(outline);
     let bearing = r.w > r.d ? r.bearing : r.bearing + 90;
     if (Math.abs(((bearing - 69 + 540) % 360) - 180) > 90) bearing += 180;
     const g = site.bare(r.cx, r.cz);
-    for (const kit of [k, d]) { kit.place(r.cx, g, r.cz, bearing); kit.ground = g; }
+    for (const kit of [k, d, f]) { kit.place(r.cx, g, r.cz, bearing); kit.ground = g; }
     // Extent along the axis, and the key parts in local coordinates.
     let x0 = Infinity, x1 = -Infinity;
     for (let i = 0; i < outline.length; i += 2) { const l = k.local(outline[i], g, outline[i + 1]); x0 = Math.min(x0, l[0]); x1 = Math.max(x1, l[0]); }
@@ -98,10 +119,10 @@ export const castle: Model = {
       k.roof(amb, 21, { shape: 'skillion', pitch: 40, cap: 99, gable: () => false, direction: (((bearing + sz * 90) % 360 + 360) % 360) * Math.PI / 180 }, TILES, STONE);
       // Clerestory and aisle windows.
       for (let x = west + 16; x < xc - 8; x += 7) {
-        k.plate([x, 25, sz * hv], [sz, 0, 0], [0, 1, 0], arch(3.2, 13, 'pointed', 2.4), TRACERY, 0.05);
-        k.plate([x, 5, sz * 14], [sz, 0, 0], [0, 1, 0], arch(3, 13, 'pointed', 2.2), TRACERY, 0.05);
+        traceryWindow(k, f, [x, 0, sz * hv], [sz, 0, 0], UP, 0, 25, 3.2, 13, STONE_DARK, TRACERY, { lights: 3, rise: 2.4, transom: true, proud: 0.16, depth: 0.3 });
+        traceryWindow(k, f, [x, 0, sz * 14], [sz, 0, 0], UP, 0, 5, 3, 13, STONE_DARK, TRACERY, { lights: 3, rise: 2.2, transom: true, proud: 0.16, depth: 0.3 });
       }
-      for (let x = xc + 9; x < apseX - 1; x += 6.5) k.plate([x, 23.5, sz * hv], [sz, 0, 0], [0, 1, 0], arch(3.4, 15, 'pointed', 2.6), TRACERY, 0.05);
+      for (let x = xc + 9; x < apseX - 1; x += 6.5) traceryWindow(k, f, [x, 0, sz * hv], [sz, 0, 0], UP, 0, 23.5, 3.4, 15, STONE_DARK, TRACERY, { lights: 3, rise: 2.6, transom: true, proud: 0.16, depth: 0.3 });
     }
     // Chapels round the apse: a ring of low polygonal bays under one roof.
     const ring: V2[] = [];
@@ -113,7 +134,8 @@ export const castle: Model = {
     k.roof(chevet, 20, { shape: 'hipped', pitch: 38, cap: 5, gable: () => false }, TILES, STONE);
     // Flying buttresses: piers at the outer walls, arms up to the clerestory, pinnacles on top.
     const flyer = (px: number, pz: number, wx: number, wz: number) => {
-      pinnacle(k, px, pz, -3, 33, 1.9, 39.5, STONE_DARK);
+      k.box(px, pz, 1.9, 1.9, -3, 22, STONE_DARK, null);
+      pinnacle(k, f, px, pz, 22, 33, 1.9, 40, STONE_DARK);
       d.beam([px, 31.5, pz], [wx, 37.5, wz], 0.9, STONE_DARK);
       d.beam([px, 26.5, pz], [wx, 31.5, wz], 0.7, STONE_DARK);
     };
@@ -121,17 +143,24 @@ export const castle: Model = {
     for (let q = 1; q < 8; q++) {
       const a = -Math.PI / 2 + (q * Math.PI) / 8, c = Math.cos(a), s = Math.sin(a);
       flyer(apseX + 20.5 * c, 20.5 * s, apseX + (hv + 0.3) * c, (hv + 0.3) * s);
-      if (q % 2) k.plate([apseX + hv * c, 23.5, hv * s], [-s, 0, c], [0, 1, 0], arch(2.6, 15, 'pointed', 2.0), TRACERY, 0.05);
+      if (q % 2) traceryWindow(k, f, [apseX + hv * c, 0, hv * s], [-s, 0, c], UP, 0, 23.5, 2.6, 15, STONE_DARK, TRACERY, { lights: 2, rise: 2.0, transom: true, proud: 0.14, depth: 0.26 });
     }
-    for (const sz of [-1, 1]) for (let x = west + 16; x < xc - 8; x += 7) pinnacle(k, x + 3.5, sz * 14.6, 20, 25, 1.2, 29.5, STONE_DARK);
+    for (const sz of [-1, 1]) for (let x = west + 16; x < xc - 8; x += 7) { k.box(x + 3.5, sz * 14.6, 1.4, 1.4, -3, 20, STONE_DARK, null); pinnacle(k, f, x + 3.5, sz * 14.6, 20, 25, 1.2, 29.5, STONE_DARK); }
 
     // West front: rose window and gable between the towers, and the towers.
-    k.plate([west + 4, 26, 0], [0, 0, 1], [0, 1, 0], ngon(24, 5, 0).map(([a, b]) => [a, b + 5] as V2), ROSE, 0.06);
-    k.plate([west + 4, 5, 0], [0, 0, 1], [0, 1, 0], arch(5, 14, 'pointed', 4), TRACERY, 0.06);
+    k.plate([west + 4, 26, 0], [0, 0, 1], UP, ngon(24, 5, 0).map(([a, b]) => [a, b + 5] as V2), ROSE, 0.06);
+    f.sweep(ngon(24, 5.4, 0).map(([a, b]) => [west + 4, 31 + b, a] as V3), PROFILE.ring(0.5, 0.3), STONE_DARK, { v: [-1, 0, 0], closed: true });
+    traceryWindow(k, f, [west + 4, 0, 0], [0, 0, 1], UP, 0, 5, 5, 14, STONE_DARK, TRACERY, { lights: 3, rise: 4, transom: true, proud: 0.2, depth: 0.4 });
+    // The gable between the towers: pinnacles up both rakes and a finial at the ridge.
+    for (let q = 1; q <= 3; q++) {
+      const t = q / 4, y = 40 + 14 * t;
+      for (const sz of [-1, 1]) pinnacle(k, f, west + 3.8, sz * hv * (1 - t), y - 1.5, y + 0.5, y + 3.2, 0.7, STONE_DARK);
+    }
+    pinnacle(k, f, west + 3.8, 0, 52.5, 55, 0.9, 59, STONE_DARK);
     for (const t of [tw1, tw2]) {
-      for (const kit of [k, d]) kit.push().at(t[0], 0, t[2]);
-      westTower(k, d, 9.3);
-      for (const kit of [k, d]) kit.pop();
+      for (const kit of [k, d, f]) kit.push().at(t[0], 0, t[2]);
+      westTower(k, d, f, 9.3);
+      for (const kit of [k, d, f]) kit.pop();
     }
 
     // Crossing spire: a copper lantern and needle.
@@ -139,18 +168,26 @@ export const castle: Model = {
     d.ball(cr[0], 80.3, cr[2], 0.3, GOLD, 6);
 
     // The great south tower: dark body, golden clock, gallery with four cupolas, the stacked helmet.
-    for (const kit of [k, d]) kit.push().at(st[0], 0, st[2]);
+    for (const kit of [k, d, f]) kit.push().at(st[0], 0, st[2]);
     const sb = rect(15.2, 15.2);
     k.prism(sb, -3, 58, STONE, null);
-    for (const y of [20, 38]) k.prism(offsetRing(sb, 0.25), y, y + 0.6, STONE_DARK, STONE_DARK);
-    for (const [x, z] of offsetRing(sb, 0.4)) k.box(x, z, 2, 2, -3, 50, STONE_DARK, null);
-    k.plate([0, 22, 7.6], [1, 0, 0], [0, 1, 0], arch(4.5, 15, 'pointed', 3.4), TRACERY, 0.05);
+    for (const y of [20, 38]) k.sweep(sb.map(([x, z]) => [x, y, z] as V3), PROFILE.string(0.35, 0.6), STONE_DARK, { closed: true });
+    for (const [x, z] of offsetRing(sb, 0.4)) {
+      const sx = Math.sign(x), sz = Math.sign(z);
+      k.box(x + sx * 0.3, z + sz * 0.3, 2.6, 2.6, -3, 20, STONE_DARK, null);
+      k.pyramid(rect(2.6, 2.6, x + sx * 0.3, z + sz * 0.3), 20, 21.4, STONE_DARK, [x, z]);
+      k.box(x, z, 2, 2, 20, 50, STONE_DARK, null);
+    }
+    traceryWindow(k, f, [0, 0, 7.6], [1, 0, 0], UP, 0, 22, 4.5, 15, STONE_DARK, TRACERY, { lights: 3, rise: 3.4, transom: true, proud: 0.2, depth: 0.4 });
+    traceryWindow(k, f, [7.6, 0, 0], [0, 0, -1], UP, 0, 22, 4.5, 15, STONE_DARK, TRACERY, { lights: 3, rise: 3.4, transom: true, proud: 0.2, depth: 0.4 });
+    for (const [o, u] of [[[0, 0, -7.6], [-1, 0, 0]], [[-7.6, 0, 0], [0, 0, 1]]] as [V3, V3][]) traceryWindow(k, f, o, u, UP, 0, 30, 3.2, 9, STONE_DARK, DARK, { lights: 2, rise: 2.4, proud: 0.16, depth: 0.3 });
     for (const [o, u] of [[[0, 0, 7.6], [1, 0, 0]], [[7.6, 0, 0], [0, 0, -1]]] as [V3, V3][]) {
       k.plate([o[0], 44, o[2]], u, [0, 1, 0], ngon(24, 2.2, 0).map(([a, b]) => [a, b + 2.2] as V2), GOLD, 0.06);
       k.plate([o[0], 44, o[2]], u, [0, 1, 0], ngon(24, 1.7, 0).map(([a, b]) => [a, b + 2.2] as V2), mat('#243a52', Surface.Plain), 0.09);
     }
     k.loft(sb, 57, offsetRing(sb, 0.7), 58.4, STONE_DARK);
     k.prism(offsetRing(sb, 0.7), 58.4, 60.2, STONE, STONE_DARK);
+    balustrade(f, offsetRing(sb, 0.6).map(([x, z]) => [x, 60.2, z] as V3), STONE, { h: 1.3, closed: true, posts: true, w: 0.3, step: 0.38 });
     for (const [x, z] of offsetRing(sb, 0.2)) {
       k.lathe(x, z, [[1.1, 60], [1.1, 64.5]], 8, STONE, { flat: true, phase: 22.5 });
       k.lathe(x, z, [[1.4, 64.5], [1.5, 65.6], [1.0, 67.4], [0.35, 68.8], [0.25, 69.6], [0, 70.8]], 8, COPPER, { flat: true, phase: 22.5 });
@@ -168,7 +205,7 @@ export const castle: Model = {
     d.lathe(0, 0, [[0.08, 90.6], [0.06, 95.6]], 4, GOLD);
     d.ball(0, 92.3, 0, 0.5, GOLD, 8);
     d.box(0, 0, 0.16, 1.8, 93.8, 95.2, GOLD, GOLD);
-    for (const kit of [k, d]) kit.pop();
+    for (const kit of [k, d, f]) kit.pop();
 
     // The palace wings along the ridge: even windows, grey roofs west, red over the Old Royal Palace.
     const pal = site.feature('relation/3367557')!.polygons[0];
@@ -178,7 +215,7 @@ export const castle: Model = {
     gs.sort((a, b) => a - b);
     const gref = (gmin + gs[gs.length >> 1]) / 2;
     const eave = gref + 19.5;
-    for (const kit of [k, d]) { kit.place(r.cx, 0, r.cz, bearing); kit.ground = gref; }
+    for (const kit of [k, d, f]) { kit.place(r.cx, 0, r.cz, bearing); kit.ground = gref; }
     const outer = toLocal(pal.outer), holes = pal.holes.map(toLocal);
     k.prism(outer, gmin - 1, eave, PALACE, null, { windows: true, eave });
     for (const h of holes) k.prism(h, gmin - 1, eave, PALACE, null, { windows: true, eave, inward: true });
