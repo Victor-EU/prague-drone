@@ -570,6 +570,7 @@ export class Trees {
   readonly group = new THREE.Group();
   readonly count: number;
   private tiles: Tile[] = [];
+  private sprites: THREE.Mesh[] = [];
   private near = { centre: new THREE.Vector3(1e9, 0, 1e9), r: { value: NEAR1 } };
   private buckets: Bucket[][] = []; // [lod][kind]
   private sorted = new THREE.Vector3(1e9, 0, 1e9);
@@ -658,7 +659,13 @@ export class Trees {
       m.matrixAutoUpdate = false;
       m.layers.enable(REFLECT);
       this.group.add(m);
+      this.sprites.push(m);
     }
+  }
+
+  /** Whether the far trees' sprites cast shadows (the lite preset turns them off). */
+  set spriteShadows(on: boolean) {
+    for (const m of this.sprites) m.castShadow = on;
   }
 
   /** Sorts the trees round the camera into the near meshes, when it has moved far enough. */

@@ -1,6 +1,7 @@
 // Loads the prebuilt world (public/world/, made by tools/build-world.ts) and assembles the scene
-// parts: terrain, horizon, water, the streamed tiles of buildings and bridge decks, the streets'
-// furniture and the hand-built landmarks.
+// parts: terrain, horizon and water for the first frame; then, streamed in (design.md §10.2), the
+// tiles of buildings and bridge decks, the streets' furniture and lamps, the hand-built landmarks,
+// the trees and the city's life.
 
 import * as THREE from 'three';
 import { fetchPack } from '../core/pack.ts';
@@ -29,23 +30,29 @@ export interface Manifest {
   attribution: string;
 }
 
+interface Rest { streets: Promise<Pack>; landmarks: Promise<Pack>; trees: Promise<Pack | null>; life: Promise<Pack<LifeMeta> | null> }
+
 export class World implements Ground {
   readonly group = new THREE.Group();
   readonly manifest: Manifest;
   readonly terrain: Terrain;
   readonly buildings: Buildings;
-  readonly streets: Streets;
-  readonly landmarks: Landmarks;
   readonly water: Water;
-  readonly lights: CityLights;
-  readonly trees: Trees | null;
+  // Streamed in after the first frame (design.md §10.2), in this order: the streets and the lamps,
+  // the landmarks, the trees, the city's life.
+  streets: Streets | null = null;
+  landmarks: Landmarks | null = null;
+  lights: CityLights | null = null;
+  trees: Trees | null = null;
   /** The city's life (src/life/). */
-  readonly life: Life | null;
+  life: Life | null = null;
+  private rest: Rest;
+  private streamDone = false;
   readonly bounds: Manifest['world'];
   readonly height: HeightGrid;
   private surf: HeightGrid;
 
-  private constructor(base: string, manifest: Manifest, height: HeightGrid, surf: HeightGrid, landuse: THREE.Texture, horizon: HeightGrid, water: Pack, streets: Pack, landmarks: Pack, trees: Pack | null, life: Pack<LifeMeta> | null, renderer: THREE.WebGLRenderer) {
+  private constructor(base: string, manifest: Manifest, height: HeightGrid, surf: HeightGrid, landuse: THREE.Texture, horizon: HeightGrid, water: Pack, renderer: THREE.WebGLRenderer, rest: Rest) {
     this.manifest = manifest;
     this.bounds = manifest.world;
     this.height = height;
@@ -62,43 +69,75 @@ export class World implements Ground {
 
     this.buildings = new Buildings(base, manifest.tile, manifest.world);
     this.group.add(this.buildings.group);
-    this.streets = new Streets(streets);
-    this.group.add(this.streets.group);
-    this.landmarks = new Landmarks(landmarks, this.buildings.material);
-    this.group.add(this.landmarks.group);
-    // The trees of the canopy model (src/world/trees.ts).
-    this.trees = trees ? new Trees(trees as Pack<{ nx: number; nz: number; tile: number; x0: number; z0: number }>, height) : null;
-    if (this.trees) this.group.add(this.trees.group);
-    this.life = life ? new Life(life) : null;
-    if (this.life) this.group.add(this.life.group);
-    this.lights = new CityLights(renderer, streets.arrays.lamp as Float32Array, ((landmarks.meta as { lights?: number[] }).lights ?? []));
-    this.group.add(this.lights.points);
     reflects(this.terrain.group);
     reflects(horizonRing);
-    reflects(this.landmarks.group);
     // Every lit material takes the sky's haze and the terrain and cloud shadows.
     patchLit(horizonRing.material as THREE.Material);
+    this.rest = rest;
+  }
+
+  /** True once the streamed parts and every building tile are in. */
+  get complete() {
+    return this.streamDone && this.buildings.loaded >= this.buildings.total;
+  }
+
+  /**
+   * Streams in the parts that come after the first frame, each added as soon as its data is in and
+   * `prepare` (main.ts compiles its shaders, in parallel where the driver can) has run. Resolves when
+   * all are in the scene; the building tiles stream on their own.
+   */
+  async stream(renderer: THREE.WebGLRenderer, prepare: (o: THREE.Object3D) => Promise<void>) {
+    const rest = this.rest;
+    const add = async (o: THREE.Object3D) => {
+      await prepare(o);
+      this.group.add(o);
+    };
+    const [streets, landmarks] = await Promise.all([rest.streets, rest.landmarks]);
+    this.streets = new Streets(streets);
+    this.landmarks = new Landmarks(landmarks, this.buildings.material);
+    reflects(this.landmarks.group);
+    this.lights = new CityLights(renderer, streets.arrays.lamp as Float32Array, ((landmarks.meta as { lights?: number[] }).lights ?? []));
+    await Promise.all([add(this.streets.group), add(this.landmarks.group), add(this.lights.points)]);
+    const trees = await rest.trees;
+    // The trees of the canopy model (src/world/trees.ts).
+    if (trees) {
+      const t = new Trees(trees as Pack<{ nx: number; nz: number; tile: number; x0: number; z0: number }>, this.height);
+      await add(t.group);
+      this.trees = t;
+    }
+    const life = await rest.life;
+    if (life) {
+      const l = new Life(life);
+      await add(l.group);
+      this.life = l;
+    }
+    this.streamDone = true;
   }
 
   static async load(base: string, renderer: THREE.WebGLRenderer): Promise<World> {
     const manifest: Manifest = await (await fetch(`${base}/manifest.json`)).json();
-    const [terrain, surface, landuse, horizon, water, streets, landmarks, trees, life] = await Promise.all([
+    // The first frame's data first, on the whole connection; the rest once it is in.
+    const first = Promise.all([
       fetchPack(`${base}/terrain.bin`),
       fetchPack(`${base}/surface.bin`),
       fetchPack(`${base}/landuse.bin`),
       fetchPack(`${base}/horizon.bin`),
       fetchPack(`${base}/water.bin`),
-      fetchPack(`${base}/streets.bin`),
-      fetchPack(`${base}/landmarks.bin`),
-      manifest.trees ? fetchPack(`${base}/trees.bin`) : Promise.resolve(null),
-      manifest.life ? fetchPack<LifeMeta>(`${base}/life.bin`) : Promise.resolve(null),
     ]);
+    const after = <T>(f: () => Promise<T>) => first.then(f);
+    const rest: Rest = {
+      streets: after(() => fetchPack(`${base}/streets.bin`)),
+      landmarks: after(() => fetchPack(`${base}/landmarks.bin`)),
+      trees: after(() => (manifest.trees ? fetchPack(`${base}/trees.bin`) : Promise.resolve(null))),
+      life: after(() => (manifest.life ? fetchPack<LifeMeta>(`${base}/life.bin`) : Promise.resolve(null))),
+    };
+    const [terrain, surface, landuse, horizon, water] = await first;
     const lu = landuse.meta as { nx: number; nz: number };
     return new World(
       base, manifest,
       HeightGrid.fromPack(terrain), HeightGrid.fromPack(surface),
       landuseTexture(landuse.arrays.ground as Uint8Array, lu.nx, lu.nz),
-      HeightGrid.fromPack(horizon), water, streets, landmarks, trees, life, renderer,
+      HeightGrid.fromPack(horizon), water, renderer, rest,
     );
   }
 

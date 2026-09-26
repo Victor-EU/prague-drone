@@ -320,8 +320,13 @@ export class Clouds {
     U.uWind.value.set(r() * 24000, r() * 24000);
   }
 
+  /** The raymarch runs at 1 / divisor of the frame's size (2, or 3 on the lite preset). */
+  divisor = 2;
+  /** Most of the session's peak coverage that is drawn (the lite preset draws fewer clouds). */
+  maxCoverage = 0.65;
+
   setSize(w: number, h: number) {
-    this.target.setSize(Math.max(1, Math.ceil(w / 2)), Math.max(1, Math.ceil(h / 2)));
+    this.target.setSize(Math.max(1, Math.ceil(w / this.divisor)), Math.max(1, Math.ceil(h / this.divisor)));
   }
 
   /** Shifts the cloud field so its densest cell drifts over the ground point (x, z) now. */
@@ -343,15 +348,18 @@ export class Clouds {
     U.uWind.value.y += -Math.cos(a) * s.wind * dt;
     this.cirrusOffset.x += Math.sin(a) * s.wind * 2.5 * dt;
     this.cirrusOffset.y += -Math.cos(a) * s.wind * 2.5 * dt;
-    this.coverage = THREE.MathUtils.clamp(s.coverage * share, 0.05, 0.65) * (1 - overcast);
+    // Never under 5% by day, so there are always shadows moving; none once the evening's share has
+    // gone (the blue hour's sky is clear, design.md §5.3).
+    const floor = 0.05 * THREE.MathUtils.smoothstep(share, 0, 0.25);
+    this.coverage = THREE.MathUtils.clamp(Math.min(s.coverage, this.maxCoverage) * share, floor, 0.65) * (1 - overcast);
     // The threshold that leaves `coverage` of the map above it; the soft edge takes a little more.
     const n = this.sorted.length;
-    const thr = this.sorted[Math.floor(THREE.MathUtils.clamp(1 - this.coverage, 0, 0.9999) * n)];
+    const thr = this.coverage > 1e-4 ? this.sorted[Math.floor(THREE.MathUtils.clamp(1 - this.coverage, 0, 0.9999) * n)] : 2;
     // Local coverage reaches 1 part of the way from the threshold to the densest cell, so the
     // cores are solid whatever the coverage.
     const width = Math.max(0.06, (this.sorted[n - 1] - thr) * 0.5);
     const thickness = 500 + 1100 * Math.min(1, s.coverage / 0.5);
-    U.uCloud.value.set(thr, 0.82 * (1 - overcast), s.base + thickness * 0.3, width);
+    U.uCloud.value.set(thr, 0.82 * (1 - overcast) * THREE.MathUtils.smoothstep(this.coverage, 0, 0.01), s.base + thickness * 0.3, width);
     (this.pass.uniforms.uLayer.value as THREE.Vector4).set(s.base, s.base + thickness, 0.065, 0.42);
     // Slow boil: the noise rises through the cloud.
     (this.pass.uniforms.uNoiseOffset.value as THREE.Vector3).y -= 0.8 * dt;

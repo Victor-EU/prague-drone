@@ -13,7 +13,7 @@ const STONE = mat('#8a8174', Surface.Stone, Stone.Rubble, 0.5);
 const BRICK = mat('#8e5a45', Surface.Stone, Stone.Brick, 0.4);
 const COPING = mat('#a39b8d', Surface.Stone, Stone.Ashlar, 0.2);
 
-export function gardenWalls(els: OsmElement[], ground: (x: number, z: number) => number, k: Kit, seen: (x: number, z: number) => boolean): { metres: number; count: number } {
+export function gardenWalls(els: OsmElement[], ground: (x: number, z: number) => number, k: Kit, seen: (x: number, z: number) => boolean, wet: (x: number, z: number) => boolean): { metres: number; count: number } {
   let metres = 0, count = 0;
   k.place(0, 0, 0);
   k.seed = 61;
@@ -46,6 +46,10 @@ export function gardenWalls(els: OsmElement[], ground: (x: number, z: number) =>
       const len = Math.hypot(bx - ax, bz - az);
       if (len < 0.05) continue;
       const nx = -(bz - az) / len * (w / 2), nz = (bx - ax) / len * (w / 2);
+      // Not out in the river: OSM draws the Old Town weir's crest as a wall. Water on both sides of
+      // the middle; a wall on the bank has land on one side.
+      const mx = (ax + bx) / 2, mz = (az + bz) / 2, ox = (nx / w) * 8, oz = (nz / w) * 8;
+      if (wet(mx + ox, mz + oz) && wet(mx - ox, mz - oz)) continue;
       const ga = ground(ax, az), gb = ground(bx, bz);
       if (Number.isNaN(ga) || Number.isNaN(gb)) continue;
       const P = (x: number, z: number, s: number, y: number): V3 => [x + nx * s, y, z + nz * s];

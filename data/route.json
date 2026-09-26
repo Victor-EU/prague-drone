@@ -15,14 +15,20 @@
     { "n": 7, "name": "The Castle ridge", "t": 108, "clock": "11:10", "pos": [-1360, 150, 330], "gaze": [-751, 489, 120], "lens": "long" },
     { "n": 8, "name": "Malá Strana roofs", "t": 126, "clock": "12:00", "pos": [-640, 440, 210], "gaze": [-325, 89, 40], "lens": "wide" },
     { "n": 9, "name": "Charles Bridge, low pass", "t": 144, "clock": "12:45", "pos": [-230, 63, 35], "gaze": [157, -40, 30], "lens": "wide" },
+    { "via": true, "n": 0, "name": "turning upstream", "t": 153, "clock": "", "pos": [-93, -139, 56], "gaze": [-150, -470, 15], "lens": "wide" },
     { "n": 10, "name": "Kampa, Čertovka", "t": 162, "clock": "13:35", "pos": [60, -250, 90], "gaze": [-243, -167, 10], "lens": "wide" },
+    { "via": true, "n": 0, "name": "panning north", "t": 168, "clock": "", "pos": [192, -166, 118], "gaze": [103, 499, 40], "lens": "wide" },
     { "n": 11, "name": "Old Town Square, orbit", "t": 178, "clock": "14:15", "pos": [560, -40, 150], "gaze": [808, 122, 60], "lens": "long" },
+    { "via": true, "n": 0, "name": "round Týn, south", "t": 182, "clock": "", "pos": [808, -143, 150], "gaze": [808, 122, 60], "lens": "long" },
+    { "via": true, "n": 0, "name": "round Týn, east", "t": 187, "clock": "", "pos": [1006, 69, 150], "gaze": [808, 122, 60], "lens": "long" },
     { "n": 12, "name": "Old Town Square, orbit", "t": 192, "clock": "14:55", "pos": [900, 240, 150], "gaze": [808, 122, 60], "lens": "long" },
     { "n": 13, "name": "Old Town Square, orbit", "t": 204, "clock": "15:25", "pos": [700, 340, 140], "gaze": [808, 122, 60], "lens": "wide" },
     { "n": 14, "name": "Josefov to Mánes Bridge", "t": 218, "clock": "16:05", "pos": [450, 520, 175], "gaze": [-500, 400, 60], "lens": "wide" },
+    { "via": true, "n": 0, "name": "turning south", "t": 231, "clock": "", "pos": [850, -230, 207], "gaze": [450, -950, 40], "lens": "wide" },
     { "n": 15, "name": "Wenceslas Square", "t": 240, "clock": "17:05", "pos": [1100, -640, 230], "gaze": [1344, -856, 40], "lens": "long" },
     { "n": 16, "name": "The bridges from Letná", "t": 268, "clock": "18:20", "pos": [330, 960, 300], "gaze": [0, 0, 20], "lens": "long>wide" },
     { "n": 17, "name": "Back up the river", "t": 302, "clock": "19:50", "pos": [240, -1250, 260], "gaze": [458, -2446, 60], "lens": "wide" },
-    { "n": 18, "name": "Vyšehrad, blue hour", "t": 345, "clock": "21:45", "pos": [760, -2850, 380], "gaze": [458, -2446, 40], "lens": "wide" }
+    { "via": true, "n": 0, "name": "round the basilica", "t": 324, "clock": "", "pos": [180, -2660, 250], "gaze": [458, -2446, 90], "lens": "wide" },
+    { "n": 18, "name": "Vyšehrad, blue hour", "t": 345, "clock": "21:45", "pos": [700, -2950, 280], "gaze": [138, -1559, 69], "lens": "wide" }
   ]
 }

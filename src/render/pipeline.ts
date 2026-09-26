@@ -400,6 +400,40 @@ export class Pipeline {
   /** Throws the history away, for jumps of the camera. */
   invalidate() { this.reset = true; }
 
+  /**
+   * Draws the scene into the HDR target alone, none of the passes after it: to warm the driver up.
+   * With `everything`, nothing is culled, so every mesh's buffers reach the GPU now rather than on
+   * the frame it first comes into view.
+   */
+  warm(scene: THREE.Scene, camera: THREE.Camera, everything = false) {
+    const r = this.renderer, saved = r.getRenderTarget(), culled: THREE.Object3D[] = [];
+    if (everything) scene.traverse((o) => { if (o.frustumCulled) { o.frustumCulled = false; culled.push(o); } });
+    r.setRenderTarget(this.hdr);
+    r.render(scene, camera);
+    r.setRenderTarget(saved);
+    for (const o of culled) o.frustumCulled = true;
+  }
+
+  /**
+   * Compiles the shaders of `o` for the scene pass (into the HDR target, so the programs are the ones
+   * the frame will use), without waiting on the driver where it compiles in parallel. Parts hidden
+   * for now are compiled too (the lamps, lit only after sunset), and so is the variant the river's
+   * mirror draws with its clipping plane: made on first use, each cost a hitch in flight.
+   */
+  async compile(o: THREE.Object3D, camera: THREE.Camera, scene: THREE.Scene) {
+    const r = this.renderer, saved = r.getRenderTarget(), clip = r.clippingPlanes;
+    const hidden: THREE.Object3D[] = [];
+    o.traverse((c) => { if (!c.visible) { c.visible = true; hidden.push(c); } });
+    r.setRenderTarget(this.hdr);
+    const plain = r.compileAsync(o, camera, scene);
+    r.clippingPlanes = [new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)];
+    const clipped = r.compileAsync(o, camera, scene);
+    r.clippingPlanes = clip;
+    r.setRenderTarget(saved);
+    for (const c of hidden) c.visible = false;
+    await Promise.all([plain, clipped]);
+  }
+
   render(scene: THREE.Scene, camera: THREE.PerspectiveCamera, o: FrameOptions) {
     const r = this.renderer;
     this.time += o.dt;

@@ -285,10 +285,11 @@ export class RiverLife {
     // Rowers: the long pool above the Šítkov weir.
     const rowC = new Circuit(this.st, Math.max(pA[0] + 150, mk.vysehrad - 700), pA[1] - 70, 0.12, 0.12);
     this.rowers.push({ c: rowC, u0: 0, v: 4.6 }, { c: rowC, u0: rowC.length * 0.55, v: 4.9 });
-    // Pedal boats: from the pontoon, between Legion Bridge and the Old Town weir, up to its crest
-    // (the bank field keeps them off it; it runs across the river on a slant).
+    // Pedal boats: from the pontoon, between Legion Bridge and the Old Town weir, to the middle of its
+    // slant across the river (the bank field keeps them off the crest; ranging up to its far end, they
+    // slid along it and queued at the lip).
     const weir = meta.river.weirs.find(([a]) => a > mk.legion) ?? [pB[1], pB[1]];
-    this.pedalRange = [mk.legion + 25, weir[1]];
+    this.pedalRange = [mk.legion + 25, (weir[0] + weir[1]) / 2];
     for (let k = 0; k < 12; k++) {
       const s = this.pedalRange[0] + r() * (this.pedalRange[1] - this.pedalRange[0]);
       const p = this.st.at(s, 0, tmp);
@@ -379,7 +380,7 @@ export class RiverLife {
       a.rest -= dt;
       // Now and then the riders stop pedalling for a while.
       if (a.rest < 0) { const stop = r() < 0.25; a.vt = stop ? 0 : 0.8 + r() * 0.7; a.rest = stop ? 8 + r() * 20 : 20 + r() * 40; }
-      this.steer(a, dt, r, this.pedalRange[0], this.pedalRange[1], 12, this.pedal);
+      this.steer(a, dt, r, this.pedalRange[0], this.pedalRange[1], 16, this.pedal);
     }
     for (const a of this.swans) {
       a.rest -= dt;

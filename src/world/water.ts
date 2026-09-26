@@ -53,12 +53,13 @@ const MAIN = /* glsl */ `
   if (foam > 0.0) {
     vec2 q = vec2(dot(p, vec2(-f.y, f.x)) * 0.9, dot(p, f) * 0.22 - uTime * 0.9);
     float n = texture2D(tRipple, q / 3.0).b * 0.6 + texture2D(tRipple, q / 1.1 + 0.3).b * 0.4;
-    // Streaks: foam where the noise rises over what the band's strength leaves uncovered.
-    praFoamK = smoothstep(1.05 - foam, 1.25 - foam, n) * smoothstep(0.05, 0.3, foam);
+    // Streaks: foam where the noise rises over what the band's strength leaves uncovered; never all
+    // of it, so from the air the band keeps its streaks and does not read as a painted strip.
+    praFoamK = smoothstep(1.2 - foam * 0.9, 1.42 - foam * 0.9, n) * smoothstep(0.05, 0.3, foam);
     s += praSlope(p, f, 1.3, 2.2, 0.7) * foam * 1.4;
   } else praFoamK = 0.0;
   praRipN = normalize(vec3(-s.x, 1.0, -s.y));
-  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.6, 0.62, 0.6), praFoamK);
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.55, 0.57, 0.56), praFoamK);
 }
 `;
 

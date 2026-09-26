@@ -59,6 +59,8 @@ label.check { font-size: 9.5px; letter-spacing: 0.14em; color: var(--dim); displ
 #cover .go { margin-top: max(22px, 2.2vw); font-size: clamp(9px, 0.72vw, 14px); letter-spacing: 0.32em; color: var(--dim); transition: color 0.8s ease; }
 #cover.ready .go { color: var(--gold); animation: breathe 3.2s ease-in-out infinite; }
 @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+/* The cut through black when the flight starts again from the hold. */
+#fade { position: fixed; inset: 0; background: #0b1016; opacity: 0; pointer-events: none; transition: opacity 1.4s ease; }
 /* Viewpoint renders for the side-by-side: the frame alone, centred, no interface. */
 body.viewpoint #hud, body.viewpoint #cover { display: none; }
 body.viewpoint canvas#view { margin: auto; position: absolute; inset: 0; }

@@ -1,6 +1,6 @@
 // Building tiles: requested nearest first from a small worker pool, turned into two meshes each:
 // walls and roofs, and the detail (chimneys, dormers, roof boxes), which is hidden beyond
-// DETAIL_RANGE and not drawn into the far shadow cascade.
+// `detailRange` and not drawn into the far shadow cascade.
 
 import * as THREE from 'three';
 import type { MeshBuffers } from './extrude.ts';
@@ -9,7 +9,6 @@ import { REFLECT } from '../render/reflection.ts';
 
 export interface TileInfo { i: number; j: number; file: string; count: number }
 
-const DETAIL_RANGE = 1600;
 
 export class Buildings {
   readonly group = new THREE.Group();
@@ -23,6 +22,8 @@ export class Buildings {
   private world: { xMin: number; zMin: number };
   loaded = 0;
   total = 0;
+  /** The detail meshes are hidden beyond this distance (the quality preset sets it). */
+  detailRange = 1600;
 
   constructor(base: string, tileSize: number, world: { xMin: number; zMin: number }) {
     this.base = base;
@@ -52,7 +53,7 @@ export class Buildings {
     for (const m of this.details) {
       const s = m.geometry.boundingSphere!;
       const d = Math.hypot(camera.x - (s.center.x + m.position.x), camera.z - (s.center.z + m.position.z)) - s.radius;
-      m.visible = d < DETAIL_RANGE;
+      m.visible = d < this.detailRange;
     }
   }
 

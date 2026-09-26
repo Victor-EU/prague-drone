@@ -13,6 +13,7 @@ import { Route, hfovFor, WIDE, LONG, type RouteData } from './drone/route.ts';
 import { Drone } from './drone/drone.ts';
 import { Keys } from './drone/input.ts';
 import { Hud } from './ui/hud.ts';
+import { PRESETS, choosePreset, Governor, type Quality } from './render/quality.ts';
 import { Cover } from './ui/cover.ts';
 import { parseClock } from './core/sun.ts';
 import routeData from '../data/route.json';
@@ -78,9 +79,57 @@ const pipeline = new Pipeline(renderer, lut);
 if (import.meta.env.DEV) for (const [k, v] of params) if (k.startsWith('light.')) (atmosphere.lightOverride as Record<string, number | number[]>)[k.slice(6)] = v.includes(':') ? v.split(':').map(Number) : Number(v);
 if (import.meta.env.DEV && params.get('ao') === '0') pipeline.ao = false;
 if (import.meta.env.DEV && params.get('grade') === '0') pipeline.grade = false;
+// The quality preset (design.md §11) and the governor of the render scale. Viewpoints and
+// measurements (`?scale=1`) hold a fixed scale.
+let quality: Quality = PRESETS[choosePreset(params, renderer.getContext())];
+const governor = new Governor(quality);
+const fixedScale = params.has('scale') ? Number(params.get('scale')) : view ? 1 : undefined;
+if (fixedScale) governor.scale = fixedScale;
+function applyQuality(q: Quality) {
+  quality = q;
+  pipeline.ao = q.ao && !(import.meta.env.DEV && params.get('ao') === '0');
+  world.water.mirror.scale = q.mirror;
+  world.water.mirror.range = q.mirrorRange;
+  atmosphere.clouds.divisor = q.clouds;
+  atmosphere.clouds.maxCoverage = q.coverage;
+  atmosphere.sun.shadow.camera.far = q.shadowFar;
+  world.buildings.detailRange = q.detail;
+  if (world.landmarks) world.landmarks.detailRange = q.detail * 0.9;
+  if (world.trees) world.trees.spriteShadows = q.spriteShadows;
+}
+applyQuality(quality);
+// The shadow maps are sized once, before the first frame allocates them.
+atmosphere.sun.shadow.mapSize.set(quality.shadow, quality.shadow);
 const terrainShadow = new TerrainShadow(world.height);
 scene.add(world.group);
 atmosphere.sun.layers.enable(REFLECT);
+// The rest of the world streams in behind the first frame (design.md §10.2).
+const streamed = world.stream(renderer, (o) => pipeline.compile(o, camera, scene)).then(() => {
+  performance.mark('praha:streamed');
+  applyQuality(quality);
+});
+
+/**
+ * Once the world is in (under the cover), the whole of it is drawn once, into the scene's target
+ * and the mirror's, never to the screen: nothing culled and every detail shown, so each mesh's
+ * buffers reach the GPU now and not on the frame it first comes into view, and every lamp lit, as
+ * the driver finishes their programs on first use (the mirror took 80 ms over it at the first dusk).
+ */
+function warmUp() {
+  const lit = U.uCityLights.value, p = camera.position;
+  U.uCityLights.value = 1;
+  if (world.lights) world.lights.points.visible = true;
+  world.life?.lamps.set([[p.x, p.y - 40, p.z, 1, p.x + 2, p.y - 40, p.z, 0]]);
+  world.buildings.detailRange = world.landmarks!.detailRange = Infinity;
+  world.buildings.update(p);
+  world.landmarks?.update(p);
+  pipeline.warm(scene, camera, true);
+  world.water.mirror.render(renderer, scene, camera, Math.min(0, p.y - 50));
+  U.uCityLights.value = lit;
+  world.life?.lamps.set([]);
+  applyQuality(quality);
+  world.lights?.update();
+}
 
 function resize() {
   let w = window.innerWidth, h = window.innerHeight;
@@ -90,9 +139,10 @@ function resize() {
     canvas.style.width = `${w}px`;
     canvas.style.height = `${h}px`;
   }
-  // Cap the drawing buffer near 2560 × 1600 so the frame rate target holds on large screens.
-  const ratio = Math.min(window.devicePixelRatio, Math.sqrt(4.2e6 / (w * h)));
-  renderer.setPixelRatio(Math.max(1, ratio));
+  // Cap the drawing buffer (near 2560 × 1600 on the full preset) so the frame rate target holds on
+  // large screens; the governor's scale goes below a pixel a pixel when it must.
+  const ratio = Math.min(window.devicePixelRatio, Math.sqrt(quality.pixels / (w * h)));
+  renderer.setPixelRatio(Math.max(view ? 1 : 0.5, (view ? Math.max(1, ratio) : ratio) * governor.scale));
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
   const size = renderer.getDrawingBufferSize(new THREE.Vector2());
@@ -136,14 +186,19 @@ hudEl.classList.toggle('covered', cover !== undefined);
 /** The cover lifts: the drone starts the route, the interface follows a second later. */
 function fly() {
   drone.fly();
-  setTimeout(() => hudEl.classList.remove('covered'), 1000);
+  setTimeout(() => { hudEl.classList.remove('covered'); hud.shown(); }, 1000);
 }
+if (!cover) hud.shown();
 
 world.buildings.load(world.manifest.tiles, drone.position);
+// Loading milestones (design.md §10.2), read by tools/motion.ts: the world's data in, the first
+// frame drawn, the last tile in.
+performance.mark('praha:world');
 const worldLoadedAt = performance.now();
+let cityLoaded = false;
 if (view?.weather.cloudAt) atmosphere.clouds.moveDensestOver(view.weather.cloudAt[0], -view.weather.cloudAt[1]);
 // A viewpoint shows its moment of city life, still; `?life=seconds` sets it for any view.
-if (world.life && (view || params.has('life'))) world.life.setTime(params.has('life') ? Number(params.get('life')) : (view?.life ?? 60));
+if (view || params.has('life')) void streamed.then(() => world.life?.setTime(params.has('life') ? Number(params.get('life')) : (view?.life ?? 60)));
 
 // Handles for poking at the running app from the console, in development only.
 if (import.meta.env.DEV) {
@@ -151,8 +206,12 @@ if (import.meta.env.DEV) {
   const once = () => { placeCamera(); renderFrame(1 / 60); };
   Object.assign(window, {
     praha: {
-      renderer, scene, camera, world, atmosphere, pipeline, drone, route, bench, worldLoadedAt,
+      renderer, scene, camera, world, atmosphere, pipeline, drone, route, bench, worldLoadedAt, governor,
+      quality: () => quality,
       setClock: (h: number) => { dayAdvances = false; fixedClock = clock = h; },
+      keys, rollSession, U, hud,
+      /** Starts recording frames; `false` stops and returns them: [route time, interval ms, work ms, programs]. */
+      record: (on = true) => { const r = recording; recording = on ? [] : null; return r; },
       frame: (n = 1) => { for (let k = 0; k < n; k++) once(); },
       capture: (name = 'capture.png') => dev.capture(canvas, once, name),
       sheet: (width = 0, suffix = '') => view && dev.sheet(canvas, once, view.id, width, suffix),
@@ -183,10 +242,10 @@ function renderFrame(dt: number) {
   terrainShadow.update(renderer, atmosphere.sunDir);
   world.terrain.update(camera.position);
   world.buildings.update(camera.position);
-  world.streets.update(camera.position);
-  world.landmarks.update(camera.position);
+  world.streets?.update(camera.position);
+  world.landmarks?.update(camera.position);
   world.trees?.update(camera.position);
-  world.lights.update();
+  world.lights?.update();
   if (world.life) {
     const agl = drone.position.y - world.ground(drone.position.x, drone.position.z);
     world.life.update(view ? 0 : dt, clock, camera.position, drone.position, agl);
@@ -256,9 +315,43 @@ function pickLandmark(now: number) {
 const timer = new THREE.Timer();
 let hudClock = 0, frames = 0, fpsTime = 0, fps = 0;
 
+/**
+ * Enter in the blue-hour hold: the flight again from stop 1 at dawn, a cut through black. The clock
+ * jumps with the drone; eased, it would spin the sun back through the whole day.
+ */
+const fadeEl = document.createElement('div');
+fadeEl.id = 'fade';
+document.body.appendChild(fadeEl);
+function restart() {
+  drone.setAuto(0);
+  if (dayAdvances) clock = route.clock(0);
+  fadeEl.style.transition = 'none';
+  fadeEl.style.opacity = '1';
+  void fadeEl.offsetWidth;
+  fadeEl.style.transition = '';
+  fadeEl.style.opacity = '0';
+}
+
+/**
+ * Development only: per frame, the route time, the interval since the last frame, the main thread's
+ * work and the number of shader programs so far (tools/motion.ts).
+ */
+let recording: [number, number, number, number][] | null = null;
+
 function frame(time: number) {
+  const workStart = performance.now();
   timer.update(time);
-  const dt = Math.min(timer.getDelta(), 0.1);
+  const raw = timer.getDelta(), dt = Math.min(raw, 0.1);
+  // The render scale follows the frame rate once the city is in; a full session that cannot keep
+  // up at its lowest scale goes lite.
+  if (!fixedScale && cityLoaded) {
+    const change = governor.sample(raw);
+    if (change === 'lite') {
+      applyQuality(PRESETS.lite);
+      governor.quality = PRESETS.lite;
+    }
+    if (change) resize();
+  }
 
   const pressed = keys.drain();
   if (pressed.length && cover?.up) cover.lift();
@@ -267,7 +360,7 @@ function frame(time: number) {
     else if (k === 'Space') drone.toggleHover();
     else if (k === 'Enter' || k === 'NumpadEnter') {
       if (drone.mode === 'manual') drone.rejoin();
-      else if (drone.holding) drone.setAuto(0);
+      else if (drone.holding) restart();
     } else if (k === 'Backquote') {
       statsOn = !statsOn;
       hud.stats.style.display = statsOn ? 'block' : 'none';
@@ -310,15 +403,23 @@ function frame(time: number) {
         `t ${drone.t.toFixed(1)} s  stop ${route.stopAt(drone.t).n}  ${drone.focal.toFixed(0)} mm\n` +
         `x ${drone.position.x.toFixed(0)}  north ${(-drone.position.z).toFixed(0)}  y ${drone.position.y.toFixed(0)}\n` +
         `clouds seed ${s.seed}  peak ${(s.coverage * 100).toFixed(0)}%  base ${s.base.toFixed(0)} m  wind ${s.wind.toFixed(1)} m/s  cirrus ${s.cirrus.toFixed(2)}\n` +
-        `tiles ${world.buildings.loaded}/${world.buildings.total}  grade ${pipeline.grade ? 'on' : 'off'}  ao ${pipeline.ao ? 'on' : 'off'}`;
+        `tiles ${world.buildings.loaded}/${world.buildings.total}  grade ${pipeline.grade ? 'on' : 'off'}  ao ${pipeline.ao ? 'on' : 'off'}\n` +
+        `${quality.preset}  scale ${governor.scale.toFixed(2)}  ${renderer.domElement.width} × ${renderer.domElement.height}`;
     }
   }
   if (!firstFrameAt) {
     firstFrameAt = performance.now();
+    performance.mark('praha:first-frame');
     if (import.meta.env.DEV) console.info(`first frame at ${firstFrameAt.toFixed(0)} ms`);
     cover?.showCity();
   }
-  if (cover?.up && (world.buildings.loaded >= world.buildings.total || performance.now() - firstFrameAt > 6000)) cover.ready();
+  if (!cityLoaded && world.complete) {
+    cityLoaded = true;
+    performance.mark('praha:city');
+    warmUp();
+  }
+  if (cover?.up && (cityLoaded || performance.now() - firstFrameAt > 6000)) cover.ready();
+  if (recording) recording.push([drone.t, raw * 1000, performance.now() - workStart, renderer.info.programs?.length ?? 0]);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

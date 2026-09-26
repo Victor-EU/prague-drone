@@ -21,7 +21,8 @@ export class PlanarReflection {
   private clip = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   /** How far the mirror draws. */
   range = 2200;
-  private scale: number;
+  /** The mirror's size as a fraction of the frame's (the quality preset sets it; takes effect at the next setSize). */
+  scale: number;
 
   constructor(scale = 0.4) {
     this.scale = scale;

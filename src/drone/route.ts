@@ -7,6 +7,8 @@ import { parseClock } from '../core/sun.ts';
 interface StopData {
   n: number; name: string; t: number; clock: string;
   pos: [number, number, number]; gaze: [number, number, number]; lens: 'wide' | 'long' | 'long>wide';
+  /** A knot that shapes a leg without being a stop (no number, no name, no clock of its own). */
+  via?: boolean;
 }
 export interface RouteData {
   duration: number; hold: number; clockEnd: string; holdClockEnd: string; stops: StopData[];
@@ -86,12 +88,14 @@ export class Route {
   constructor(data: RouteData) {
     this.data = data;
     this.duration = data.duration;
-    this.stops = data.stops.map((s) => ({ n: s.n, name: s.name, t: s.t, clock: parseClock(s.clock), pos: toVec(s.pos), gaze: toVec(s.gaze) }));
-    this.end = this.stops[this.stops.length - 1].t;
+    // The splines run through every knot; the stops are the knots that are not via points.
+    const knots = data.stops.map((s) => ({ n: s.n, name: s.name, t: s.t, clock: s.via ? NaN : parseClock(s.clock), pos: toVec(s.pos), gaze: toVec(s.gaze) }));
+    this.stops = knots.filter((_, k) => !data.stops[k].via);
+    this.end = knots[knots.length - 1].t;
     // Stop 1 holds for `hold` seconds before the spline starts.
-    this.knots = this.stops.map((s, k) => (k === 0 ? data.hold : s.t));
-    this.pos = new TimedSpline(this.knots, this.stops.map((s) => s.pos));
-    this.gaze = new TimedSpline(this.knots, this.stops.map((s) => s.gaze));
+    this.knots = knots.map((s, k) => (k === 0 ? data.hold : s.t));
+    this.pos = new TimedSpline(this.knots, knots.map((s) => s.pos));
+    this.gaze = new TimedSpline(this.knots, knots.map((s) => s.gaze));
     this.lensIn = data.stops.map((s) => (s.lens === 'wide' ? WIDE : LONG));
     this.lensOut = data.stops.map((s) => (s.lens === 'long' ? LONG : WIDE));
     this.holdClockEnd = parseClock(data.holdClockEnd);

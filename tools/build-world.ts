@@ -598,7 +598,11 @@ let landmarkMeshes: Built[];
     // The gardens the route and the photographs see: Petřín, Strahov, Malá Strana, Hradčany, the Old Town.
     const seen = (x: number, z: number) => x > -1900 && x < 1500 && z > -900 && z < 1300;
     const els = PARTIAL && !layerExists('gardenwalls') ? [] : layer('gardenwalls');
-    const { metres, count } = gardenWalls(els, (x, z) => ground.sample(x, z), k, seen);
+    const wet = (x: number, z: number) => {
+      const i = Math.round((x - ground.x0) / CELL), j = Math.round((z - ground.z0) / CELL);
+      return i >= 0 && j >= 0 && i < NX && j < NZ && water[j * NX + i] === 1;
+    };
+    const { metres, count } = gardenWalls(els, (x, z) => ground.sample(x, z), k, seen, wet);
     landmarkMeshes.push({ id: 'garden-walls', main: k.finish(), detail: d.finish() });
     log(`garden walls: ${count} walls, ${(metres / 1000).toFixed(1)} km, ${k.triangles} triangles`);
   }

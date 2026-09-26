@@ -46,12 +46,14 @@ const KEYS: Key[] = [
   // The Petřín panoramas (7924 to 7944, 18:50): clear air, deep shadows, bright sunlit plaster.
   { t: 18.5, aerosol: 1.4, haze: 0.05, hazeHeight: 900, skySat: 0.96, skyFlat: 0.35, sun: 1, ambient: 0.55, ev: 0.15, wb: [1.0, 1.0, 1.0], sat: 1.0, contrast: 1.12, lift: 0, cumulus: 0.75 },
   { t: 20.2, aerosol: 2, haze: 0.2, hazeHeight: 800, skySat: 0.9, skyFlat: 0.2, sun: 1, ambient: 1, ev: 0, wb: [1.04, 1.0, 0.96], sat: 1.02, contrast: 1.0, lift: 0, cumulus: 0.55 },
-  { t: 21.0, aerosol: 2, haze: 0.15, hazeHeight: 800, skySat: 0.75, skyFlat: 0.2, sun: 1, ambient: 1, ev: -0.3, wb: [0.99, 1.0, 1.01], sat: 1.0, contrast: 1.0, lift: 0, cumulus: 0.45 },
+  { t: 21.0, aerosol: 2, haze: 0.15, hazeHeight: 800, skySat: 0.75, skyFlat: 0.2, sun: 1, ambient: 1, ev: -0.3, wb: [0.99, 1.0, 1.01], sat: 1.0, contrast: 1.0, lift: 0, cumulus: 0.25 },
   // Blue hour and night (9542, 9547): the camera's daylight white balance turns the twilight,
-  // which three wavelengths of ozone leave magenta, the navy of the photographs.
-  { t: 21.75, aerosol: 1.4, haze: 0.14, hazeHeight: 800, skySat: 0.7, skyFlat: 0.3, sun: 1, ambient: 1, ev: -0.8, wb: [0.84, 0.97, 1.2], sat: 1.0, contrast: 1.0, lift: 0.005, cumulus: 0.35, night: 0.5 },
-  { t: 22.5, aerosol: 1.4, haze: 0.14, hazeHeight: 800, skySat: 0.65, skyFlat: 0, sun: 1, ambient: 1, ev: -1.2, wb: [0.86, 0.96, 1.18], sat: 0.95, contrast: 1.0, lift: 0.01, cumulus: 0.3, night: 1 },
-  { t: 23.0, aerosol: 1.4, haze: 0.14, hazeHeight: 800, skySat: 0.65, skyFlat: 0, sun: 1, ambient: 1, ev: -1.4, wb: [0.86, 0.96, 1.18], sat: 0.95, contrast: 1.0, lift: 0.01, cumulus: 0.3, night: 1 },
+  // which three wavelengths of ozone leave magenta, the navy of the photographs. The fair-weather
+  // cumulus have gone with the sun, as in those frames; lit from below by nothing, they hung over
+  // the blue-hour hold as dark blobs.
+  { t: 21.75, aerosol: 1.4, haze: 0.14, hazeHeight: 800, skySat: 0.7, skyFlat: 0.3, sun: 1, ambient: 1, ev: -0.8, wb: [0.84, 0.97, 1.2], sat: 1.0, contrast: 1.0, lift: 0.005, cumulus: 0, night: 0.5 },
+  { t: 22.5, aerosol: 1.4, haze: 0.14, hazeHeight: 800, skySat: 0.65, skyFlat: 0, sun: 1, ambient: 1, ev: -1.2, wb: [0.86, 0.96, 1.18], sat: 0.95, contrast: 1.0, lift: 0.01, cumulus: 0, night: 1 },
+  { t: 23.0, aerosol: 1.4, haze: 0.14, hazeHeight: 800, skySat: 0.65, skyFlat: 0, sun: 1, ambient: 1, ev: -1.4, wb: [0.86, 0.96, 1.18], sat: 0.95, contrast: 1.0, lift: 0.01, cumulus: 0, night: 1 },
 ].map((k) => ({ night: 0, skyHorizon: 0.8, ...k }) as Key);
 
 // The pastel overcast of 8952 to 9026: flat light, no shadows, colours pastel, a bright grey sky.

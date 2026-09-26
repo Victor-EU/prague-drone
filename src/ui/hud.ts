@@ -109,6 +109,10 @@ export class Hud {
     for (const [mode, b] of Object.entries(this.buttons))
       b.addEventListener('click', () => { actions.setMode(mode as HudState['mode']); b.blur(); });
 
+  }
+
+  /** The interface is showing: the key hint stays for 20 s from now (design.md §10.1). */
+  shown() {
     setTimeout(() => (this.keys.style.opacity = '0'), 20000);
   }
 

@@ -452,7 +452,7 @@ As built in M4 (`src/world/water.ts`, `src/render/reflection.ts`, `tools/lib/riv
 
 - Physically based sky from precomputed scattering tables (transmittance, multiple scattering and a sky view table, after Hillaire 2020), tuned per light family (aerosol amount, sky saturation), then graded. Not Hosek-Wilkie or Preetham as first written: both are fitted for the sun above the horizon only and have no twilight, and the flight ends in the blue hour, whose deep blue comes from ozone absorption with the sun below the horizon. The same tables give the sunlight's colour through the air and the haze colour, so sun, sky and haze agree at every hour.
 - Sun disc with a soft glare, no lens flare streaks.
-- **Clouds**: cumulus as raymarched impostors or layered billboards with proper lighting (lit tops, shaded bases), base 1200 to 1800 m above the river, drifting with a wind of 3 to 8 m/s from the west-south-west. Coverage rolled per session between 5% and 65%. Clouds cast shadows on the city through the shadow map or a projected cloud-shadow texture; the shadow movement is essential. As built: a raymarched layer at half resolution over a 2D coverage map and two tiling 3D noises; shadows come from the same coverage map projected along the sun, so they move with the clouds. The rolled coverage is the afternoon peak: cumulus build through the late morning and thin out after 18:00, so the dawn of §5.3 is clear; the coverage shown never leaves 5 to 65%.
+- **Clouds**: cumulus as raymarched impostors or layered billboards with proper lighting (lit tops, shaded bases), base 1200 to 1800 m above the river, drifting with a wind of 3 to 8 m/s from the west-south-west. Coverage rolled per session between 5% and 65%. Clouds cast shadows on the city through the shadow map or a projected cloud-shadow texture; the shadow movement is essential. As built: a raymarched layer at half resolution over a 2D coverage map and two tiling 3D noises; shadows come from the same coverage map projected along the sun, so they move with the clouds. The rolled coverage is the afternoon peak: cumulus build through the late morning and thin out after 18:00, so the dawn of §5.3 is clear; by day the coverage shown never leaves 5 to 65%. Changed in M7: after sunset the last of them dissolve, and the sky of the blue hour is clear from 21:45, as it is in 9541, 9542 and 9547. Kept at 5% into the dusk, they hung over the blue-hour hold as dark blobs against the afterglow.
 - A thin cirrus layer at 50% probability.
 - Overcast preset: a continuous stratus layer with visible texture, sun disc hidden, ambient light from a bright grey dome.
 - Haze: aerial perspective that desaturates and cools toward the horizon; strength varies by family (strongest in the warm morning, weakest at midday). As built: height fog whose colour is the sky's own colour just above the horizon in that direction (from the sky view table), so distant roofs fade into the sky they stand under, warm toward the sun and cool away from it.
@@ -572,11 +572,20 @@ Total 360 s (fast mode: identical path and gaze at 2× speed, 180 s). Time of da
 | 15 | Wenceslas Square | 240 | 17:05 | 1100, −640, 230 | 1344, −856, 40 | long | Over the middle of the square looking up to the museum end, trams crossing the top |
 | 16 | The bridges from Letná | 268 | 18:20 | 330, 960, 300 | 0, 0, 20 | long → wide | Wide and high, all the bridges in one frame, late light |
 | 17 | Back up the river | 302 | 19:50 | 240, −1250, 260 | 458, −2446, 60 | wide | Golden hour along the embankments toward Vyšehrad |
-| 18 | Vyšehrad, blue hour | 345 | 21:45 | 760, −2850, 380 | 458, −2446, 40 | wide | Arrive above the rock as the lights come on and hold |
+| 18 | Vyšehrad, blue hour | 345 | 21:45 | 700, −2950, 280 | 138, −1559, 69 | wide | Round the basilica and arrive above the ramparts as the lights come on, looking down the river to the bridges and the Castle in the afterglow, and hold |
 
 Leg speeds run from about 20 m/s in the Old Town orbit to about 65 m/s on the long sweeps from Wenceslas Square to Letná and from Letná back up the river; the sweeps are high and wide, so the ground speed reads as a glide. The last leg has 43 s so that the arrival slows down.
 
 The spline is timed: each stop is a knot at its time `t`, knot velocities are the three-point derivative (zero at the first and last stop), and altitude uses monotone tangents so the drone never sinks below a low stop between two higher ones. Where the route doubles back (stops 12, 14, 15) the drone nearly stops and the next leg peaks near 90 m/s at 200 to 300 m up; `tools/check-route.ts` prints the timeline. Stops 8 and 9 were moved on 2026-09-25 when the Lesser Town Bridge Towers turned out to stand 78 m north of their first coordinate (§6.2): stop 8 now looks at the towers, and stop 9 sits above the bridge deck 100 m east of them, over Kampa, so the descent passes north of the towers rather than through them, looking down the bridge to the Old Town tower. Stops 1 and 2 were moved on 2026-09-26 when stop 1 became the cover (§10.2): the take-off had been 340 m up looking steeply down at the fortress, and now sits 183 m above the north edge of the rock looking down the river at 8° below the horizon; stop 2 moved 300 m on so the first leg keeps its pace.
+
+**Via knots (M7).** Between some stops the splines run through knots that are not stops (`"via": true` in `data/route.json`, no number, no name, no clock of their own). They were added on 2026-09-26 because a spline of gaze targets turns the camera violently wherever the gaze target passes under the drone: the camera pitched to straight down and swung round in half a second. Measured on the camera's yaw every 0.1 s (`tools/check-route.ts` prints the route; the yaw was checked with the same splines):
+
+- **The turn back over Kampa** (between stops 9 and 10) flipped over at 153 s, 1,400°/s for a frame. A knot at 153 s turns the view through the south, up the river toward Legion Bridge and Střelecký island, then round to Kampa: 14°/s at most.
+- **The Old Town Square orbit** was a fly-over: stops 11 (south-west of Týn) and 12 (north-east) are joined by a nearly straight line across the towers, and the camera flipped at 187 s. Two knots on a circle round Týn, south at 265 m and east at 205 m, make it the orbit the table describes, counter-clockwise, Týn in the middle of the long lens all the way (13 to 15°/s). A knot at 168 s pans the view across the rooftops to the north on the way in, instead of swinging past a gaze target 130 m away.
+- **Josefov to Wenceslas Square** (stops 14 to 15): the drone pulls back from the Castle view, flying backwards, and then swung round 125° in four seconds. A knot at 231 s turns it left through the south, the New Town's roofs, over eight seconds (15°/s).
+- **The last leg** passes round the west and south of the basilica with the gaze on its towers (a knot at 324 s, 400 m out over the river), then lifts the gaze from the towers to the city as the drone settles above the ramparts. Stop 18 moved from 380 m up looking 34° down onto the dark rock (the M4 gap) to 280 m up looking 8° down the river: the ramparts and the lit houses of Vyšehrad in front, the river of lights and the bridges leading to the floodlit Castle on the horizon, the afterglow above it. It echoes the cover at dawn, the same river from nearly the same place.
+
+With the knots the camera turns at 22°/s at the most, against 45°/s for the arrows in manual flight; the top speed went from 94.6 to 99.8 m/s, on the high sweep to Letná.
 
 The route does not loop. At stop 18 the drone holds above Vyšehrad in the blue hour, drifting very slowly, clouds and river still moving, until the user presses a key. Arrows hand over manual control there; Enter restarts the flight from stop 1 at dawn. Fast mode uses the same table with `t / 2`.
 
@@ -609,6 +618,8 @@ The app opens on the cover: the drone's own first view, stop 1 of the route, hel
 
 Under 8 s on a fast connection: a first frame with terrain, river, sky and Tier 3 blocks appears within 3 s; Tier 2 roofs and Tier 1 landmarks stream in over the next 5 s while the drone is still high above Vyšehrad, where detail is small. Textures load progressive. Total transfer budget 60 MB, cached.
 
+As built in M7: the world loads in two parts. The first frame needs only the terrain, the clearance grid, the land use, the horizon and the river (8.5 MB), fetched first on the whole connection; the building tiles then stream from the workers nearest first, and the streets and their lamps, the landmarks, the trees and the city's life (8.6 MB) follow, each added to the scene once its data is in and its shaders are compiled, in parallel where the driver can (`World.stream`). Measured with `tools/motion.ts load` on the production build over a 100 Mbit/s connection with a 20 ms round trip, cache off, in headless Chrome on the M2: the first frame at 1.6 s, the streamed parts in at 2.3 to 2.5 s, the last tile at 3.4 to 3.6 s; 23.5 MB transferred, of 60 MB allowed. Before the split everything was fetched at once and built before the first frame, which came at 2.9 to 3.1 s. The app marks the moments (`praha:world`, `praha:first-frame`, `praha:streamed`, `praha:city` in the performance timeline).
+
 ### 10.3 Audio
 
 None. The app is silent. No audio assets, no speaker control.
@@ -632,6 +643,20 @@ None. The app is silent. No audio assets, no speaker control.
 
 Performance targets: 60 fps at 2560 × 1600 on an M1 Pro or better in Chrome and Safari; 30 fps floor on an Intel MacBook with integrated graphics with a "lite" preset (no SSAO, half-res reflections, fewer clouds). Memory under 1.5 GB.
 
+As built in M7 (`src/render/quality.ts`): integrated and software GPUs (Intel, Iris, UHD, SwiftShader by the renderer's name) start on lite, everything else on full; `?quality=lite` or `full` forces one. Most of the frame is geometry (5 to 7 million triangles across the view, the shadow cascades and the mirror), so lite cuts geometry as well as pixels:
+
+| | full | lite |
+|---|---|---|
+| Pixels, most | 4.2 M | 1.7 M |
+| Ambient occlusion | on | off |
+| Mirror | 40% of the frame, to 2.2 km | 20%, to 1.3 km |
+| Cumulus | half resolution, the session's coverage | a third, at most 40% |
+| Sun shadows | 2 × 2048 to 2.8 km | 2 × 1024 to 1.4 km |
+| Far trees (sprites) cast shadows | yes | no |
+| Roof and landmark detail | to 1.6 km | to 0.9 km |
+
+On top of either a governor sets the render scale from the frame interval: down within a few seconds while frames are slower than the preset's target (60 fps on full, 30 on lite), to 72% of each side on full and 60% on lite; back up only by probing, one step after 20 s of good frames, undone if the frames slow again and then tried half as often, since at the display's rate a frame with time to spare and one without look alike. A full session still under 40 fps after six seconds at its lowest scale goes lite. Each change of scale rebuilds the render targets, a frame of about 70 ms, so the governor steps rarely. `?scale=1` fixes the scale (the measuring tools use it); viewpoints never scale.
+
 Repository layout:
 
 ```
@@ -639,14 +664,15 @@ design.md            this document
 Photos/              the reference set (422) and _excluded/
 mockup/              index.html (3D sketch), plan.html (set + route), set/ thumbnails
 data/                hero.json (starred frames), viewpoints.json, route.json, palette.json, landmarks.json
-tools/               fetch-data.ts, build-world.ts, check-route.ts, find-landmarks.ts, make-lut.ts, lut-fit.ts, compare.ts;
-                     lib/ roofs.ts, skeleton.ts, props.ts, plan.ts (+ plan-worker.ts), districts.ts, river.ts, trees.ts, walls.ts, life.ts;
+tools/               fetch-data.ts, build-world.ts, check-route.ts, find-landmarks.ts, make-lut.ts, lut-fit.ts, compare.ts, motion.ts;
+                     lib/ roofs.ts, skeleton.ts, props.ts, plan.ts (+ plan-worker.ts), districts.ts, river.ts, trees.ts, walls.ts, life.ts,
+                     chrome.ts (headless Chrome for compare and motion);
                      landmarks/ kit.ts, index.ts, parts.ts, bridges.ts, and one module per landmark or group (§7.1)
 cache/               raw downloads from fetch-data.ts (generated, git-ignored)
 assets/              lut/classic-neg.cube
 src/                 app: core/ (incl. buildings.ts, trees.ts and life.ts, shared with the build), world/ (terrain, tiles, buildings
                      and their material, landmarks, streets, water, lights, trees, blooms), sky/ (atmosphere, families, clouds, shadows),
-                     render/ (post, the river's mirror), life/ (trams, the river's boats and swans, people, pigeons, cars), drone/, ui/,
+                     render/ (post, the river's mirror, the quality presets), life/ (trams, the river's boats and swans, people, pigeons, cars), drone/, ui/,
                      dev/ (side-by-side, development only)
 public/world/        built tiles (generated, git-ignored)
 compare/             side-by-side sheets from tools/compare.ts (generated, git-ignored)
@@ -683,7 +709,13 @@ Added in M5: 8725 was taken in the Seminary garden, looking up at the gloriette 
 - Reseed clouds 20 times: coverage stays within 5 to 65%, and cloud shadows always move.
 - Slide time from 04:30 to 23:00 continuously: no popping of lights, sky or grade.
 
-### 12.3 Colour statistics (assistive, not a gate)
+As built in M7, `tools/motion.ts` runs each of them in headless Chrome on the GPU, on a dev server of its own (the page must not reload when the source is edited during a six-minute run):
+
+- **route 1** and **route 2** fly the auto route in real time from stop 1 to the hold and record every frame's interval and the main thread's work in it; a hitch is an interval over 33 ms. The interval also carries the GPU's time and whatever else the machine's GPU is doing, so the main thread's share is reported apart.
+- **manual** flies five minutes at Shift speed, simulated at 60 Hz without drawing: a key held at random for one to four seconds (turns, climbs, descents three times as often as climbs, strafes, tilts), turned back toward Charles Bridge past 1.6 km. It passes if the drone never comes within the camera's near plane (3 m) of the clearance grid (ground, water, roofs, decks, landmarks) and never leaves the world.
+- **clouds** reseeds twenty times and reads each session's peak coverage, the coverage drawn at 14:00 and how far the shadows moved in a second.
+- **clock** slides the clock from 04:30 to 23:00 over 3,600 frames (a third of a minute each) at a stop and reads the frame's brightness in rows across the sky and the city; a pop is a step unlike the steps either side of it.
+ Colour statistics (assistive, not a gate)
 
 For each hero pair, compute Lab histograms of the photograph and the render, excluding sky masks, and report ΔE between the dominant clusters. Used by `tools/lut-fit.ts` to refine the LUT and reported in the compare sheet. Not a gate, because composition differences move the numbers; the human judgement in §12.1 is the gate.
 
@@ -823,6 +855,29 @@ Known gaps after M6:
 - **No historic trams.** 8942's photograph has line 42's 1900s car; the render has a T3 pair.
 
 **The cover, built 2026-09-26** (the first piece of M7), in `src/ui/cover.ts`: the words on the dark ground, the city fading in beneath them at the first frame, the call to fly once the tiles are in, and the lift into the flight; the drone waits at stop 1 with the hold's drift until the cover lifts (`Drone.waiting`), then the drift settles over a second. Stop 1 was reframed for it and stop 2 moved on (§9.2).
+
+**M7, built 2026-09-26.** The interface, loading, fast mode, the blue-hour hold, polish and the lite preset, around the cover above:
+
+- **Loading** in two parts (§10.2): the terrain, the river and the land use first, then the tiles, the streets, the landmarks, the trees and the city's life streaming in behind the first frame. On a 100 Mbit/s connection the first frame comes at 1.6 s and the whole city is in at 3.4 to 3.6 s, 23.5 MB; before the split, the first frame came at 2.9 to 3.1 s.
+- **The blue-hour hold** (§9.2): stop 18 now looks down the river of lights to the bridges and the floodlit Castle in the afterglow, the ramparts in front, and the last leg rounds the basilica to get there. The evening's cumulus dissolve by 21:45 (§8.6), as in the blue-hour frames, instead of hanging over the hold as dark blobs. Enter in the hold flies again from dawn through a short fade from black, the clock jumping with the drone; eased, it spun the sun back through the whole day in two seconds.
+- **The route's turns** (§9.2): four via knots where the camera flipped over or swung round, the worst of them the Old Town Square orbit, which was a fly-over across the Týn towers and is now an orbit.
+- **No hitches from the first use of anything**: every shader program the flight needs is compiled under the cover, the lamps hidden by day and the mirror's clipped variants included (the first dusk compiled two in flight); and once the tiles are in, the whole city is drawn once offscreen with nothing culled and every lamp lit, so each mesh's buffers are on the GPU and the driver has finished the lamps' programs before the flight needs them (the first minute's new tiles cost frames of 50 to 180 ms, the first dusk 80 to 120 ms in the mirror).
+- **Quality** (§11): the full and lite presets and the governor of the render scale.
+- **Fast mode** is the route at twice the pace as before; the motion test flies it.
+- **Polish**: the Old Town weir's foam keeps its streaks from the air instead of reading as a painted white strip; OSM draws a wall along the weir's crest, and the garden walls of M5 stood it up in the river, where it read as a queue of boats; the pedal boats keep to the upstream half of the weir's slant, as they slid along the crest; the key hint's 20 s count from when the interface first shows, not from the load, so it is still there after a long look at the cover.
+- **The motion tests** (§12.2), in headless Chrome on the M2 with `tools/motion.ts`:
+  - **The route at 1× and 2×**, the render scale held at 1: no program is compiled in flight, and the main thread takes under 12 ms a frame but for one frame of about 70 ms near 15 s in some runs, which a profiler never caught. At 1280 × 800, 3 frames of 50 ms at 1× and 2 at 2× in 26,000, all on the first leg and all on the GPU's side (most likely the ground's finest level being built as the drone comes down to the river). At 1800 × 1100, 12 and 11 frames of 50 to 83 ms, and a third of the frames at two vsyncs: two million pixels of the full preset are at the M2's limit, and headless Chrome paces frames worse than a window. With the governor on, as a visitor has it, this machine steps down twice in the first four seconds and goes lite at 15 s, a frame of about 70 ms at each step; beyond those, three frames of 50 to 67 ms in the whole flight (the first leg, and one near 50 s), one frame in seven at two vsyncs. Not yet a clean pass: it must be flown in a visible Chrome window, and on the target machine of §11.
+  - **Manual**: five minutes at Shift speed, random keys, turned back past 1.6 km: never nearer than 6.3 m to a roof, a landmark or the ground (the near plane is 3 m), under 12 m for 1.8% of the time, never outside the world.
+  - **Clouds**: twenty reseeds, peak coverage 6 to 59%, the same drawn at 14:00, the shadows moving at the wind's 3.4 to 7.6 m/s every time.
+  - **Clock**: 04:30 to 23:00 over 3,600 frames at stops 16 and 18: the largest step in the frame's brightness 3.1 of 255 (the sunrise, a steady climb over a quarter of an hour), the largest pop 1.6 of 255; the lamps fade in and out over twenty minutes of the clock.
+- **Measured** on the Apple M2 at 2048 × 1536 with the synced benchmark (`tools/motion.ts bench`), on a quiet GPU: full 14.6 and 15.4 ms a frame on average across the 18 stops in alternating runs, 20 at the most (the take-off and the Malá Strana roofs), against M5's 13.4 before the wires, the poles and the city's life; lite, at 1505 × 1129, 10.1 and 9.9, 13.2 at the most. With the GPU shared, earlier, lite broke down as the buildings 6 ms, the sun's shadows 5 (2.4 of it their reach beyond 1.4 km), the trees 3.7 (2.1 of it the far sprites' shadows), the city's life 1.4, the mirror 0.7, the landmarks 0.3, the cumulus 0.1: hence lite's cuts in geometry.
+
+Known gaps after M7:
+
+- **The 30 fps floor on integrated graphics is not measured.** There is no Intel Mac here. Lite does on the M2 what full does in two thirds of the time; an Intel Iris Plus has a third to a quarter of the M2's GPU, and the governor then takes the pixels down to about a third. Whether that holds 30 fps must be seen on one. Most of the frame is geometry: the building tiles have no levels of detail, and they are the next lever if it does not.
+- **Most of this session the GPU was shared.** Another application kept the M2's GPU 85 to 100% busy (full measured 22 ms a frame then), so the lite breakdown above is differences between alternating runs; the benchmark and the route at 1800 × 1100 were taken once it was quiet. M6's 21 ms was the same load, not M6.
+- **Frame pacing** at the busiest stops is still uneven by 3 to 4 ms, the mirror being drawn every other frame (M4).
+- **Loading and the hitches** were measured in headless Chrome; Safari is untested.
 
 ---
 
