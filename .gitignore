@@ -7,6 +7,7 @@ Photos/_excluded/
 node_modules/
 dist/
 public/world/
+public/world-*/
 compare/
 *.log
 

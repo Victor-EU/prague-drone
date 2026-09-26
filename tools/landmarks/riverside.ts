@@ -8,6 +8,7 @@ import { Kit, mat, rect, arch, offsetRing, orientedRect, ngon, type V2, type V3,
 import type { Model, Site } from './index.ts';
 import { Surface, Stone, Metal, Glass, Style } from '../../src/core/buildings.ts';
 import { buildParts, COPPER } from './parts.ts';
+import { pilaster, entablature, traceryWindow, ribs, column, balustrade, statue } from './ornament.ts';
 
 const GOLD = mat('#c9a34a', Surface.Metal, Metal.Gold);
 const WINDOW = mat('#1e2226', Surface.Glass, Glass.Plain);
@@ -108,30 +109,35 @@ export const sitkovTower: Model = {
 export const stFrancis: Model = {
   id: 'st-francis',
   floodlit: true,
-  build(site, k, d) {
-    k.seed = 95; d.seed = 96;
+  build(site, k, d, f) {
+    k.seed = 95; d.seed = 96; f.seed = 97;
     const r = orientedRect(site.feature('way/28552795')!.polygons[0].outer);
     const g = site.bare(r.cx, r.cz);
     const WALL = mat('#cfae93', Surface.Wall, Style.Palace), BAND = mat('#dcc5ae', Surface.Stone, Stone.Render, 0.25);
-    const TILES = mat('#9a5c45', Surface.Roof);
-    k.place(r.cx, g, r.cz, r.bearing); d.place(r.cx, g, r.cz, r.bearing);
-    k.ground = d.ground = g;
+    const TILES = mat('#9a5c45', Surface.Roof), COPPER_DARK = mat('#5f8878', Surface.Metal, Metal.Copper);
+    for (const kit of [k, d, f]) { kit.place(r.cx, g, r.cz, r.bearing); kit.ground = g; }
     const body = rect(r.w, r.d);
     k.prism(body, -2, 16.5, WALL, null, { windows: true, eave: g + 16.5 });
-    k.prism(offsetRing(body, 0.45), 16, 17, BAND, BAND);
+    entablature(k, body.map(([x, z]) => [x, 15.6, z] as V3), BAND, { out: 0.6, h: 1.4, closed: true });
     k.roof(body, 17, { shape: 'hipped', pitch: 40, cap: 99, gable: () => false }, TILES, BAND);
-    // The drum and dome at the dome part's centre.
+    // The drum, pilastered between its windows, under an entablature; the ribbed dome; the lantern
+    // on eight columns.
     const [dx, dz] = centre(site, 'way/420538053');
     const [lx, , lz] = k.local(dx, 0, dz);
-    const R = 7.4;
+    const R = 7.4, UP: V3 = [0, 1, 0];
     k.prism(ngon(16, R, 11.25, lx, lz), 17, 27.5, BAND, null);
     for (let i = 0; i < 8; i++) {
-      const a = ((i + 0.5) / 8) * Math.PI * 2;
-      k.plate([lx + R * 0.99 * Math.cos(a), 20.5, lz + R * 0.99 * Math.sin(a)], [Math.sin(a), 0, -Math.cos(a)], [0, 1, 0], arch(1.5, 4.2, 'round'), WINDOW, 0.06);
+      const a = ((i + 0.5) / 8) * Math.PI * 2, b = (i / 8) * Math.PI * 2;
+      traceryWindow(k, f, [lx + R * Math.cos(a), 0, lz + R * Math.sin(a)], [Math.sin(a), 0, -Math.cos(a)], UP, 0, 20.5, 1.5, 4.2, BAND, WINDOW, { lights: 1, kind: 'round', proud: 0.12, depth: 0.26 });
+      pilaster(k, [lx + R * Math.cos(b), 17, lz + R * Math.sin(b)], [Math.sin(b), 0, -Math.cos(b)], UP, 0, 0.3, 10.2, 1.1, 0.45, BAND, { capH: 0.8, baseH: 0.5 });
     }
-    k.prism(ngon(16, R + 0.4, 11.25, lx, lz), 27.5, 28.3, BAND, null);
-    k.lathe(lx, lz, [[R + 0.2, 28.3], [R * 0.93, 31.5], [R * 0.72, 34.6], [R * 0.4, 36.9], [1.4, 37.8]], 24, COPPER);
-    k.lathe(lx, lz, [[1.3, 37.8], [1.3, 40.4], [1.55, 40.6], [0.9, 41.8], [0.12, 43.2]], 8, COPPER, { flat: true });
+    entablature(k, ngon(16, R, 11.25, lx, lz).map(([x, z]) => [x, 27.3, z] as V3), BAND, { out: 0.7, h: 1.6, closed: true });
+    const dome: V2[] = [[R + 0.2, 28.9], [R * 0.93, 31.9], [R * 0.72, 34.8], [R * 0.4, 37.0], [1.4, 37.8]];
+    k.lathe(lx, lz, dome, 24, COPPER);
+    ribs(k, lx, lz, dome, 16, 0.2, COPPER_DARK, 11.25);
+    k.lathe(lx, lz, [[1.0, 37.8], [1.0, 40.4]], 8, BAND, { flat: true, phase: 22.5 });
+    for (let q = 0; q < 8; q++) { const a = ((q + 0.5) * Math.PI) / 4; column(f, lx + 1.4 * Math.cos(a), lz + 1.4 * Math.sin(a), 37.8, 40.4, 0.14, BAND, { sides: 8 }); }
+    k.lathe(lx, lz, [[1.6, 40.4], [1.6, 40.7], [1.55, 40.8], [0.9, 41.8], [0.12, 43.2]], 8, COPPER, { flat: true });
     d.lathe(lx, lz, [[0.06, 43], [0.05, 45]], 4, GOLD);
     d.beam([lx - 0.5, 44.3, lz], [lx + 0.5, 44.3, lz], 0.1, GOLD);
     k.light([lx, 20, lz], 1);
@@ -169,26 +175,29 @@ export const klementinumTower: Model = {
 export const rudolfinum: Model = {
   id: 'rudolfinum',
   floodlit: true,
-  build(site, k, d) {
-    k.seed = 99; d.seed = 100;
+  build(site, k, d, f) {
+    k.seed = 99; d.seed = 100; f.seed = 101;
     const out = orientedRect(site.feature('way/30123527')!.polygons[0].outer);
     const g = site.bare(out.cx, out.cz);
     const WALL = mat('#dac7a2', Surface.Wall, Style.Palace), STONE = mat('#d0bc96', Surface.Stone, Stone.Ashlar, 0.3);
     buildParts(site, k, ['way/668207433', 'way/1366644296'], g, { wall: WALL, flatTop: mat('#8d8f8c', Surface.FlatRoof) });
     buildParts(site, k, ['way/497192157', 'way/497192158', 'way/497192159', 'way/497192160', 'way/497192161', 'way/666627099', 'way/666627100'], g, { wall: STONE, roof: () => COPPER });
     buildParts(site, k, ['way/380044480', 'way/665521497', 'way/665521498'], g, { wall: STONE });
-    // The balustrade with its statues round the main block's attic.
+    // The cornice, the balustrade and its statues round the main block's attic.
     const main = ringOf(site, 'way/668207433');
-    k.place(0, g, 0, 90); d.place(0, g, 0, 90);
-    k.ground = d.ground = g;
+    for (const kit of [k, d, f]) { kit.place(0, g, 0, 90); kit.ground = g; }
+    entablature(k, main.map(([x, z]) => [x, 15.9, z] as V3), STONE, { out: 0.8, h: 1.5, closed: true });
     k.prism(offsetRing(main, 0.3), 17.2, 18, STONE, STONE);
+    balustrade(f, offsetRing(main, 0.1).map(([x, z]) => [x, 18, z] as V3), STONE, { h: 1.15, w: 0.3, step: 0.38, closed: true });
+    let cx = 0, cz = 0;
+    for (const [x, z] of main) { cx += x / main.length; cz += z / main.length; }
     for (let i = 0; i < main.length; i++) {
       const [ax, az] = main[i], [bx, bz] = main[(i + 1) % main.length];
       const len = Math.hypot(bx - ax, bz - az), n = Math.floor(len / 6);
       for (let q = 1; q < n; q++) {
-        const x = ax + ((bx - ax) * q) / n, z = az + ((bz - az) * q) / n;
-        d.box(x, z, 0.8, 0.8, 18, 18.9, STONE);
-        d.lathe(x, z, [[0.36, 18.9], [0.3, 19.9], [0.2, 20.5], [0, 20.8]], 6, mat('#b9a887', Surface.Stone, Stone.Render, 0.3), { flat: true });
+        const x = ax + ((bx - ax) * q) / n, z = az + ((bz - az) * q) / n, l = Math.hypot(x - cx, z - cz) || 1;
+        d.box(x, z, 0.8, 0.8, 18, 19.1, STONE);
+        statue(d, [x, 19.1, z], [(x - cx) / l, (z - cz) / l], 2.4, mat('#b9a887', Surface.Stone, Stone.Render, 0.3), 'single', 200 + i * 7 + q);
       }
     }
     k.light([out.cx, 10, out.cz], 1);

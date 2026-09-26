@@ -1,6 +1,7 @@
 // Street furniture from tools/build-world.ts (design.md §8.3): the tram rails set into the streets,
 // the lamp posts of the OSM lamp register (in the old town's streets, the lanterns on brackets on
-// the walls, M10), and the trams' overhead wire on its poles (§8.8),
+// the walls, M10, the lamps added where the register leaves a street dark and the two-armed
+// candelabra, M11), and the trams' overhead wire on its poles (§8.8),
 // grouped by kilometre tile and drawn only near the camera, where they are more than a pixel wide.
 
 import * as THREE from 'three';
@@ -9,11 +10,15 @@ import { patchLit } from '../sky/lit.ts';
 
 const TILE = 1000;
 const RANGE = 900;
+/** Lamps in finer tiles, drawn nearer and shadowed nearer still: beyond a few hundred metres a lamp is under a pixel wide (M11). */
+const LAMP_TILE = 250, LAMP_RANGE = 600, LAMP_SHADOWS = 300;
+/** Beyond this a lamp is a pixel or two wide: a pole and a box of a lantern stand in for it. */
+const LAMP_NEAR = 150;
 const GAUGE = 1.435;
 /** The contact wire's height over the rail, and how far the wires show. */
 const WIRE = 5.6, WIRE_RANGE = 450;
 
-interface Piece { mesh: THREE.Object3D; x: number; z: number; r: number; range?: number }
+interface Piece { mesh: THREE.Object3D; x: number; z: number; r: number; range?: number; lamp?: 'near' | 'far' }
 
 export class Streets {
   readonly group = new THREE.Group();
@@ -24,6 +29,7 @@ export class Streets {
     const rail = pack.arrays.rail as Float32Array;
     const lamps = pack.arrays.lamp as Float32Array;
     const wallLamps = (pack.arrays.wallLamp as Float32Array | undefined) ?? new Float32Array(0);
+    const twinLamps = (pack.arrays.lamp2 as Float32Array | undefined) ?? new Float32Array(0);
 
     // Rails: two steel strips per track, in chunks of up to 300 m sorted into tiles.
     const railMat = patchLit(new THREE.MeshStandardMaterial({ color: '#8d8b86', metalness: 0.45, roughness: 0.42 }));
@@ -126,13 +132,14 @@ export class Streets {
     // Lamp posts: a pole and a lantern, cast iron dark green, the lantern's panes pale (8777):
     // four of them, wider at the top, under a cap and a finial.
     const IRON = '#2c3430', PANE = '#b3ae9f';
-    const lantern = (y: number) => [
-      coloured(new THREE.CylinderGeometry(0.2, 0.12, 0.46, 4).rotateY(Math.PI / 4).translate(0, y, 0), PANE),
-      coloured(new THREE.CylinderGeometry(0.045, 0.045, 0.1, 4).translate(0, y - 0.28, 0), IRON),
-      coloured(new THREE.ConeGeometry(0.27, 0.22, 4).rotateY(Math.PI / 4).translate(0, y + 0.34, 0), IRON),
-      coloured(new THREE.BoxGeometry(0.3, 0.035, 0.3).translate(0, y + 0.23, 0), IRON),
-      coloured(new THREE.ConeGeometry(0.04, 0.16, 4).translate(0, y + 0.53, 0), IRON),
-    ];
+    // `k` scales it about its middle: the candelabra's lanterns are larger.
+    const lantern = (y: number, k = 1) => [
+      coloured(new THREE.CylinderGeometry(0.2, 0.12, 0.46, 4).rotateY(Math.PI / 4), PANE),
+      coloured(new THREE.CylinderGeometry(0.045, 0.045, 0.1, 4).translate(0, -0.28, 0), IRON),
+      coloured(new THREE.ConeGeometry(0.27, 0.22, 4).rotateY(Math.PI / 4).translate(0, 0.34, 0), IRON),
+      coloured(new THREE.BoxGeometry(0.3, 0.035, 0.3).translate(0, 0.23, 0), IRON),
+      coloured(new THREE.ConeGeometry(0.04, 0.16, 4).translate(0, 0.53, 0), IRON),
+    ].map((g) => g.scale(k, k, k).translate(0, y, 0));
     const lampGeom = mergeBoxes([
       coloured(new THREE.CylinderGeometry(0.06, 0.1, 4.1, 6).translate(0, 2.05, 0), IRON),
       coloured(new THREE.CylinderGeometry(0.14, 0.16, 0.7, 6).translate(0, 0.35, 0), IRON),
@@ -147,50 +154,91 @@ export class Streets {
       coloured(new THREE.BoxGeometry(0.04, 0.04, Math.hypot(arm, 0.5)).rotateX(-Math.atan2(0.5, arm)).translate(0, 4.73, -arm / 2 - 0.05), IRON),
       coloured(new THREE.BoxGeometry(0.16, 0.7, 0.04).translate(0, 4.75, -arm), IRON),
     ]);
+    // Prague's cast-iron candelabrum (8777, M11): a fluted post on a base, two arms along local x
+    // on scrolled stays, a lantern standing on each arm's end, a finial between them.
+    const reach = 0.52;
+    const twinGeom = mergeBoxes([
+      coloured(new THREE.CylinderGeometry(0.17, 0.21, 0.9, 6, 1, true).translate(0, 0.45, 0), IRON),
+      coloured(new THREE.CylinderGeometry(0.12, 0.17, 0.25, 6, 1, true).translate(0, 1.02, 0), IRON),
+      coloured(new THREE.CylinderGeometry(0.065, 0.1, 2.75, 6, 1, true).translate(0, 2.5, 0), IRON),
+      coloured(new THREE.CylinderGeometry(0.1, 0.1, 0.14, 6, 1, true).translate(0, 3.55, 0), IRON),
+      coloured(new THREE.BoxGeometry(2 * reach + 0.1, 0.06, 0.06).translate(0, 3.72, 0), IRON),
+      ...[-1, 1].flatMap((sx) => [
+        coloured(new THREE.BoxGeometry(Math.hypot(reach - 0.08, 0.4), 0.04, 0.04).rotateZ(sx * Math.atan2(0.4, reach - 0.08)).translate((sx * (reach + 0.08)) / 2, 3.5, 0), IRON),
+        coloured(new THREE.CylinderGeometry(0.05, 0.07, 0.1, 4, 1, true).translate(sx * reach, 3.78, 0), IRON),
+        ...lantern(4.25, 1.35).map((g) => g.translate(sx * reach, 0, 0)),
+      ]),
+      coloured(new THREE.CylinderGeometry(0.045, 0.065, 0.75, 4, 1, true).translate(0, 4.1, 0), IRON),
+      coloured(new THREE.OctahedronGeometry(0.085).translate(0, 4.52, 0), IRON),
+      coloured(new THREE.ConeGeometry(0.035, 0.32, 4, 1, true).translate(0, 4.74, 0), IRON),
+    ]);
+    // The far stand-ins: a four-sided pole, the lantern a box, arms a bar.
+    const farLantern = (x: number, y: number, k = 1) => coloured(new THREE.BoxGeometry(0.34 * k, 0.6 * k, 0.34 * k).translate(x, y, 0), PANE);
+    const farGeoms = [
+      mergeBoxes([coloured(new THREE.CylinderGeometry(0.07, 0.12, 4.1, 4, 1, true).translate(0, 2.05, 0), IRON), farLantern(0, 4.45)]),
+      mergeBoxes([farLantern(0, 4.45), coloured(new THREE.BoxGeometry(0.05, 0.05, arm).translate(0, 4.98, -arm / 2), IRON)]),
+      mergeBoxes([
+        coloured(new THREE.CylinderGeometry(0.07, 0.15, 4.4, 4, 1, true).translate(0, 2.2, 0), IRON),
+        coloured(new THREE.BoxGeometry(2 * reach + 0.1, 0.06, 0.06).translate(0, 3.72, 0), IRON),
+        farLantern(-reach, 4.25, 1.35), farLantern(reach, 4.25, 1.35),
+      ]),
+    ];
     const lampMat = patchLit(new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.3, roughness: 0.55 }));
+    // Per tile: x, y, z, turn and kind (0 a post, 1 on a wall, 2 two-armed).
     const lampTiles = new Map<string, number[]>();
-    for (let i = 0; i < lamps.length; i += 3) {
-      const key = `${Math.floor(lamps[i] / TILE)},${Math.floor(lamps[i + 2] / TILE)}`;
-      (lampTiles.get(key) ?? lampTiles.set(key, []).get(key)!).push(lamps[i], lamps[i + 1], lamps[i + 2], NaN);
-    }
-    for (let i = 0; i < wallLamps.length; i += 4) {
-      const key = `${Math.floor(wallLamps[i] / TILE)},${Math.floor(wallLamps[i + 2] / TILE)}`;
-      (lampTiles.get(key) ?? lampTiles.set(key, []).get(key)!).push(wallLamps[i], wallLamps[i + 1], wallLamps[i + 2], wallLamps[i + 3]);
-    }
+    const file = (x: number, y: number, z: number, a: number, kind: number) => {
+      const key = `${Math.floor(x / LAMP_TILE)},${Math.floor(z / LAMP_TILE)}`;
+      (lampTiles.get(key) ?? lampTiles.set(key, []).get(key)!).push(x, y, z, a, kind);
+    };
+    for (let i = 0; i < lamps.length; i += 3) file(lamps[i], lamps[i + 1], lamps[i + 2], 0, 0);
+    for (let i = 0; i < wallLamps.length; i += 4) file(wallLamps[i], wallLamps[i + 1], wallLamps[i + 2], wallLamps[i + 3], 1);
+    for (let i = 0; i < twinLamps.length; i += 4) file(twinLamps[i], twinLamps[i + 1], twinLamps[i + 2], twinLamps[i + 3], 2);
     const m = new THREE.Matrix4(), rot = new THREE.Matrix4();
     for (const all of lampTiles.values()) {
-      for (const onWall of [false, true]) {
+      for (const kind of [0, 1, 2]) {
         const list: number[] = [];
-        for (let i = 0; i < all.length; i += 4) if (Number.isNaN(all[i + 3]) !== onWall) list.push(all[i], all[i + 1], all[i + 2], all[i + 3]);
+        for (let i = 0; i < all.length; i += 5) if (all[i + 4] === kind) list.push(all[i], all[i + 1], all[i + 2], all[i + 3]);
         const n = list.length / 4;
         if (!n) continue;
-        const mesh = new THREE.InstancedMesh(onWall ? wallGeom : lampGeom, lampMat, n);
-        const sphere = new THREE.Sphere();
-        const box = new THREE.Box3();
-        for (let i = 0; i < n; i++) {
-          m.makeTranslation(list[i * 4], list[i * 4 + 1], list[i * 4 + 2]);
-          if (onWall) m.multiply(rot.makeRotationY(list[i * 4 + 3]));
-          mesh.setMatrixAt(i, m);
-          box.expandByPoint(new THREE.Vector3(list[i * 4], list[i * 4 + 1], list[i * 4 + 2]));
+        for (const lod of ['near', 'far'] as const) {
+          const mesh = new THREE.InstancedMesh(lod === 'near' ? [lampGeom, wallGeom, twinGeom][kind] : farGeoms[kind], lampMat, n);
+          const sphere = new THREE.Sphere();
+          const box = new THREE.Box3();
+          for (let i = 0; i < n; i++) {
+            m.makeTranslation(list[i * 4], list[i * 4 + 1], list[i * 4 + 2]);
+            if (kind) m.multiply(rot.makeRotationY(list[i * 4 + 3]));
+            mesh.setMatrixAt(i, m);
+            box.expandByPoint(new THREE.Vector3(list[i * 4], list[i * 4 + 1], list[i * 4 + 2]));
+          }
+          box.getBoundingSphere(sphere);
+          mesh.computeBoundingSphere();
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          this.add(mesh, sphere, LAMP_RANGE, lod);
         }
-        box.getBoundingSphere(sphere);
-        mesh.computeBoundingSphere();
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-        this.add(mesh, sphere);
       }
     }
   }
 
-  private add(mesh: THREE.Object3D, s: THREE.Sphere, range?: number) {
+  private add(mesh: THREE.Object3D, s: THREE.Sphere, range?: number, lamp?: Piece['lamp']) {
     this.group.add(mesh);
-    this.pieces.push({ mesh, x: s.center.x, z: s.center.z, r: s.radius, range });
+    this.pieces.push({ mesh, x: s.center.x, z: s.center.z, r: s.radius, range, lamp });
   }
 
-  /** Shows the pieces within range of the camera. */
+  /** Shows the pieces within range of the camera; lamps cast shadows only near it. */
   update(camera: THREE.Vector3) {
     const far = RANGE + Math.max(0, camera.y - 200) * 0.5;
-    for (const p of this.pieces) p.mesh.visible = Math.hypot(camera.x - p.x, camera.z - p.z) - p.r < (p.range ? p.range + Math.max(0, camera.y - 100) * 0.3 : far);
+    for (const p of this.pieces) {
+      const d = Math.hypot(camera.x - p.x, camera.z - p.z) - p.r;
+      p.mesh.visible = d < (p.range ? p.range + Math.max(0, camera.y - 100) * 0.3 : far);
+      if (p.lamp) {
+        // By tile: every lamp of a tile whose nearest point is within LAMP_NEAR in full, the
+        // others' as stand-ins.
+        const near = d < LAMP_NEAR;
+        p.mesh.visible &&= p.lamp === 'near' ? near : !near;
+        p.mesh.castShadow = d < LAMP_SHADOWS;
+      }
+    }
   }
 }
 

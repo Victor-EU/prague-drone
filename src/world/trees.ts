@@ -412,6 +412,10 @@ const FOLIAGE_COLOUR = /* glsl */ `
     // The clumps cut deep lobes into the outline, as the photographs' crowns have (8884, 9204).
     float ragged = 0.55 * praLeaf * praDetail + 0.7 * max(0.0, praClump - 0.32) * praMid + 0.25 * praFine * (1.0 - praLeaf);
     if (facing < ragged * (abs(vKind - ${Kind.Rose}.0) < 0.5 ? 0.4 : 1.0)) discard;
+    // Near the lens a rose bush opens (M11, 8722): its mass of lobes thins to its lit clusters and
+    // then to nothing within two metres, leaving the leaf clusters, the stems, leaves and blooms of
+    // src/world/roses.ts, and the sky between them.
+    if (abs(vKind - ${Kind.Rose}.0) < 0.5 && praLeaf < 1.05 * (1.0 - smoothstep(1.8, 4.5, length(vViewPosition)))) discard;
     #endif
     vec3 c = vTreeCol;
     // Near, the leaf clusters stand out more: lit clusters lighter and yellower, the gaps deeper.

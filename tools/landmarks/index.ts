@@ -21,6 +21,8 @@ import { nationalTheatre, sitkovTower, stFrancis, klementinumTower, rudolfinum }
 import { powderTower, oldTownHall, stNicholasOldTown, husMemorial } from './old-town.ts';
 import { legionBridge, manesBridge, cechBridge, jirasekBridge, palackyBridge, stefanikBridge, railwayBridge } from './bridges.ts';
 import { schonbornGloriette } from './gardens.ts';
+import { zlomkovskyMill } from './mills.ts';
+import { stSalvator } from './klementinum.ts';
 
 /** What a model may ask of the world it stands in. */
 export interface Site {
@@ -49,23 +51,33 @@ export interface Model {
   replaces?: string[];
   /** Floodlit at night (design.md §8.7). */
   floodlit?: boolean;
-  /** Main geometry, and the small detail the app drops with distance. */
-  build(site: Site, main: Kit, detail: Kit): void;
+  /** A piece of the city modelled by hand that is not one of §6.2's landmarks: no entry in
+   * data/landmarks.json, nothing replaced by id, no name on the screen. */
+  unnamed?: boolean;
+  /**
+   * Main geometry; the detail the app drops beyond about 1.4 km (statues, finials, lamps); and
+   * the fine ornament drawn within about 300 m (mouldings, tracery, balusters, crockets; M12).
+   */
+  build(site: Site, main: Kit, detail: Kit, fine: Kit): void;
 }
 
 export const MODELS: Model[] = [
   charlesBridge, oldTownBridgeTower, lesserTownBridgeTowers, tyn, stNicholas, castle, petrinTower, vysehrad,
   legionBridge, manesBridge, cechBridge, jirasekBridge, palackyBridge, stefanikBridge, railwayBridge,
   smetanaMuseum, dancingHouse, nationalTheatre, sitkovTower, stFrancis, klementinumTower, rudolfinum,
-  powderTower, oldTownHall, stNicholasOldTown, husMemorial, schonbornGloriette,
+  powderTower, oldTownHall, stNicholasOldTown, husMemorial, schonbornGloriette, zlomkovskyMill, stSalvator,
 ];
 
 export interface Built {
   id: string;
   main: MeshBuffers;
   detail: MeshBuffers;
+  /** The fine tier (M12), drawn within a few hundred metres. */
+  fine?: MeshBuffers;
   /** Lamps: x, y, z, kind per lamp. */
   lights?: number[];
+  /** Rings the model keeps clear of bushes (Kit.claims). */
+  claims?: number[][];
 }
 
 export async function buildLandmarks(site: Site, log: (...a: unknown[]) => void): Promise<Built[]> {
@@ -73,21 +85,25 @@ export async function buildLandmarks(site: Site, log: (...a: unknown[]) => void)
   const out: Built[] = [];
   for (const m of MODELS) {
     const t0 = Date.now();
-    const main = new Kit(), detail = new Kit();
-    if (m.floodlit) main.flagsOr = detail.flagsOr = SFlag.Floodlit;
-    m.build(site, main, detail);
-    out.push({ id: m.id, main: main.finish(), detail: detail.finish(), lights: [...main.lights, ...detail.lights] });
-    log(`landmark ${m.id}: ${main.triangles} + ${detail.triangles} detail triangles (${Date.now() - t0} ms)`);
+    const main = new Kit(), detail = new Kit(), fine = new Kit();
+    if (m.floodlit) main.flagsOr = detail.flagsOr = fine.flagsOr = SFlag.Floodlit;
+    m.build(site, main, detail, fine);
+    out.push({ id: m.id, main: main.finish(), detail: detail.finish(), fine: fine.finish(), lights: [...main.lights, ...detail.lights, ...fine.lights], claims: [...main.claims, ...detail.claims, ...fine.claims] });
+    log(`landmark ${m.id}: ${main.triangles} + ${detail.triangles} detail + ${fine.triangles} fine triangles (${Date.now() - t0} ms)`);
   }
   return out;
 }
 
-/** All the landmarks in one pack: shared arrays, and per landmark its ranges and bounds. */
+/** The tiers of a landmark's geometry in the pack (src/world/landmarks.ts). */
+export const Tier = { Main: 0, Detail: 1, Fine: 2 } as const;
+
+/** All the landmarks in one pack: shared arrays, and per landmark and tier its ranges and bounds. */
 export function packLandmarks(built: Built[]): Uint8Array {
-  const parts: { id: string; detail: boolean; b: MeshBuffers }[] = [];
+  const parts: { id: string; tier: number; b: MeshBuffers }[] = [];
   for (const b of built) {
-    if (b.main.index.length) parts.push({ id: b.id, detail: false, b: b.main });
-    if (b.detail.index.length) parts.push({ id: b.id, detail: true, b: b.detail });
+    if (b.main.index.length) parts.push({ id: b.id, tier: Tier.Main, b: b.main });
+    if (b.detail.index.length) parts.push({ id: b.id, tier: Tier.Detail, b: b.detail });
+    if (b.fine?.index.length) parts.push({ id: b.id, tier: Tier.Fine, b: b.fine });
   }
   const nv = parts.reduce((a, p) => a + p.b.position.length / 3, 0);
   const ni = parts.reduce((a, p) => a + p.b.index.length, 0);
@@ -95,7 +111,7 @@ export function packLandmarks(built: Built[]): Uint8Array {
     position: new Float32Array(nv * 3), normal: new Int8Array(nv * 3), color: new Uint8Array(nv * 3),
     facade: new Float32Array(nv * 4), info: new Uint8Array(nv * 4), index: new Uint32Array(ni),
   };
-  const items: { id: string; detail: boolean; v0: number; nv: number; i0: number; ni: number; sphere: number[] }[] = [];
+  const items: { id: string; tier: number; v0: number; nv: number; i0: number; ni: number; sphere: number[] }[] = [];
   let v = 0, i = 0;
   for (const p of parts) {
     const n = p.b.position.length / 3;
@@ -110,7 +126,7 @@ export function packLandmarks(built: Built[]): Uint8Array {
     const c = [(x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2];
     let r = 0;
     for (let k = 0; k < n; k++) r = Math.max(r, Math.hypot(p.b.position[k * 3] - c[0], p.b.position[k * 3 + 1] - c[1], p.b.position[k * 3 + 2] - c[2]));
-    items.push({ id: p.id, detail: p.detail, v0: v, nv: n, i0: i, ni: p.b.index.length, sphere: [...c.map((q) => Math.round(q * 100) / 100), Math.ceil(r)] });
+    items.push({ id: p.id, tier: p.tier, v0: v, nv: n, i0: i, ni: p.b.index.length, sphere: [...c.map((q) => Math.round(q * 100) / 100), Math.ceil(r)] });
     v += n; i += p.b.index.length;
   }
   const lights = built.flatMap((b) => b.lights ?? []).map((v) => Math.round(v * 100) / 100);

@@ -4,7 +4,7 @@
 
 import { roofModel, meshRoof, type Roof, type RoofModel, type RoofSpec, type Shape } from './roofs.ts';
 import { placeProps, flatRoofBoxes, rng, type PropRec } from './props.ts';
-import { RULES, roofColour, wallColour, parseColour, LANDMARK_COLOURS, type DistrictId } from './districts.ts';
+import { RULES, District, roofColour, wallColour, parseColour, LANDMARK_COLOURS, type DistrictId } from './districts.ts';
 import { parseLength, parseNumber, pointInPolygon, type Polygon, type Ring, type Tags } from './osm.ts';
 import { STYLES, Style, BFlag, EFlag } from '../../src/core/buildings.ts';
 
@@ -66,6 +66,9 @@ const SHAPES: Record<string, Shape> = {
 const FLAT_TYPES = new Set(['industrial', 'warehouse', 'retail', 'commercial', 'supermarket', 'hangar', 'greenhouse', 'transportation',
   'train_station', 'parking', 'manufacture', 'storage_tank', 'silo', 'garages', 'garage', 'carport', 'kiosk', 'stadium', 'grandstand',
   'sports_hall', 'sports_centre', 'service', 'transformer_tower', 'container', 'toilets', 'shelter', 'bunker']);
+/** The old town's districts, and the kinds of building whose single storey there is the import's error. */
+const OLD_TOWN = new Set<number>([District.MalaStrana, District.Hradcany, District.StareMesto, District.Josefov]);
+const TOWN_TYPES = new Set(['residential', 'apartments', 'hotel', 'office']);
 const CHURCH = new Set(['church', 'cathedral', 'chapel', 'basilica', 'monastery']);
 /** Boats moored for good (restaurants, botels), which OSM maps as buildings. */
 const BOATS = new Set(['houseboat', 'ship']);
@@ -175,6 +178,9 @@ export function planBuilding(b: PlanInput): PlanOutput {
   if (small || flatType || church) style = Style.Blank;
   else if (HOUSE.has(type)) style = Style.House;
   let levels = parseNumber(t['building:levels']);
+  // The cadastral import (RUIAN) gives hundreds of the old town's houses one storey, blocks of 4 to
+  // 25 flats among them; such a storey count is taken as missing (design.md §8.1, M11: 8082, 8777).
+  if (levels === 1 && OLD_TOWN.has(b.district) && !b.part && b.area > 100 && (TOWN_TYPES.has(type) || (parseNumber(t['building:flats']) ?? 0) >= 2)) levels = undefined;
   const height = parseLength(t.height);
   const roofHTag = parseLength(t['roof:height']);
   const roofLevels = parseNumber(t['roof:levels']);

@@ -558,7 +558,7 @@ const bridgeFeatures = features(layer('bridges'), (t) => t.man_made === 'bridge'
 for (const f of bridgeFeatures) featureOf.set(f.key, f);
 const modelled = new Set<number>();
 for (const m of MODELS)
-  for (const id of [m.id, ...(m.covers ?? [])]) {
+  for (const id of m.unnamed ? [] : [m.id, ...(m.covers ?? [])]) {
     const k = landmarks.findIndex((l) => l.id === id);
     if (k < 0) throw new Error(`landmark model ${id} is not in data/landmarks.json`);
     modelled.add(k);
@@ -601,7 +601,10 @@ let landmarkMeshes: Built[];
     const river = waterFeatures
       .filter((f) => /^(river|canal|lock|harbour)$/.test(f.tags.water ?? '') || f.tags.waterway === 'riverbank' || f.tags.water === 'stream')
       .flatMap((f) => f.tags.water === 'stream' ? f.polygons.filter(core) : f.polygons);
-    const metres = embankments(river, { water, level, bare }, k, seen, (x, z) => certovkaDist(x, z) < 16);
+    // Not under what a landmark stands on over the water (the Zlomkovský mill's arches).
+    const claims = landmarkMeshes.flatMap((m) => m.claims ?? []).map((r) => ({ outer: r, holes: [] }));
+    const open = (x: number, z: number) => seen(x, z) && !claims.some((p) => pointInPolygon(x, z, p));
+    const metres = embankments(river, { water, level, bare }, k, open, (x, z) => certovkaDist(x, z) < 16);
     landmarkMeshes.push({ id: 'embankments', main: k.finish(), detail: d.finish() });
     log(`embankments: ${(metres / 1000).toFixed(1)} km of wall, ${k.triangles} triangles`);
   }
@@ -978,7 +981,8 @@ let railPos: Float32Array;
   const OLD = new Set<number>([District.MalaStrana, District.Hradcany, District.StareMesto, District.Josefov]);
   const EG = 20, edges = new Map<number, number[]>();
   for (const b of kept) {
-    if (b.part || Math.abs(b.cx) > 2500 || Math.abs(b.cz) > 2500) continue;
+    // Parts too, where they stand for a replaced outline (the Thun palace on Nerudova).
+    if ((b.part && !(b as any).outline) || Math.abs(b.cx) > 2500 || Math.abs(b.cz) > 2500) continue;
     const r = b.poly.outer, n = r.length / 2;
     for (let i = 0; i < n; i++) {
       const ax = r[i * 2], az = r[i * 2 + 1], bx = r[((i + 1) % n) * 2], bz = r[((i + 1) % n) * 2 + 1];
@@ -989,10 +993,10 @@ let railPos: Float32Array;
         }
     }
   }
-  /** The nearest wall within 3 m: the foot of the perpendicular, and the way out from it. */
-  const wallNear = (x: number, z: number) => {
+  /** The nearest wall within `r` (at most 3 m): the foot of the perpendicular, and the way out from it. */
+  const wallNear = (x: number, z: number, r = 3) => {
     const list = edges.get(Math.floor(x / EG) * 100000 + Math.floor(z / EG));
-    let best = 3, out: [number, number, number, number] | null = null;
+    let best = r, out: [number, number, number, number] | null = null;
     for (let i = 0; list && i < list.length; i += 4) {
       const ax = list[i], az = list[i + 1], dx = list[i + 2] - ax, dz = list[i + 3] - az, L2 = dx * dx + dz * dz;
       if (L2 < 1) continue;
@@ -1009,23 +1013,144 @@ let railPos: Float32Array;
     }
     return out;
   };
-  const lp: number[] = [], wl: number[] = [];
+  /** The first wall from (x, z) along the unit (dx, dz) within 12 m: its distance and its normal toward (x, z). */
+  const wallAlong = (x: number, z: number, dx: number, dz: number): [number, number, number] | null => {
+    let best = 12, out: [number, number, number] | null = null;
+    const seen = new Set<number[]>();
+    for (const t of [0, 6, 12]) {
+      const list = edges.get(Math.floor((x + dx * t) / EG) * 100000 + Math.floor((z + dz * t) / EG));
+      if (!list || seen.has(list)) continue;
+      seen.add(list);
+      for (let i = 0; i < list.length; i += 4) {
+        const ax = list[i], az = list[i + 1], ex = list[i + 2] - ax, ez = list[i + 3] - az;
+        const den = dx * ez - dz * ex;
+        if (Math.abs(den) < 1e-6) continue;
+        const u = ((ax - x) * ez - (az - z) * ex) / den, v = ((ax - x) * dz - (az - z) * dx) / den;
+        if (u > 0.5 && u < best && v >= 0 && v <= 1) {
+          best = u;
+          const L = Math.hypot(ex, ez);
+          let nx = -ez / L, nz = ex / L;
+          if (nx * dx + nz * dz > 0) { nx = -nx; nz = -nz; }
+          out = [u, nx, nz];
+        }
+      }
+    }
+    return out;
+  };
+  // Posts (x, y, z), lanterns on walls (x, y, z, heading), and two-armed posts (x, y, z, the arms' turn).
+  const lp: number[] = [], wl: number[] = [], l2: number[] = [];
+  const arms = (dx: number, dz: number) => Math.atan2(-dz, dx);
   for (const el of layer('lamps')) {
     if (el.type !== 'node' || el.lat === undefined || el.lon === undefined) continue;
-    const x = lonToX(el.lon), z = latToZ(el.lat);
+    let x = lonToX(el.lon), z = latToZ(el.lat);
     if (x <= WORLD.xMin || x >= WORLD.xMax || z <= WORLD.zMin || z >= WORLD.zMax) continue;
     if (modelledDecks.some((d) => pointInPolygon(x, z, d.poly))) continue;
     let y = ground.sample(x, z), deck = false;
     for (const d of decks) if (pointInPolygon(x, z, d.poly)) { y = d.top; deck = true; break; }
     if (Number.isNaN(y)) continue;
-    const w = !deck && OLD.has(districtAt(districts, x, z)) ? wallNear(x, z) : null;
+    const old = !deck && OLD.has(districtAt(districts, x, z));
+    // Two lanterns or more: a candelabrum on a post even against a wall, at least 1.2 m out from
+    // it, its arms along the wall (8777, M11).
+    if (old && (parseNumber(el.tags?.['light:count']) ?? 1) >= 2) {
+      const w = wallNear(x, z);
+      if (w && Math.hypot(x - w[0], z - w[1]) < 1.2) { x = w[0] + w[2] * 1.2; z = w[1] + w[3] * 1.2; }
+      l2.push(x, ground.sample(x, z), z, w ? arms(w[3], -w[2]) : 0);
+      continue;
+    }
+    const w = old ? wallNear(x, z) : null;
     // The lantern 0.8 m out from the wall, the bracket's heading as an angle.
     if (w) wl.push(w[0] + w[2] * 0.8, ground.sample(w[0] + w[2] * 0.8, w[1] + w[3] * 0.8), w[1] + w[3] * 0.8, Math.atan2(w[2], w[3]));
     else lp.push(x, y, z);
   }
+  // The old town's cobbled streets are paved from front to front: the ground raster painted them
+  // at a nominal width, which left pale strips of the district's ground between them and the
+  // houses, the pavements (8082, M11).
+  let paved = 0;
+  for (const el of layer('highways')) {
+    const t = el.tags ?? {};
+    if (el.type !== 'way' || !(t.highway in ROAD_WIDTH) || !PAVED.test(t.surface ?? '') || t.area === 'yes' || (t.bridge && t.bridge !== 'no') || underground(t)) continue;
+    const line = lineOf(el);
+    for (let i = 0; i + 3 < line.length; i += 2) {
+      const ax = line[i], az = line[i + 1], ex = line[i + 2] - ax, ez = line[i + 3] - az, len = Math.hypot(ex, ez);
+      if (len < 0.5) continue;
+      const dx = ex / len, dz = ez / len;
+      for (let s = 0; s < len; s += 1) {
+        const x = ax + dx * s, z = az + dz * s;
+        if (!OLD.has(districtAt(districts, x, z))) continue;
+        for (const side of [-1, 1]) {
+          const px = -dz * side, pz = dx * side, w = wallAlong(x, z, px, pz);
+          if (!w) continue;
+          for (let d = 1; d < w[0]; d += 1) {
+            const li = Math.round((x + px * d - landuse.x0) / LU), lj = Math.round((z + pz * d - landuse.z0) / LU);
+            if (li < 0 || lj < 0 || li >= LNX || lj >= LNZ) continue;
+            const c = landuse.data[lj * LNX + li];
+            if (c === Ground.Residential || c === Ground.Urban) { landuse.data[lj * LNX + li] = Ground.Cobbles; paved++; }
+          }
+        }
+      }
+    }
+  }
+  log(`pavements: ${((paved * LU * LU) / 1e4).toFixed(1)} ha of the old town's pavements cobbled`);
+  // OSM's register leaves stretches of the old town's streets dark (130 m of Nerudova): along every
+  // street there, wherever no lamp stands within 24 m, one is added, on alternate sides; on a
+  // bracket where the fronts stand less than 9 m apart, else on a post 1.2 m out from the wall, one
+  // post in two with two arms along the street (8777, M11).
+  let added = 0, addedPosts = 0;
+  {
+    const LG = 30, grid = new Map<number, number[]>();
+    const put = (x: number, z: number) => { const k = Math.floor(x / LG) * 100000 + Math.floor(z / LG); (grid.get(k) ?? grid.set(k, []).get(k)!).push(x, z); };
+    const lit = (x: number, z: number, r: number) => {
+      const gx = Math.floor(x / LG), gz = Math.floor(z / LG);
+      for (let i = gx - 1; i <= gx + 1; i++)
+        for (let j = gz - 1; j <= gz + 1; j++) {
+          const l = grid.get(i * 100000 + j);
+          for (let q = 0; l && q < l.length; q += 2) if (Math.hypot(l[q] - x, l[q + 1] - z) < r) return true;
+        }
+      return false;
+    };
+    for (let i = 0; i < lp.length; i += 3) put(lp[i], lp[i + 2]);
+    for (let i = 0; i < wl.length; i += 4) put(wl[i], wl[i + 2]);
+    for (let i = 0; i < l2.length; i += 4) put(l2[i], l2[i + 2]);
+    const STREETS = new Set(['residential', 'living_street', 'pedestrian', 'unclassified', 'tertiary', 'secondary', 'primary']);
+    for (const el of layer('highways')) {
+      const t = el.tags ?? {};
+      if (el.type !== 'way' || !STREETS.has(t.highway) || t.area === 'yes' || (t.bridge && t.bridge !== 'no') || (t.tunnel && t.tunnel !== 'no')) continue;
+      const line = lineOf(el);
+      if (line.length < 4) continue;
+      let side = treeHash(line[0], line[1]) & 1 ? 1 : -1;
+      for (let i = 0; i + 3 < line.length; i += 2) {
+        const ax = line[i], az = line[i + 1], ex = line[i + 2] - ax, ez = line[i + 3] - az, len = Math.hypot(ex, ez);
+        if (len < 0.5) continue;
+        const dx = ex / len, dz = ez / len;
+        for (let s = 0; s < len; s += 2) {
+          const x = ax + dx * s, z = az + dz * s;
+          if (!OLD.has(districtAt(districts, x, z)) || lit(x, z, 24)) continue;
+          if (decks.some((d) => pointInPolygon(x, z, d.poly))) continue;
+          // The fronts either side, across the street: this lamp's side, or the other if it has none.
+          let px = -dz * side, pz = dx * side;
+          let near = wallAlong(x, z, px, pz), far = wallAlong(x, z, -px, -pz);
+          if (!near) { [near, far, px, pz] = [far, near, -px, -pz]; side = -side; }
+          if (!near) continue;
+          const [d, nx, nz] = near, width = d + (far ? far[0] : 99);
+          const wx = x + px * d, wz = z + pz * d;
+          if (width < 9) {
+            const lx = wx + nx * 0.8, lz = wz + nz * 0.8;
+            wl.push(lx, ground.sample(lx, lz), lz, Math.atan2(nx, nz));
+          } else {
+            const lx = wx + nx * 1.2, lz = wz + nz * 1.2;
+            if (addedPosts++ % 2 === 0) l2.push(lx, ground.sample(lx, lz), lz, arms(dx, dz));
+            else lp.push(lx, ground.sample(lx, lz), lz);
+          }
+          put(x, z);
+          added++;
+          side = -side;
+        }
+      }
+    }
+  }
   railPos = new Float32Array(pos);
-  streetsPack = encodePack({}, { railStart: new Uint32Array(starts), rail: railPos, lamp: new Float32Array(lp), wallLamp: new Float32Array(wl), pole: new Float32Array(poles) });
-  log(`streets: ${km.toFixed(0)} km of tram track in ${starts.length - 1} runs, ${lp.length / 3} lamps and ${wl.length / 4} on walls, ${poles.length / 4} wire poles`);
+  streetsPack = encodePack({}, { railStart: new Uint32Array(starts), rail: railPos, lamp: new Float32Array(lp), wallLamp: new Float32Array(wl), lamp2: new Float32Array(l2), pole: new Float32Array(poles) });
+  log(`streets: ${km.toFixed(0)} km of tram track in ${starts.length - 1} runs, ${lp.length / 3} lamps, ${wl.length / 4} on walls and ${l2.length / 4} with two arms (${added} added in the old town), ${poles.length / 4} wire poles`);
 }
 
 // ---- City life (design.md §8.8, tools/lib/life.ts) ---------------------------------------------
@@ -1138,6 +1263,9 @@ let treesPack: Uint8Array | null = null;
     // on the water, their crowns hanging over it.
     {
       const near = buildings.filter((b) => certovkaDist(b.cx, b.cz) < 60);
+      // And off what the landmarks stand on there (the Zlomkovský mill's wing over the water), by
+      // the crown's reach.
+      const claims = landmarkMeshes.flatMap((m) => m.claims ?? []).map((r) => ({ outer: r, holes: [] }));
       let shrubs = 0;
       for (const l of certovka)
         for (let i = 0; i + 3 < l.length; i += 2) {
@@ -1153,7 +1281,8 @@ let treesPack: Uint8Array | null = null;
               if (d >= 14) continue;
               const seed = treeHash(px * 3 + side, pz * 3), u = seed / 256, v = ((seed * 131) % 256) / 256;
               const x = px + nx * side * (d + 0.4 + 0.8 * u), z = pz + nz * side * (d + 0.4 + 0.8 * u);
-              if (near.some((b) => pointInPolygon(x, z, b.poly))) continue;
+              const claimed = (qx: number, qz: number) => claims.some((p) => pointInPolygon(qx, qz, p));
+              if (near.some((b) => pointInPolygon(x, z, b.poly)) || [[0, 0], [2, 0], [-2, 0], [0, 2], [0, -2]].some(([ox, oz]) => claimed(x + ox, z + oz))) continue;
               trees.push({ x, z, h: 2.6 + 2.2 * u, r: 1.6 + 1.0 * v, kind: TreeKind.Shrub, seed });
               shrubs++;
             }

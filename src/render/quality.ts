@@ -27,14 +27,16 @@ export interface Quality {
   spriteShadows: boolean;
   /** How far the buildings' detail (chimneys, dormers) and the landmarks' (statues, finials) are drawn. */
   detail: number;
+  /** How far the landmarks' fine tier (mouldings, tracery, balusters, crockets; M12) is drawn; 0 leaves it out. */
+  fine: number;
   /** The frame interval the governor holds, seconds, and its lowest scale (of each side). */
   target: number;
   minScale: number;
 }
 
 export const PRESETS: Record<Preset, Quality> = {
-  full: { preset: 'full', pixels: 4.2e6, ao: true, mirror: 0.4, mirrorRange: 2200, clouds: 2, coverage: 0.65, shadow: 2048, shadowFar: 2800, spriteShadows: true, detail: 1600, target: 1 / 60, minScale: 0.72 },
-  lite: { preset: 'lite', pixels: 1.7e6, ao: false, mirror: 0.2, mirrorRange: 1300, clouds: 3, coverage: 0.4, shadow: 1024, shadowFar: 1400, spriteShadows: false, detail: 900, target: 1 / 30, minScale: 0.6 },
+  full: { preset: 'full', pixels: 4.2e6, ao: true, mirror: 0.4, mirrorRange: 2200, clouds: 2, coverage: 0.65, shadow: 2048, shadowFar: 2800, spriteShadows: true, detail: 1600, fine: 300, target: 1 / 60, minScale: 0.72 },
+  lite: { preset: 'lite', pixels: 1.7e6, ao: false, mirror: 0.2, mirrorRange: 1300, clouds: 3, coverage: 0.4, shadow: 1024, shadowFar: 1400, spriteShadows: false, detail: 900, fine: 0, target: 1 / 30, minScale: 0.6 },
 };
 
 /** `?quality=lite` or `full` forces a preset; otherwise integrated and software GPUs start on lite. */

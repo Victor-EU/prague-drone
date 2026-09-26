@@ -19,12 +19,12 @@ interface Ring { n: number; r0: number; r1: number; h: number; flare: number; w:
 // turns out, the angle a petal spans, and how light it is (the heart is in its own shade).
 const RINGS: Ring[] = [
   // The heart: petals wrapped round each other in a spiral and closed over it, a high centre.
-  { n: 3, r0: 0.003, r1: 0.012, h: 0.046, flare: 0, w: 2.6, tone: 0.8, close: 0.011 },
-  { n: 3, r0: 0.005, r1: 0.017, h: 0.049, flare: 0, w: 2.4, tone: 0.84, close: 0.01 },
-  { n: 4, r0: 0.007, r1: 0.021, h: 0.05, flare: 0.002, w: 2.0, tone: 0.86, close: 0.006 },
+  { n: 3, r0: 0.003, r1: 0.012, h: 0.046, flare: 0, w: 2.6, tone: 0.95, close: 0.011 },
+  { n: 3, r0: 0.005, r1: 0.017, h: 0.049, flare: 0, w: 2.4, tone: 0.95, close: 0.01 },
+  { n: 4, r0: 0.007, r1: 0.021, h: 0.05, flare: 0.002, w: 2.0, tone: 0.95, close: 0.006 },
   // The cup.
-  { n: 5, r0: 0.009, r1: 0.027, h: 0.046, flare: 0.007, w: 1.7, tone: 0.86 },
-  { n: 5, r0: 0.012, r1: 0.034, h: 0.046, flare: 0.01, w: 1.55, tone: 0.92 },
+  { n: 5, r0: 0.009, r1: 0.027, h: 0.046, flare: 0.007, w: 1.7, tone: 0.93 },
+  { n: 5, r0: 0.012, r1: 0.034, h: 0.046, flare: 0.01, w: 1.55, tone: 0.95 },
   // The outer petals, opening, their tips rolled back.
   { n: 6, r0: 0.015, r1: 0.042, h: 0.042, flare: 0.014, w: 1.35, tone: 0.97 },
   { n: 6, r0: 0.018, r1: 0.048, h: 0.032, flare: 0.02, w: 1.25, tone: 1.0 },
@@ -32,27 +32,36 @@ const RINGS: Ring[] = [
 
 /** One bloom, facing +y with its base at the origin; `full` with finer petals and every ring. */
 function bloomGeometry(full: boolean): THREE.BufferGeometry {
-  const pos: number[] = [], col: number[] = [], idx: number[] = [];
-  const S = full ? 6 : 3, T = full ? 5 : 2;
+  const pos: number[] = [], col: number[] = [], uv: number[] = [], idx: number[] = [];
+  const S = full ? 8 : 3, T = full ? 6 : 2;
   const rings = full ? RINGS : RINGS.slice(2).filter((_, i) => i !== 1);
   rings.forEach((g, ri) => {
     for (let i = 0; i < g.n; i++) {
       // Each ring turned by the golden angle from the last: the petals overlap in a spiral.
       const c = (i / g.n) * Math.PI * 2 + ri * 2.4;
       // Each petal its own shade, so the folds between them show.
-      const own = 0.86 + 0.14 * Math.abs(Math.sin(ri * 7.1 + i * 3.7));
+      const own = 0.8 + 0.2 * Math.abs(Math.sin(ri * 7.1 + i * 3.7));
       const base = pos.length / 3;
       for (let b = 0; b <= T; b++)
         for (let a = 0; a <= S; a++) {
           const s = (a / S) * 2 - 1, t = b / T;
-          // Narrow at the base, wide at the lip; cupped across; the open petals' lips turned out
-          // and down, their edges rolled back further, so each comes to a point (8722).
+          // Narrow at the base, broad at the lip, and cupped: the middle of a petal bellies out
+          // past its edges. The open petals' lips turn out and down, their edges rolled back a
+          // little further, to a soft point (8722; M11, where M10's came to spikes).
           const th = c + s * (g.w / 2) * (0.55 + 0.45 * Math.sin((t * Math.PI) / 2));
-          const rho = g.r0 + (g.r1 - g.r0) * t - (g.close ?? 0) * t * t + g.flare * t * t * t * (1 + 0.8 * s * s) + 0.002 * (1 - s * s);
-          const y = g.h * t - g.flare * 0.8 * t ** 4 - 0.28 * g.h * Math.abs(s) * t * t;
+          const cup = 0.011 * (g.r1 / 0.048) * (1 - s * s) * Math.sin(t * Math.PI * 0.85);
+          const rho = g.r0 + (g.r1 - g.r0) * t - (g.close ?? 0) * t * t + g.flare * t * t * t * (1 + 0.5 * s * s) + cup;
+          // The lip rolls back over the last third, its edges most (a hybrid tea's reflexed petal).
+          const roll = Math.max(0, t - 0.6) / 0.4;
+          const y = g.h * t - g.flare * 0.8 * t ** 4 - 0.22 * g.h * s * s * t * t - 0.12 * g.h * roll * roll * (0.4 + Math.abs(s));
           pos.push(rho * Math.cos(th), y, rho * Math.sin(th));
-          const k = own * g.tone * (0.7 + 0.3 * t) * (1 - 0.08 * s * s);
-          col.push(k, k, k);
+          // Deep in the cup a petal is in its neighbours' shade; its lip catches the light, and the
+          // rolled edge more, a little paler and oranger where it thins (8722).
+          // The heart's petals are lit through the ones round them: lighter, a little pinker.
+          const heart = g.close ? 1.15 : 1;
+          const k = own * g.tone * heart * (0.45 + 0.55 * t ** 0.9) * (1 - 0.12 * s * s) * (1 + 0.18 * roll * Math.abs(s));
+          col.push(k, k * (0.85 + 0.25 * roll) * (g.close ? 1.2 : 1), k * (0.85 + 0.1 * t) * (g.close ? 1.3 : 1));
+          uv.push(s, t);
         }
       for (let b = 0; b < T; b++)
         for (let a = 0; a < S; a++) {
@@ -64,12 +73,13 @@ function bloomGeometry(full: boolean): THREE.BufferGeometry {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   g.setIndex(idx);
   g.computeVertexNormals();
   return g;
 }
 
-/** The green under a bloom: its stem into the bush, five sepals and two leaves. */
+/** The green under a bloom: its stem down into the bush, five sepals, and three leaves of five leaflets. */
 function greenGeometry(): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
   const paint = (g: THREE.BufferGeometry, r: number, gr: number, b: number) => {
@@ -78,21 +88,31 @@ function greenGeometry(): THREE.BufferGeometry {
     g.setAttribute('color', new THREE.Float32BufferAttribute(a, 3));
     return g;
   };
-  parts.push(paint(new THREE.CylinderGeometry(0.0035, 0.0045, 0.32, 5, 1, true).translate(0, -0.16, 0), 0.035, 0.055, 0.025));
+  parts.push(paint(new THREE.CylinderGeometry(0.0035, 0.005, 0.5, 5, 1, true).translate(0, -0.25, 0), 0.035, 0.055, 0.025));
   for (let i = 0; i < 5; i++) {
     const a = (i / 5) * Math.PI * 2;
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute([0.004, 0.002, -0.004, 0.004, 0.002, 0.004, 0.03, -0.012, 0], 3));
     parts.push(paint(g.rotateY(a), 0.03, 0.05, 0.022));
   }
-  for (const [y, a] of [[-0.1, 0.3], [-0.19, 2.7]] as const) {
-    // A leaf: a pointed oval a few centimetres long, out from the stem and a little up.
-    const g = new THREE.BufferGeometry();
+  // A leaflet: a pointed oval, folded a little along its midrib, from its stalk along +x.
+  const leaflet = (len: number) => {
+    const w = len * 0.32, g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute([
-      0.004, 0, 0, 0.03, 0.006, 0.014, 0.03, 0.006, -0.014, 0.065, 0.016, 0,
+      0, 0, 0, len * 0.35, 0.002, w, len * 0.35, 0.002, -w, len * 0.4, -0.003, 0, len, 0, 0,
     ], 3));
-    g.setIndex([0, 1, 2, 1, 3, 2]);
-    parts.push(paint(g.toNonIndexed().rotateY(a).translate(0, y, 0), 0.03, 0.05, 0.024));
+    g.setIndex([0, 3, 1, 0, 2, 3, 3, 4, 1, 3, 2, 4]);
+    return g.toNonIndexed();
+  };
+  for (const [y, a, k] of [[-0.09, 0.3, 1], [-0.2, 2.6, 1.15], [-0.33, 4.6, 1.25]] as const) {
+    // A rose's leaf: a stalk out from the stem and a little up, a leaflet at its end and two pairs
+    // along it, a few centimetres each, darker and glossier than the bush's mass seen from afar.
+    const L = 0.1 * k, tone = 0.8 + 0.2 * Math.sin(a * 5);
+    const leaf: THREE.BufferGeometry[] = [paint(new THREE.CylinderGeometry(0.0012, 0.0015, L, 3, 1, true).rotateZ(-Math.PI / 2).translate(L / 2, 0, 0), 0.03, 0.045, 0.022)];
+    leaf.push(paint(leaflet(0.045 * k).translate(L, 0, 0), 0.03 * tone, 0.05 * tone, 0.022 * tone));
+    for (const [at, side] of [[0.45, 1], [0.45, -1], [0.8, 1], [0.8, -1]] as const)
+      leaf.push(paint(leaflet(0.038 * k).rotateY((side * Math.PI) / 3).translate(L * at, 0, 0), 0.028 * tone, 0.047 * tone, 0.02 * tone));
+    for (const g of leaf) parts.push(g.rotateZ(0.35).rotateY(a).translate(0, y, 0));
   }
   const pos: number[] = [], col: number[] = [];
   for (const p of parts) {
@@ -124,7 +144,7 @@ function bnoise(x: number, y: number) {
 }
 function bloomColour(x: number, z: number, out: THREE.Color) {
   const v = bnoise(x * 0.18 + 11, z * 0.18 + 11);
-  return v < 0.5 ? out.setRGB(0.58, 0.035, 0.028) : v < 0.68 ? out.setRGB(0.62, 0.04, 0.012) : v < 0.86 ? out.setRGB(0.66, 0.24, 0.3) : out.setRGB(0.8, 0.76, 0.7);
+  return v < 0.5 ? out.setRGB(0.58, 0.035, 0.028) : v < 0.68 ? out.setRGB(0.7, 0.07, 0.004) : v < 0.86 ? out.setRGB(0.66, 0.24, 0.3) : out.setRGB(0.8, 0.76, 0.7);
 }
 
 /** A rose bush near the camera: where it stands, its crown's radii and centre height, its seed. */
@@ -155,9 +175,10 @@ export class RoseBlooms {
         // The lobes reach the ellipsoid's sides but only about four fifths of its top.
         n.set(dx / b.rx, yN / (0.82 * b.ry), dz / b.rx).normalize();
         p.set(b.x + dx * b.rx, b.y + b.cy + yN * 0.82 * b.ry, b.z + dz * b.rx).addScaledVector(n, 0.03 + 0.03 * rnd());
-        // Turned up more than out: from beside the bush they show their profile (8722).
-        n.y += 1.1;
-        n.x += (rnd() - 0.5) * 0.5; n.z += (rnd() - 0.5) * 0.5;
+        // Turned out as much as up, each its own way: from beside the bush some show their cups
+        // and some their profiles (8722; M11, where M10's all faced the sky).
+        n.y += 0.45;
+        n.x += (rnd() - 0.5) * 0.9; n.z += (rnd() - 0.5) * 0.9;
         n.normalize();
         q.setFromUnitVectors(up, n);
         spin.setFromAxisAngle(up, rnd() * Math.PI * 2);
@@ -183,13 +204,33 @@ export class RoseBlooms {
   }
 
   private create() {
-    // Petals take light through them: the sun lights a petal from either side, and the sky
-    // reaches down into the heart more than its occlusion says.
-    const petals = patchLit(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, side: THREE.DoubleSide }), (shader) => {
-      shader.fragmentShader = shader.fragmentShader.replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
-reflectedLight.indirectDiffuse *= 1.5;
+    // M11: lit as petals, not paint. The sky's light is its own, not raised; the sheen is velvet,
+    // weak and never white; and light passes through a petal lit from behind only, deeper red for
+    // it, so the side toward the sun is lit and the other glows (8722).
+    // Across each petal (uv: s from edge to edge, t from base to lip): its base in shadow where it
+    // leaves the one below, faint veins along it, and the thin edge of the lip paler, so each
+    // petal shows as its own surface over the next (8722).
+    const petals = patchLit(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, side: THREE.DoubleSide }), (shader) => {
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec2 vPetal;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPetal = uv;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying vec2 vPetal;')
+        .replace('#include <color_fragment>', `#include <color_fragment>
+{
+  float s = abs(vPetal.x), t = vPetal.y;
+  float veins = 1.0 - 0.07 * pow(abs(sin(vPetal.x * 9.0 + t * 1.5)), 6.0) * smoothstep(0.1, 0.5, t);
+  float base = mix(0.55, 1.0, smoothstep(0.0, 0.35, t));
+  float lip = smoothstep(0.75, 1.0, max(s, t)) * smoothstep(0.55, 0.9, t);
+  diffuseColor.rgb *= veins * base * (1.0 + 0.22 * lip);
+  diffuseColor.g += 0.012 * lip;
+}`)
+        .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+reflectedLight.indirectDiffuse *= 1.1;
+reflectedLight.indirectSpecular *= 0.25;
+reflectedLight.directSpecular *= 0.35;
 #if NUM_DIR_LIGHTS > 0
-reflectedLight.directDiffuse += diffuseColor.rgb * directionalLights[0].color * praSunVisibility(vPraWorld) * 0.3 * abs(dot(normal, directionalLights[0].direction)) * RECIPROCAL_PI;
+reflectedLight.directDiffuse += diffuseColor.rgb * diffuseColor.rgb * 1.6 * directionalLights[0].color * praSunVisibility(vPraWorld) * 0.55 * max(-dot(normal, directionalLights[0].direction), 0.0) * RECIPROCAL_PI;
 #endif`);
     }, '-petals');
     const green = patchLit(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, side: THREE.DoubleSide }));

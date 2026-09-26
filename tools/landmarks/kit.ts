@@ -131,6 +131,29 @@ export function arch(w: number, h: number, kind: 'pointed' | 'round' | 'flat' | 
   return pts;
 }
 
+/**
+ * Moulding profiles for Kit.sweep, (u out, v up) in metres, traversed with the solid on the left
+ * from the wall out and back to it: `out` is how far they stand proud, `h` how tall they are.
+ */
+export const PROFILE = {
+  /** A plain band. */
+  band: (out: number, h: number): V2[] => [[0, 0], [out, 0], [out, h], [0, h]],
+  /** A string course, its top weathered back to the wall. */
+  string: (out: number, h: number): V2[] => [[0, 0], [out, 0], [out, h * 0.45], [0, h]],
+  /** A classical cornice: bed mould, corona, cyma. */
+  cornice: (out: number, h: number): V2[] => [[0, 0], [out * 0.25, 0], [out * 0.25, h * 0.15], [out * 0.5, h * 0.3], [out * 0.5, h * 0.4], [out * 0.95, h * 0.45], [out * 0.95, h * 0.75], [out, h * 0.85], [out, h], [0, h]],
+  /** A plinth at a wall's foot: a step and a chamfer. */
+  plinth: (out: number, h: number): V2[] => [[0, 0], [out, 0], [out, h * 0.7], [out * 0.5, h * 0.85], [out * 0.5, h], [0, h]],
+  /** A sill: a slope back to the wall on top. */
+  sill: (out: number, h: number): V2[] => [[0, 0], [out * 0.8, 0], [out, h * 0.3], [out, h * 0.7], [0, h]],
+  /** An arch ring or a window surround: `depth` across the face, `proud` of it, chamfered edges (v is the wall's normal). */
+  ring: (depth: number, proud: number): V2[] => [[depth, 0], [depth, proud * 0.6], [depth - proud * 0.4, proud], [proud * 0.4, proud], [0, proud * 0.6], [0, 0]],
+  /** A coping or handrail astride a wall: `w` wide, `h` tall, chamfered on both sides (a closed profile round the path). */
+  coping: (w: number, h: number): V2[] => [[-w / 2, 0], [w / 2, 0], [w / 2, h * 0.55], [w * 0.32, h], [-w * 0.32, h], [-w / 2, h * 0.55], [-w / 2, 0]],
+  /** A gallery's or balcony's corbelled course: the underside curving out. */
+  corbel: (out: number, h: number): V2[] => [[0, 0], [out * 0.35, h * 0.3], [out * 0.7, h * 0.55], [out, h * 0.75], [out, h], [0, h]],
+};
+
 export interface PolyOptions {
   /** Facade coordinates per world vertex; by default derived from the surface's orientation. */
   fac?: (w: V3, n: V3) => F4;
@@ -154,6 +177,8 @@ export class Kit {
   flagsOr = 0;
   /** Lamps for the night (src/world/lights.ts): world x, y, z and kind, per lamp. */
   lights: number[] = [];
+  /** World rings (flat x, z) the model stands on, kept clear of the bushes the world build plants. */
+  claims: number[][] = [];
   private f: Frame = { x: 0, y: 0, z: 0, a: 1, b: 0 };
   private stack: Frame[] = [];
 
@@ -393,6 +418,69 @@ export class Kit {
       this.poly([P[i], P[j], Q[j], Q[i]], m, { normal: mid });
     }
     if (caps) { this.poly(P.slice().reverse(), m, { normal: [-d[0], -d[1], -d[2]] }); this.poly(Q, m, { normal: d }); }
+  }
+
+  /**
+   * A profile swept along a path of local points: the moulding of a cornice, a string course, a
+   * coping, a plinth, an arch ring or an entablature (M12, design.md §7.1). The profile is (u, v)
+   * in metres: v along the axis `v` (up by default; a wall's outward normal for an arch ring or a
+   * moulding drawn on one face), u across the path in the plane that axis is normal to, outward
+   * from a closed ring, and on an open path to the left of travel as seen from the tip of `v`
+   * (up at the crown of an arch drawn left to right as seen from outside the wall; along a jamb,
+   * away from the opening). Traverse the profile with the solid on its left, from the wall out and
+   * back to it (PROFILE has the usual ones). Corners are mitred; faces are flat; stone takes its
+   * courses along the path.
+   */
+  sweep(path: V3[], prof: V2[], m: Mat, o: { v?: V3; closed?: boolean; caps?: boolean; shade?: number; flip?: boolean } = {}) {
+    const n = path.length;
+    if (n < 2 || prof.length < 2) return;
+    const V = norm(o.v ?? [0, 1, 0]);
+    const closed = !!o.closed, segs = n - (closed ? 0 : 1);
+    const dirs: V3[] = [];
+    for (let i = 0; i < segs; i++) dirs.push(norm(sub(path[(i + 1) % n], path[i])));
+    // Per vertex: the u axis, mitred (scaled so the profile meets both segments), and the length along the path.
+    const U: V3[] = [], K: number[] = [], S: number[] = [];
+    let s = 0;
+    for (let i = 0; i < n; i++) {
+      const d0 = closed || i > 0 ? dirs[(i - 1 + segs) % segs] : dirs[0];
+      const d1 = closed || i < n - 1 ? dirs[i % segs] : dirs[segs - 1];
+      let T = norm([d0[0] + d1[0], d0[1] + d1[1], d0[2] + d1[2]]);
+      if (Math.hypot(...T) < 1e-6 || Math.abs(dot(d0, d1) + 1) < 1e-6) T = d1;
+      const u = norm(cross(V, T)), n1 = norm(cross(V, d1));
+      U.push(u); K.push(1 / Math.max(0.3, Math.abs(dot(u, n1)))); S.push(s);
+      if (i < segs) s += Math.hypot(...sub(path[(i + 1) % n], path[i]));
+    }
+    let flip = !!o.flip;
+    if (closed) {
+      const c: V3 = [0, 0, 0];
+      for (const p of path) { c[0] += p[0] / n; c[1] += p[1] / n; c[2] += p[2] / n; }
+      let out = 0;
+      for (let i = 0; i < n; i++) out += dot(U[i], sub(path[i], c));
+      if (out < 0) flip = !flip;
+    }
+    if (flip) for (const u of U) { u[0] = -u[0]; u[1] = -u[1]; u[2] = -u[2]; }
+    const P = (i: number, j: number): V3 => {
+      const k = K[i] * prof[j][0], pv = prof[j][1];
+      return [path[i][0] + U[i][0] * k + V[0] * pv, path[i][1] + U[i][1] * k + V[1] * pv, path[i][2] + U[i][2] * k + V[2] * pv];
+    };
+    for (let i = 0; i < segs; i++) {
+      const i1 = (i + 1) % n;
+      const Wi = this.world(path[i]), T = this.dir(dirs[i]), s0 = S[i];
+      const fac = (w: V3): F4 => [s0 + dot(sub(w, Wi), T), w[1] - this.ground, m.w, 0];
+      const um = norm([U[i][0] + U[i1][0], U[i][1] + U[i1][1], U[i][2] + U[i1][2]]);
+      for (let j = 0; j + 1 < prof.length; j++) {
+        const du = prof[j + 1][0] - prof[j][0], dv = prof[j + 1][1] - prof[j][1];
+        if (Math.abs(du) + Math.abs(dv) < 1e-6) continue;
+        // The face's outward normal is the profile segment's right-hand normal (dv, −du).
+        const nrm: V3 = [um[0] * dv - V[0] * du, um[1] * dv - V[1] * du, um[2] * dv - V[2] * du];
+        this.poly([P(i, j), P(i1, j), P(i1, j + 1), P(i, j + 1)], m, { normal: nrm, shade: o.shade, fac: m.kind === Surface.Stone ? fac : undefined });
+      }
+    }
+    if (o.caps && !closed) {
+      const d0 = dirs[0], d1 = dirs[segs - 1];
+      this.poly(prof.map((_, j) => P(0, j)), m, { normal: [-d0[0], -d0[1], -d0[2]], shade: o.shade });
+      this.poly(prof.map((_, j) => P(n - 1, j)), m, { normal: d1, shade: o.shade });
+    }
   }
 
   /**

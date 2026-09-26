@@ -23,7 +23,9 @@ import landmarkData from '../data/landmarks.json';
 import lutUrl from '../assets/lut/classic-neg.cube?url';
 
 const params = new URLSearchParams(location.search);
-const BASE = `${import.meta.env.BASE_URL}world`;
+// Development only: another built world beside public/world (`?world=world-m10`), for benchmarking
+// one milestone's world against another's.
+const BASE = `${import.meta.env.BASE_URL}${(import.meta.env.DEV && params.get('world')?.replace(/[^\w-]/g, '')) || 'world'}`;
 
 // Development only: a hero frame's viewpoint (data/viewpoints.json), for judging the render
 // against the photograph (design.md §12.1). The shipped app never loads either.
@@ -34,6 +36,9 @@ interface Viewpoint {
   life?: number;
   /** The camera's near plane, for a close-up (8722's roses); 3 m otherwise. */
   near?: number;
+  /** A close-up's focus distance (m) and f-number at the 35 mm equivalent, for its depth of field (design.md §5.5). */
+  focus?: number;
+  fstop?: number;
 }
 // `?view=look` is a free camera for inspecting the world (set it with the nudges below).
 const LOOK: Viewpoint = { id: 'look', x: 0, north: 0, agl: 60, heading: 0, tilt: -10, focal35: 24, aspect: 1.5, clock: '17:30', weather: { seed: 1, coverage: 0.15, overcast: false, cirrus: 0 } };
@@ -42,7 +47,7 @@ const view: Viewpoint | undefined = import.meta.env.DEV && params.has('view')
   : undefined;
 if (view) {
   // Nudging a viewpoint while lining it up: /?view=8385&heading=40&tilt=-9 (tools/compare.ts id@heading=40,tilt=-9).
-  for (const k of ['x', 'north', 'agl', 'y', 'heading', 'tilt', 'focal35', 'aspect', 'near'] as const) if (params.has(k)) view[k] = Number(params.get(k));
+  for (const k of ['x', 'north', 'agl', 'y', 'heading', 'tilt', 'focal35', 'aspect', 'near', 'focus', 'fstop'] as const) if (params.has(k)) view[k] = Number(params.get(k));
   // A height above ground is ambiguous over water and on bridges: `y` gives the eye's height instead.
   if (params.has('agl')) delete view.y;
   if (params.has('vclock')) view.clock = params.get('vclock')!;
@@ -88,6 +93,7 @@ const route = new Route(routeData as unknown as RouteData);
 const [lut, world] = await Promise.all([loadCube(lutUrl), World.load(BASE, renderer)]);
 const atmosphere = new Atmosphere(renderer, scene, session, overcast);
 const pipeline = new Pipeline(renderer, lut);
+if (view?.focus) pipeline.dof = { focus: view.focus, fstop: view.fstop ?? 4, focal35: view.focal35 };
 if (import.meta.env.DEV) for (const [k, v] of params) if (k.startsWith('light.')) (atmosphere.lightOverride as Record<string, number | number[]>)[k.slice(6)] = v.includes(':') ? v.split(':').map(Number) : Number(v);
 if (import.meta.env.DEV && params.get('ao') === '0') pipeline.ao = false;
 if (import.meta.env.DEV && params.get('grade') === '0') pipeline.grade = false;
@@ -106,7 +112,8 @@ function applyQuality(q: Quality) {
   atmosphere.clouds.maxCoverage = q.coverage;
   atmosphere.sun.shadow.camera.far = q.shadowFar;
   world.buildings.detailRange = q.detail;
-  if (world.landmarks) world.landmarks.detailRange = q.detail * 0.9;
+  // `?fine=0` (development) leaves the landmarks' fine tier out, to measure it (design.md §11).
+  if (world.landmarks) { world.landmarks.detailRange = q.detail * 0.9; world.landmarks.fineRange = import.meta.env.DEV && params.get('fine') === '0' ? 0 : q.fine; }
   if (world.trees) world.trees.spriteShadows = q.spriteShadows;
   // The close-up details (design.md §8.2, §8.4), off with `?detail=0` in development to measure them.
   const detail = !(import.meta.env.DEV && params.get('detail') === '0');
@@ -136,7 +143,7 @@ function warmUp() {
   U.uCityLights.value = 1;
   if (world.lights) world.lights.points.visible = true;
   world.life?.lamps.set([[p.x, p.y - 40, p.z, 1, p.x + 2, p.y - 40, p.z, 0]]);
-  world.buildings.detailRange = world.landmarks!.detailRange = Infinity;
+  world.buildings.detailRange = world.landmarks!.detailRange = world.landmarks!.fineRange = Infinity;
   world.buildings.update(p);
   world.landmarks?.update(p);
   pipeline.warm(scene, camera, true);

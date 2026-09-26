@@ -1,14 +1,17 @@
 // Charles Bridge (design.md §7.1): sixteen sandstone arches on fifteen piers, 515 m from the Old
 // Town Bridge Tower to the Lesser Town gate, with its slight S in plan and a gentle rise to the
 // middle of the river. Pointed cutwaters on both sides of every pier, the wooden ice guards
-// upstream, the arch rings standing proud of the spandrels, a string course under the parapet,
-// the cobbled deck, and on the parapets above the piers the thirty statues (dark silhouettes on
-// their plinths) with the lamps between them.
+// upstream, the arch rings standing proud of the spandrels, a moulded string course under the
+// parapet and a chamfered coping on it, the cobbled deck, and on the parapets above the piers the
+// thirty statue groups (M12: each its own composition, a saint alone, a trio, the Calvary, the
+// pyramids of figures, the Turk's rock, as dark silhouettes on moulded pedestals) with the tall
+// lamps between them; Bruncvík on his column on the Kampa pier.
 //
 // Everything is placed from OSM's outline of the bridge (way/119016167): its axis, the curve of the
 // deck, and the piers, which the outline draws as the places where it widens round the cutwaters.
 
-import { Kit, mat, type V3, type V2 } from './kit.ts';
+import { Kit, mat, rect, PROFILE, type V3, type V2 } from './kit.ts';
+import { statue, type StatueKind } from './ornament.ts';
 import type { Model, Site } from './index.ts';
 import { Surface, Stone, Glass } from '../../src/core/buildings.ts';
 
@@ -17,7 +20,10 @@ const RING = mat('#7d7366', Surface.Stone, Stone.Ashlar, 0.75);
 const PIER = mat('#7f766a', Surface.Stone, Stone.Ashlar, 0.8);
 const COPING = mat('#9a8f80', Surface.Stone, Stone.Ashlar, 0.45);
 const SETTS = mat('#6e6962', Surface.Stone, Stone.Setts, 0.15);
-const STATUE = mat('#3e3a36', Surface.Stone, Stone.Render, 0.2);
+const STATUE = mat('#3e3a36', Surface.Stone, Stone.Render, 0.25);
+const BRONZE = mat('#2d322f', Surface.Stone, Stone.Render, 0.15);
+const MARBLE = mat('#c9c2b4', Surface.Stone, Stone.Render, 0.1);
+const GOLD = mat('#c9a34a', Surface.Metal, 3);
 const PLINTH = mat('#857b6e', Surface.Stone, Stone.Ashlar, 0.7);
 const WOOD = mat('#4c4034', Surface.Plain);
 const IRON = mat('#2b2d2c', Surface.Plain);
@@ -135,30 +141,52 @@ export function bridgeAxis(site: Site): Axis {
 }
 
 /**
- * A statue group as a dark silhouette: one to three robed figures, sometimes a cross or a raised
- * arm, about 3.5 m tall; `facing` is the way the figures look (towards the walkway).
+ * The thirty statue groups, counted from the Old Town end, on the downstream (north) and upstream
+ * (south) parapets: the composition each stands for, the main figure's height, and its stone.
  */
-function statue(d: Kit, o: V3, facing: V2, k: number) {
-  const [fx, fz] = facing, sx = -fz, sz = fx;
-  const r = (a: number) => { const x = Math.sin(k * 12.9898 + a * 78.233) * 43758.5453; return x - Math.floor(x); };
-  const h = 3.1 + 0.7 * r(1);
-  const fig = (dx: number, dz: number, scale: number) => {
-    const cx = o[0] + sx * dx + fx * dz, cz = o[2] + sz * dx + fz * dz, H = h * scale;
-    d.lathe(cx, cz, [[0, o[1]], [0.72 * scale, o[1]], [0.62 * scale, o[1] + 0.45 * H], [0.46 * scale, o[1] + 0.74 * H], [0.36 * scale, o[1] + 0.8 * H], [0, o[1] + 0.82 * H]], 7, STATUE, { flat: true, phase: r(7) * 50 });
-    d.ball(cx, o[1] + 0.89 * H, cz, 0.17 * scale, STATUE, 6);
-  };
-  const n = r(2) < 0.35 ? 2 : r(2) < 0.5 ? 3 : 1;
-  if (n === 1) fig(0, 0, 1);
-  else if (n === 2) { fig(-0.45, 0, 1); fig(0.6, -0.2, 0.75); }
-  else { fig(0, -0.2, 1); fig(-0.75, 0.2, 0.7); fig(0.75, 0.2, 0.65); }
-  if (r(4) < 0.3) {
-    const cx = o[0] - fx * 0.5, cz = o[2] - fz * 0.5;
-    d.beam([cx, o[1] + 0.5, cz], [cx, o[1] + h + 1.3, cz], 0.18, STATUE);
-    d.beam([cx - sx * 0.7, o[1] + h + 0.5, cz - sz * 0.7], [cx + sx * 0.7, o[1] + h + 0.5, cz + sz * 0.7], 0.16, STATUE);
-  } else if (r(5) < 0.55) {
-    const side = r(6) < 0.5 ? -1 : 1;
-    d.beam([o[0] + sx * side * 0.35, o[1] + h * 0.62, o[2] + sz * side * 0.35], [o[0] + sx * side * 0.75 + fx * 0.25, o[1] + h + 0.35, o[2] + sz * side * 0.75 + fz * 0.25], 0.18, STATUE);
-  }
+interface Group { kind: StatueKind; h: number; m?: typeof STATUE; halo?: boolean }
+const NORTH: Group[] = [
+  { kind: 'trio', h: 3.4 },            // Madonna with St Bernard
+  { kind: 'trio', h: 3.5 },            // Madonna with Sts Dominic and Thomas Aquinas
+  { kind: 'cross', h: 4.0 },           // The Calvary
+  { kind: 'pair', h: 3.4 },            // St Anne
+  { kind: 'pyramid', h: 4.4 },         // Sts Cyril and Methodius
+  { kind: 'single', h: 3.5 },          // St John the Baptist
+  { kind: 'trio', h: 3.5 },            // Sts Norbert, Wenceslas and Sigismund
+  { kind: 'single', h: 3.4, m: BRONZE, halo: true }, // St John of Nepomuk, in bronze
+  { kind: 'single', h: 3.4 },          // St Anthony of Padua
+  { kind: 'single', h: 3.4 },          // St Jude Thaddeus
+  { kind: 'single', h: 3.4 },          // St Augustine
+  { kind: 'obelisk', h: 3.5 },         // St Cajetan
+  { kind: 'single', h: 3.4, m: MARBLE }, // St Philip Benizi, in white marble
+  { kind: 'rock', h: 4.0 },            // St Vitus on his rock
+  { kind: 'trio', h: 3.5 },            // Sts Cosmas and Damian
+];
+const SOUTH: Group[] = [
+  { kind: 'trio', h: 3.5 },            // St Ivo
+  { kind: 'trio', h: 3.4 },            // Sts Barbara, Margaret and Elizabeth
+  { kind: 'trio', h: 3.3 },            // The Pietà
+  { kind: 'single', h: 3.4 },          // St Joseph
+  { kind: 'pyramid', h: 4.6 },         // St Francis Xavier
+  { kind: 'single', h: 3.6 },          // St Christopher
+  { kind: 'trio', h: 3.4 },            // St Francis Borgia
+  { kind: 'pair', h: 3.4 },            // St Ludmila with the young Wenceslas
+  { kind: 'trio', h: 3.4 },            // St Francis of Assisi
+  { kind: 'pyramid', h: 4.4 },         // Sts Vincent Ferrer and Procopius
+  { kind: 'pair', h: 3.4 },            // St Nicholas of Tolentino
+  { kind: 'cross', h: 3.8 },           // St Luitgard's vision
+  { kind: 'single', h: 3.5 },          // St Adalbert
+  { kind: 'rock', h: 4.9 },            // Sts John of Matha, Felix of Valois and Ivan: the Turk
+  { kind: 'single', h: 3.5 },          // St Wenceslas
+];
+
+/** A bridge lamp: a cast-iron post on its base, the big four-paned lantern under a crown. */
+function bridgeLamp(d: Kit, x: number, z: number, y: number) {
+  d.box(x, z, 0.42, 0.42, y, y + 0.35, IRON);
+  d.lathe(x, z, [[0.16, y + 0.35], [0.16, y + 0.75], [0.1, y + 1.0], [0.075, y + 3.2], [0.12, y + 3.35]], 8, IRON, { flat: true });
+  d.lathe(x, z, [[0.14, y + 3.35], [0.3, y + 3.5], [0.33, y + 4.1], [0.22, y + 4.25]], 6, LANTERN, { flat: true });
+  d.lathe(x, z, [[0.38, y + 4.22], [0.14, y + 4.5], [0.05, y + 4.7], [0, y + 4.85]], 6, IRON, { flat: true });
+  d.light([x, y + 3.8, z]);
 }
 
 export const charlesBridge: Model = {
@@ -226,25 +254,15 @@ export const charlesBridge: Model = {
         const cm = A.at(span.m);
         k.poly(q, RING, { normal: [cm.x - (q[0][0] + q[2][0]) / 2, span.yc - (B0 + B1) / 2, cm.z - (q[0][2] + q[2][2]) / 2] });
       }
-      // Deck, parapets' inner faces and coping.
+      // Deck and the parapets' inner faces; the coping is swept below.
       k.poly([side(s0, -HALF + WALL, d0), side(s0, HALF - WALL, d0), side(s1, HALF - WALL, d1), side(s1, -HALF + WALL, d1)], SETTS, { normal: [0, 1, 0] });
       for (const t of [-HALF + WALL, HALF - WALL]) {
         const c = A.at((s0 + s1) / 2), inward = -Math.sign(t);
         k.poly([side(s0, t, d0), side(s1, t, d1), side(s1, t, d1 + PARAPET), side(s0, t, d0 + PARAPET)], STONE, { normal: [c.ax * inward, 0, c.az * inward] });
-        const o = t + Math.sign(t) * WALL;
-        k.poly([side(s0, t, d0 + PARAPET), side(s0, o, d0 + PARAPET), side(s1, o, d1 + PARAPET), side(s1, t, d1 + PARAPET)], COPING, { normal: [0, 1, 0] });
-      }
-      // String course under the parapet, standing out from both faces.
-      for (const t of [-HALF, HALF]) {
-        const o = t + Math.sign(t) * 0.18, c = A.at((s0 + s1) / 2), out: V3 = [c.ax * Math.sign(t), 0, c.az * Math.sign(t)];
-        const y0a = d0 - 0.55, y0b = d0 - 0.2, y1a = d1 - 0.55, y1b = d1 - 0.2;
-        k.poly([side(s0, o, y0a), side(s1, o, y1a), side(s1, o, y0b + (y1b - y0b)), side(s0, o, y0b)], COPING, { normal: out });
-        k.poly([side(s0, t, y0b), side(s0, o, y0b), side(s1, o, y1b), side(s1, t, y1b)], COPING, { normal: [0, 1, 0] });
-        k.poly([side(s0, t, y0a), side(s1, t, y1a), side(s1, o, y1a), side(s0, o, y0a)], COPING, { normal: [0, -1, 0] });
       }
       // The arch ring: a band a metre deep round the arch, standing 0.12 m proud of the face.
       if (span) {
-        const ring = (s: number) => { const c = A.at(span.m); void c; const dy = archAt(s) - span.yc, ds = s - span.m, l = Math.hypot(ds, dy) || 1; return { ds: ds / l, dy: dy / l }; };
+        const ring = (s: number) => { const dy = archAt(s) - span.yc, ds = s - span.m, l = Math.hypot(ds, dy) || 1; return { ds: ds / l, dy: dy / l }; };
         for (const t of [-HALF, HALF]) {
           const o = t + Math.sign(t) * 0.12, c = A.at((s0 + s1) / 2), out: V3 = [c.ax * Math.sign(t), 0, c.az * Math.sign(t)];
           const r0 = ring(s0), r1 = ring(s1);
@@ -255,6 +273,14 @@ export const charlesBridge: Model = {
           k.poly([side(s0, t, B0), side(s1, t, B1), p1, p0], RING, { normal: [span.m - (s0 + s1) / 2, -1, 0].map((v, j) => j === 1 ? -1 : 0) as V3 });
         }
       }
+    }
+    // The coping astride each parapet and the moulded string course under it, swept along the
+    // whole length (u points to the left of travel: outward on the north face, flipped on the south).
+    for (const sgn of [-1, 1]) {
+      const path = S.map((s) => side(s, sgn * (HALF - WALL / 2), A.deck(s) + PARAPET));
+      k.sweep(path, PROFILE.coping(WALL + 0.16, 0.24), COPING, { caps: true });
+      const course = S.map((s) => side(s, sgn * HALF, A.deck(s) - 0.58));
+      k.sweep(course, PROFILE.string(0.2, 0.38), COPING, { caps: true, flip: sgn > 0 });
     }
     // The jambs of every opening: the pier's (or abutment's) face below the springing.
     for (const h of arches)
@@ -271,6 +297,9 @@ export const charlesBridge: Model = {
     // Piers. Upstream, a pointed cutwater; downstream, a square buttress; each rises to about
     // two thirds of the arches under a sloping cap, and above it a pilaster carries the statue's
     // pedestal past the parapet.
+    const n = A.piers.length;
+    let bruncvik = A.piers.findIndex((p) => !Number.isNaN(water(p.s)));
+    if (bruncvik < 0) bruncvik = 2;
     A.piers.forEach((p, i) => {
       const c = A.at(p.s);
       const wl = water(p.s);
@@ -281,7 +310,7 @@ export const charlesBridge: Model = {
       const bearing = (Math.atan2(c.tx, -c.tz) * 180) / Math.PI;
       for (const dir of [1, -1]) {
         // In the pier's own frame: x along the bridge, z out from the face (dir > 0 upstream).
-        k.push().place(...side(p.s, dir * HALF, 0), bearing + (dir > 0 ? 0 : 180));
+        for (const kit of [k, d]) kit.push().place(...side(p.s, dir * HALF, 0), bearing + (dir > 0 ? 0 : 180));
         const L = dir > 0 ? Math.min(5.4, Math.max(3.2, p.up + 0.2)) : 3.0, W = dir > 0 ? 7.6 : 6.6;
         if (dir > 0) {
           k.prism([[-W / 2, 0], [0, L], [W / 2, 0]].map(([x, z]) => [x, z]) as V2[], base, top, PIER, null);
@@ -297,20 +326,34 @@ export const charlesBridge: Model = {
           k.poly([[-W / 2, top, 0], f0, b0], PIER, { normal: [-1, 0, 0] });
           k.poly([f1, [W / 2, top, 0], b1], PIER, { normal: [1, 0, 0] });
         }
-        // The pilaster up to the parapet, and the pedestal on it.
+        // The pilaster up to the parapet, and the pedestal on it: a moulded base, the dado, a
+        // moulded cap.
         const pw = 3.8, pd = 1.25;
         k.box(0, pd / 2, pw, pd, top + 1.5, y + PARAPET, STONE, COPING);
-        k.box(0, 0.25, pw - 1.2, 2.2, y + PARAPET, y + PARAPET + 2.3, PLINTH, null);
-        k.box(0, 0.25, pw - 0.8, 2.6, y + PARAPET + 2.3, y + PARAPET + 2.65, COPING, COPING);
-        k.box(0, 0.25, pw - 0.8, 2.6, y + PARAPET - 0.25, y + PARAPET + 0.1, COPING, null);
-        k.pop();
+        const dado = rect(pw - 1.3, 2.1, 0, 0.25);
+        k.sweep(dado.map(([x, z]) => [x, y + PARAPET - 0.2, z] as V3), PROFILE.plinth(0.28, 0.5), COPING, { closed: true });
+        k.prism(dado, y + PARAPET + 0.3, y + PARAPET + 2.35, PLINTH, null);
+        k.sweep(dado.map(([x, z]) => [x, y + PARAPET + 2.35, z] as V3), PROFILE.cornice(0.3, 0.42), COPING, { closed: true });
+        k.poly(rect(pw - 1.3 + 0.6, 2.7, 0, 0.25).map(([x, z]) => [x, y + PARAPET + 2.77, z] as V3), COPING, { normal: [0, 1, 0] });
+        // Bruncvík's column on the upstream cutwater of the first river pier from Kampa.
+        if (dir > 0 && i === bruncvik) {
+          const cy = top + 1.2;
+          k.box(0, L * 0.45, 1.6, 1.6, top - 0.2, cy, PIER, COPING);
+          k.lathe(0, L * 0.45, [[0.55, cy], [0.42, cy + 0.6], [0.36, cy + 8.6], [0.5, cy + 9.0], [0.5, cy + 9.3]], 10, COPING);
+          d.box(0, L * 0.45, 1.1, 1.1, cy + 9.3, cy + 9.6, COPING, COPING);
+          statue(d, [0, cy + 9.6, L * 0.45], [0, 1], 2.4, STATUE, 'single', 77, { pose: 'staff' });
+          d.box(0.4, L * 0.45 + 0.35, 0.5, 0.9, cy + 9.6, cy + 10.2, STATUE, STATUE);
+        }
+        for (const kit of [k, d]) kit.pop();
         // Ice guards upstream of the river piers: wooden wedges on the water.
         if (dir > 0 && !Number.isNaN(wl) && p.up > 6.5) {
           const g0 = side(p.s - 2.4, HALF + L + 1.2, 0), g1 = side(p.s + 2.4, HALF + L + 1.2, 0), gt = side(p.s, Math.min(HALF + p.up, HALF + L + 9), 0);
           d.prism([[g0[0], g0[2]], [g1[0], g1[2]], [gt[0], gt[2]]], wl - 1, wl + 1.3, WOOD, WOOD);
         }
+        // The statue group, facing the walkway; counted from the Old Town end.
+        const list = dir > 0 ? SOUTH : NORTH, g = list[Math.min(list.length - 1, n - 1 - i)];
         const pc = side(p.s, dir * (HALF + 0.25), 0);
-        statue(d, [pc[0], y + PARAPET + 2.65, pc[2]], [-c.ax * dir, -c.az * dir], i * 2 + (dir > 0 ? 1 : 0));
+        statue(d, [pc[0], y + PARAPET + 2.77, pc[2]], [-c.ax * dir, -c.az * dir], g.h, g.m ?? STATUE, g.kind, i * 2 + (dir > 0 ? 1 : 0) + 3, { halo: g.halo ? GOLD : undefined });
       }
     });
 
@@ -318,12 +361,8 @@ export const charlesBridge: Model = {
     for (const h of arches) {
       if (h.b - h.a < 10) continue;
       for (const dir of [1, -1]) {
-        const pc = side(h.m, dir * (HALF - WALL / 2), 0), y = A.deck(h.m) + PARAPET;
-        d.box(pc[0], pc[2], 0.3, 0.3, y, y + 0.4, IRON);
-        d.lathe(pc[0], pc[2], [[0.07, y + 0.4], [0.05, y + 2.6]], 6, IRON);
-        d.lathe(pc[0], pc[2], [[0.12, y + 2.55], [0.22, y + 2.7], [0.26, y + 3.2], [0.12, y + 3.3]], 6, LANTERN, { flat: true });
-        d.lathe(pc[0], pc[2], [[0.3, y + 3.28], [0.08, y + 3.55], [0, y + 3.7]], 6, IRON, { flat: true });
-        d.light([pc[0], y + 2.95, pc[2]]);
+        const pc = side(h.m, dir * (HALF - WALL / 2), 0), y = A.deck(h.m) + PARAPET + 0.24;
+        bridgeLamp(d, pc[0], pc[2], y);
       }
     }
   },

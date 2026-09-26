@@ -195,6 +195,48 @@ void main() {
   gl_FragColor = vec4(next, ev, evFrame, evSky);
 }`;
 
+// Depth of field for the close-ups (design.md §5.5, M11): the comparison tool's viewpoints that
+// give a focus distance and an aperture, never the flight. A gather in linear light after TAA: each
+// pixel averages the image over a golden-angle spiral out to the largest circle of confusion,
+// taking a sample where the sample's own circle reaches back to it; what lies behind a pixel in
+// sharper focus may blur only as far as that pixel's own circle, so the background does not bleed
+// over a rose in focus.
+const DOF_FRAG = /* glsl */ `
+uniform sampler2D tColor;
+uniform sampler2D tDepth;
+uniform mat4 uProjInv;
+uniform vec2 uTexel;
+uniform float uK;
+uniform float uFocus;
+uniform float uMaxR;
+uniform float uStep;
+varying vec2 vUv;
+float dist(vec2 uv) {
+  float d = texture2D(tDepth, uv).r;
+  if (d <= 0.0) return 1e6;
+  vec4 p = uProjInv * vec4(uv * 2.0 - 1.0, d, 1.0);
+  return -p.z / p.w;
+}
+float coc(float s) { return min(uK * abs(1.0 - uFocus / s), uMaxR); }
+void main() {
+  vec3 acc = texture2D(tColor, vUv).rgb;
+  float d0 = dist(vUv), r0 = coc(d0), tot = 1.0;
+  float radius = uStep, ang = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) * 6.2831853;
+  for (int i = 0; i < 4096; i++) {
+    if (radius >= uMaxR) break;
+    vec2 uv = vUv + vec2(cos(ang), sin(ang)) * uTexel * radius;
+    vec3 c = texture2D(tColor, uv).rgb;
+    float d = dist(uv), r = coc(d);
+    if (d > d0) r = min(r, r0 * 2.0);
+    float m = smoothstep(radius - 0.5, radius + 0.5, r);
+    acc += mix(acc / tot, c, m);
+    tot += 1.0;
+    radius += uStep / radius;
+    ang += 2.39996323;
+  }
+  gl_FragColor = vec4(acc / tot, 1.0);
+}`;
+
 const FINAL_FRAG = /* glsl */ `
 uniform sampler2D tColor;
 uniform sampler2D tExposure;
@@ -292,6 +334,8 @@ export interface FrameOptions {
 export class Pipeline {
   /** Grade, vignette and grain on; key G in development turns them off (design.md §5.2). */
   grade = true;
+  /** Development only: a close-up's lens (focus distance in metres, f-number at the 35 mm equivalent, focal length), for its depth of field (design.md §5.5). */
+  dof: { focus: number; fstop: number; focal35: number } | null = null;
   /** Development only, for tools/lut-fit.ts: 1 draws the image as it enters the LUT, 2 the sky's mask. */
   fit = 0;
   readonly renderer: THREE.WebGLRenderer;
@@ -309,6 +353,8 @@ export class Pipeline {
   private lumPass: FullScreen;
   private adapt: FullScreen;
   private final: FullScreen;
+  private dofPass: FullScreen;
+  private dofOut: THREE.WebGLRenderTarget;
   private frame = 0;
   private time = 0;
   private reset = true;
@@ -357,6 +403,17 @@ export class Pipeline {
       uTexel: { value: new THREE.Vector2() },
       uReset: { value: 1 },
     });
+    this.dofOut = halfTarget(1, 1);
+    this.dofPass = new FullScreen(DOF_FRAG, {
+      tColor: { value: null },
+      tDepth: { value: this.hdr.depthTexture },
+      uProjInv: { value: new THREE.Matrix4() },
+      uTexel: { value: new THREE.Vector2() },
+      uK: { value: 0 },
+      uFocus: { value: 1 },
+      uMaxR: { value: 0 },
+      uStep: { value: 1 },
+    });
     this.lumPass = new FullScreen(LUM_FRAG, {
       tColor: { value: null },
       tExposure: { value: null },
@@ -399,6 +456,8 @@ export class Pipeline {
     this.height = h;
     this.hdr.setSize(w, h);
     for (const t of this.hist) t.setSize(w, h);
+    this.dofOut.setSize(w, h);
+    (this.dofPass.uniforms.uTexel.value as THREE.Vector2).set(1 / w, 1 / h);
     const hw = Math.max(1, Math.round(w / 2)), hh = Math.max(1, Math.round(h / 2));
     this.aoRaw.setSize(hw, hh);
     this.aoOut.setSize(hw, hh);
@@ -491,6 +550,24 @@ export class Pipeline {
     tu.uReset.value = this.reset ? 1 : 0;
     this.taa.render(r, histOut);
 
+    // The close-up's depth of field: the circle of confusion's radius in pixels is uK·|1 − focus/s|,
+    // uK = f² / (N (focus − f)) / 2 on a frame whose width is the 35 mm frame's 24 or 36 mm.
+    let image = histOut;
+    if (this.dof) {
+      const du = this.dofPass.uniforms, f = this.dof.focal35, N = this.dof.fstop;
+      const pxPerMm = this.width / (this.width < this.height ? 24 : 36);
+      const K = ((f * f) / (N * Math.max(1, this.dof.focus * 1000 - f)) / 2) * pxPerMm;
+      du.tColor.value = histOut.texture;
+      (du.uProjInv.value as THREE.Matrix4).copy(camera.projectionMatrixInverse);
+      du.uK.value = K;
+      du.uFocus.value = this.dof.focus;
+      du.uMaxR.value = Math.min(K, 48);
+      // At most about 800 samples at the largest circle.
+      du.uStep.value = Math.max(0.5, (du.uMaxR.value * du.uMaxR.value) / 1600);
+      this.dofPass.render(r, this.dofOut);
+      image = this.dofOut;
+    }
+
     this.lumPass.uniforms.tColor.value = histOut.texture;
     this.lumPass.uniforms.tExposure.value = expoIn.texture;
     this.lumPass.render(r, this.lum);
@@ -503,7 +580,7 @@ export class Pipeline {
     this.adapt.render(r, expoOut);
 
     const fu = this.final.uniforms;
-    fu.tColor.value = histOut.texture;
+    fu.tColor.value = image.texture;
     fu.tExposure.value = expoOut.texture;
     fu.uGrade.value = this.grade ? 1 : 0;
     fu.uFit.value = this.fit;

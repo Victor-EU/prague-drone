@@ -4,10 +4,11 @@
 // their carved frame) and the chapel's oriel; on the square, St Nicholas with its two onion
 // towers and the dome, the Jan Hus memorial and the Marian column.
 
-import { Kit, mat, rect, arch, offsetRing, orientedRect, ngon, type V2, type V3 } from './kit.ts';
+import { Kit, mat, rect, arch, offsetRing, orientedRect, ngon, PROFILE, type V2, type V3 } from './kit.ts';
 import type { Model, Site } from './index.ts';
 import { Surface, Stone, Metal, Glass, Style } from '../../src/core/buildings.ts';
 import { gothicTower, placeOn } from './bridge-towers.ts';
+import { pinnacle, traceryWindow, surround, statue } from './ornament.ts';
 import { COPPER } from './parts.ts';
 
 const GOLD = mat('#c9a34a', Surface.Metal, Metal.Gold);
@@ -18,13 +19,15 @@ export const powderTower: Model = {
   id: 'powder-tower',
   floodlit: true,
   replaces: ['way/225234255'],
-  build(site, k, d) {
-    k.seed = 101; d.seed = 102;
-    const r = placeOn(k, d, site, 'way/27124370', 108);
-    gothicTower(k, d, {
+  build(site, k, d, f) {
+    k.seed = 101; d.seed = 102; f.seed = 109;
+    const r = placeOn([k, d, f], site, 'way/27124370', 108);
+    gothicTower(k, d, f, {
       w: r.w, d: r.d, body: 43.5, gallery: 46.6, roofTop: 64.5, ridge: 3.4,
       turret: { r: 1.0, shaft: 48.2, spire: 54.5 }, tracery: [26, 41], gate: { w: 5.6, h: 8.4 },
-      stone: mat('#4f443d', Surface.Stone, Stone.Ashlar, 1), roof: mat('#3b3f44', Surface.Metal, Metal.Slate),
+      strings: [10.4, 17.5, 24.8], windows: [12.5, 19.5],
+      stone: mat('#4f443d', Surface.Stone, Stone.Ashlar, 1), dressing: mat('#7d7266', Surface.Stone, Stone.Ashlar, 0.5),
+      roof: mat('#3b3f44', Surface.Metal, Metal.Slate), sculpted: 1,
     });
     k.light([0, 30, 0], 1);
   },
@@ -34,20 +37,29 @@ export const oldTownHall: Model = {
   id: 'old-town-hall',
   floodlit: true,
   replaces: ['way/481986568', 'way/481986569', 'way/481986570', 'way/481986571', 'way/481986572', 'way/481986573', 'way/481986574', 'way/482235437', 'way/482235438'],
-  build(site, k, d) {
-    k.seed = 103; d.seed = 104;
-    const r = placeOn(k, d, site, 'way/391354925', 66);
+  build(site, k, d, f) {
+    k.seed = 103; d.seed = 104; f.seed = 110;
+    const r = placeOn([k, d, f], site, 'way/391354925', 66);
     const stone = mat('#84776a', Surface.Stone, Stone.Ashlar, 0.8);
-    gothicTower(k, d, {
+    gothicTower(k, d, f, {
       w: r.w, d: r.d, body: 41, gallery: 43.8, roofTop: 60, ridge: 1.6,
-      turret: { r: 0.85, shaft: 45.8, spire: 52 }, tracery: [29, 38.5],
-      stone, roof: mat('#3a3e43', Surface.Metal, Metal.Slate),
+      turret: { r: 0.85, shaft: 45.8, spire: 52 }, tracery: [29, 38.5], strings: [16, 27.6], windows: [18.5, 22.5],
+      stone, dressing: mat('#9a8d7e', Surface.Stone, Stone.Ashlar, 0.45), roof: mat('#3a3e43', Surface.Metal, Metal.Slate),
     });
-    // The orloj on the face toward the square (local +z points south-south-east).
+    // The orloj on the face toward the square (local +z points south-south-east): the two dials in
+    // their carved frame, pinnacled, with the figures beside them.
     const face = r.d / 2 + 0.05;
     const u: V3 = [1, 0, 0], v: V3 = [0, 1, 0];
     const FRAME = mat('#6d6154', Surface.Stone, Stone.Ashlar, 0.6);
     k.slab([0, 2.8, face + 0.6], u, v, [[-2.9, 0], [2.9, 0], [2.9, 10.2], [0, 12.8], [-2.9, 10.2]], 0.6, FRAME);
+    for (const sx of [-1, 1]) {
+      pinnacle(k, f, sx * 2.6, face + 0.3, 13.0, 14.6, 17.0, 0.3, FRAME, { sides: 4, crockets: true });
+      pinnacle(f, f, sx * 3.1, face + 0.35, 6.4, 7.2, 8.6, 0.16, FRAME, { sides: 4 });
+      statue(f, [sx * 2.35, 7.6, face + 0.75], [0, 1], 1.15, BRONZE, 'single', 20 + sx);
+      statue(f, [sx * 2.35, 3.3, face + 0.75], [0, 1], 1.05, BRONZE, 'single', 24 + sx);
+    }
+    surround(f, [0, 0, face + 0.6], u, v, -0.75, 10.9, 0.9, 0.9, FRAME, { proud: 0.08, depth: 0.14 });
+    surround(f, [0, 0, face + 0.6], u, v, 0.75, 10.9, 0.9, 0.9, FRAME, { proud: 0.08, depth: 0.14 });
     const at = (y: number, rr: number, col: string, off: number) => k.plate([0, y, face + 0.6], u, v, ngon(32, rr, 0), mat(col, Surface.Plain), off);
     at(8.4, 1.95, '#2b2621', 0.04); at(8.4, 1.75, '#c8a655', 0.05); at(8.4, 1.45, '#2f4d78', 0.06); at(8.4, 0.75, '#1d1b1a', 0.07);
     k.plate([0, 8.4, face + 0.6], u, v, [[-1.45, -0.2], [1.45, -0.2], [1.2, -1.1], [-1.2, -1.1]], mat('#a3483a', Surface.Plain), 0.065);
@@ -55,10 +67,19 @@ export const oldTownHall: Model = {
     k.plate([0, 10.9, face + 0.6], u, v, [[-1.2, 0], [-0.3, 0], [-0.3, 0.9], [-1.2, 0.9]], WINDOW, 0.05);
     k.plate([0, 10.9, face + 0.6], u, v, [[0.3, 0], [1.2, 0], [1.2, 0.9], [0.3, 0.9]], WINDOW, 0.05);
     k.pyramid(rect(6, 1.5, 0, face + 0.9), 12.6, 14.4, COPPER);
-    // The chapel's oriel on the east face.
+    // The chapel's oriel on the east face: a hexagonal bay on a corbel, traceried on its three
+    // outer faces, pinnacles at its corners under the copper spire.
     const ox = r.w / 2 + 1.3;
-    k.prism(ngon(6, 1.8, 0, ox, 1.2), 8, 21, mat('#8f8171', Surface.Stone, Stone.Ashlar, 0.6), null);
-    k.plate([ox + 1.75, 12, 1.2], [0, 0, -1], [0, 1, 0], arch(1.2, 5.5, 'pointed'), mat('#262a2c', Surface.Glass, Glass.Tracery), 0.05);
+    const ORIEL = mat('#8f8171', Surface.Stone, Stone.Ashlar, 0.6), OGLASS = mat('#262a2c', Surface.Glass, Glass.Tracery);
+    const hex = ngon(6, 1.8, 0, ox, 1.2);
+    k.lathe(ox, 1.2, [[0.4, 5.5], [1.2, 7.2], [1.85, 8]], 6, ORIEL, { flat: true });
+    k.prism(hex, 8, 21, ORIEL, null);
+    k.sweep(hex.map(([x, z]) => [x, 12.6, z] as V3), PROFILE.string(0.2, 0.35), FRAME, { closed: true });
+    for (let q = -1; q <= 1; q++) {
+      const a = (q * Math.PI) / 3, nx = Math.cos(a), nz = Math.sin(a), rr = 1.8 * Math.cos(Math.PI / 6);
+      traceryWindow(k, f, [ox + rr * nx, 0, 1.2 + rr * nz], [-nz, 0, nx], v, 0, 13.4, 1.15, 5.5, FRAME, OGLASS, { lights: 1, proud: 0.1, depth: 0.16 });
+    }
+    for (const [x, z] of hex) pinnacle(k, f, x, z, 20.2, 21.4, 23.6, 0.22, FRAME, { sides: 4, crockets: true });
     k.lathe(ox, 1.2, [[2.0, 21], [0, 27.5]], 6, COPPER, { flat: true });
     d.ball(ox, 27.8, 1.2, 0.2, GOLD, 6);
     k.light([0, 30, face + 5], 1);

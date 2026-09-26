@@ -267,7 +267,12 @@ export function embankments(polys: Polygon[], g: RiverGrids, k: Kit, seen: (x: n
   k.place(0, 0, 0);
   k.seed = 41;
   for (const p of polys)
-    for (const ring of [p.outer, ...p.holes]) {
+    for (const raw of [p.outer, ...p.holes]) {
+      // The Čertovka's outline has steps of a metre or two in it, which the walls followed and
+      // stood across the canal as blocks (9204, M11): its rings are simplified first.
+      let wet = 0;
+      for (let i = 0; i < raw.length; i += 2) if (canal(raw[i], raw[i + 1])) wet++;
+      const ring = wet * 4 > raw.length ? simplify(raw, 1.6) : raw;
       // Points at most 5 m apart round the ring.
       const pts: [number, number][] = [];
       const n = ring.length / 2;
@@ -301,6 +306,9 @@ export function embankments(polys: Polygon[], g: RiverGrids, k: Kit, seen: (x: n
       const flush = () => {
         if (run.length >= 2) {
           const B = run.map((_, i) => { let s = 0, c = 0; for (let d = -2; d <= 2; d++) { const q = run[i + d]; if (q) { s += q.B; c++; } } return s / c; });
+          // The Čertovka's walls end in a slope down to the water, not a cut end standing as a
+          // block in the bank (9204, M11).
+          for (const i of [0, run.length - 1]) if (run[i].c) B[i] = Math.min(B[i], run[i].L + 0.3);
           for (let i = 0; i + 1 < run.length; i++) (run[i].c && run[i + 1].c ? canalPiece : wallPiece)(k, run[i], run[i + 1], B[i], B[i + 1]);
           for (let i = 0; i + 1 < run.length; i++) metres += Math.hypot(run[i + 1].x - run[i].x, run[i + 1].z - run[i].z);
         }
@@ -310,6 +318,32 @@ export function embankments(polys: Polygon[], g: RiverGrids, k: Kit, seen: (x: n
       flush();
     }
   return metres;
+}
+
+/** A closed ring (flat x, z) with every vertex dropped that lies within `tol` of the line its kept neighbours make (Douglas–Peucker). */
+function simplify(r: Ring, tol: number): Ring {
+  const n = r.length / 2;
+  if (n < 5) return r;
+  const keep = new Uint8Array(n);
+  // Split the loop at vertex 0 and the vertex farthest from it.
+  let far = 0, best = -1;
+  for (let i = 1; i < n; i++) { const d = Math.hypot(r[i * 2] - r[0], r[i * 2 + 1] - r[1]); if (d > best) { best = d; far = i; } }
+  keep[0] = keep[far] = 1;
+  const stack: [number, number][] = [[0, far], [far, n]];
+  while (stack.length) {
+    const [a, b] = stack.pop()!;
+    const ax = r[a * 2], az = r[a * 2 + 1], bx = r[(b % n) * 2], bz = r[(b % n) * 2 + 1];
+    const dx = bx - ax, dz = bz - az, L = Math.hypot(dx, dz) || 1;
+    let m = -1, dm = tol;
+    for (let i = a + 1; i < b; i++) {
+      const d = Math.abs((r[i * 2] - ax) * dz - (r[i * 2 + 1] - az) * dx) / L;
+      if (d > dm) { dm = d; m = i; }
+    }
+    if (m >= 0) { keep[m] = 1; stack.push([a, m], [m, b]); }
+  }
+  const out: number[] = [];
+  for (let i = 0; i < n; i++) if (keep[i]) out.push(r[i * 2], r[i * 2 + 1]);
+  return out;
 }
 
 interface Edge { x: number; z: number; nx: number; nz: number; L: number }

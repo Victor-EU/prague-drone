@@ -59,8 +59,14 @@ export function grade(P: GradeParams, r: number, g: number, b: number): [number,
     hShift += w.hue * k;
     lShift += (w.lightness ?? 0) * k;
   }
+  // Vivid reds keep their strength and hue (M11): the film holds roses, geraniums and the trams'
+  // red as the strongest colours in a frame (design.md §5.1), where the fit's loss of chroma and
+  // turn toward crimson, made on the roofs and plaster, had turned 8722's vermilion roses pink. It
+  // fades in above the roofs' chroma.
+  const v = inWindow(h, P.red.centre, P.red.width) * Math.min(1, Math.max(0, (C - 0.15) / 0.04)), vivid = v * v * (3 - 2 * v);
+  cMul += (1 - cMul) * vivid;
   C *= cMul;
-  h += hShift;
+  h += hShift * (1 - vivid);
   L += lShift * Math.min(1, C / 0.05);
   // Split toning by lightness.
   const sh = Math.max(0, 1 - L / 0.5) ** 1.5, hi = Math.max(0, (L - 0.62) / 0.38) ** 1.2;

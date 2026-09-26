@@ -4,7 +4,8 @@
 // lávka, two storeys of sgraffito render over an arcade, with Renaissance gables to the river and to
 // the south. Both floodlit at night (9542).
 
-import { Kit, mat, rect, arch, offsetRing, orientedRect, ngon, type V2, type V3, type Mat } from './kit.ts';
+import { Kit, mat, rect, arch, offsetRing, orientedRect, ngon, PROFILE, type V2, type V3, type Mat } from './kit.ts';
+import { entablature, traceryWindow, statue } from './ornament.ts';
 import type { Model, Site } from './index.ts';
 import { Surface, Stone, Metal, Glass, Style } from '../../src/core/buildings.ts';
 
@@ -90,35 +91,38 @@ function waterTower(k: Kit, d: Kit, site: Site) {
 }
 
 /** The Smetana Museum: arcade, two storeys, hipped roof, gables to the river and the south. */
-function museum(k: Kit, d: Kit, site: Site) {
+function museum(k: Kit, d: Kit, f: Kit, site: Site) {
   const r = orientedRect(site.feature('way/30619188')!.polygons[0].outer);
   // Local x along the long side (roughly north to south), z across; which way the river lies.
   const g = site.bare(r.cx, r.cz);
-  k.place(r.cx, g, r.cz, r.bearing);
-  d.place(r.cx, g, r.cz, r.bearing);
-  k.ground = d.ground = g;
-  const L = r.w, D = r.d, eave = 12.2;
+  for (const kit of [k, d, f]) { kit.place(r.cx, g, r.cz, r.bearing); kit.ground = g; }
+  const L = r.w, D = r.d, eave = 12.2, UP: V3 = [0, 1, 0];
   // The side facing the river: the one whose outside is water.
   const west = (() => { const p = k.world([0, 0, D / 2 + 8]), q = k.world([0, 0, -D / 2 - 8]); return Number.isNaN(site.water(p[0], p[2])) && !Number.isNaN(site.water(q[0], q[2])) ? -1 : 1; })();
   const body = rect(L, D);
   k.prism(body, -2, 4.4, RENDER_DARK, null, { windows: false });
   k.prism(body, 4.4, eave, STOREYS, null, { windows: true, eave: g + eave });
-  k.prism(offsetRing(body, 0.3), 4.2, 4.6, RENDER, RENDER);
-  k.prism(offsetRing(body, 0.45), eave - 0.5, eave, RENDER, RENDER);
-  // The arcade under the river front and the south end.
+  k.sweep(body.map(([x, z]) => [x, 4.2, z] as V3), PROFILE.string(0.3, 0.45), RENDER, { closed: true });
+  entablature(k, body.map(([x, z]) => [x, eave - 1.3, z] as V3), RENDER, { out: 0.65, h: 1.3, closed: true });
+  // The arcade under the river front and the south end, its arches in moulded rings.
   const front: V3 = [0, 0, west * D / 2], fu: V3 = [west, 0, 0];
-  k.row(front, fu, [0, 1, 0], arch(2.6, 3.6, 'round'), OPENING, 9, 3.8, 0, 0.05);
+  for (let i = 0; i < 9; i++) traceryWindow(k, f, front, fu, UP, (i - 4) * 3.8, 0.1, 2.6, 3.6, RENDER, OPENING, { lights: 1, kind: 'round', proud: 0.14, depth: 0.32 });
   const southEnd: V3 = [L / 2, 0, 0];
-  k.row(southEnd, [0, 0, -1], [0, 1, 0], arch(2.6, 3.6, 'round'), OPENING, 4, 4.2, 0, 0.05);
+  for (let i = 0; i < 4; i++) traceryWindow(k, f, southEnd, [0, 0, -1], UP, (i - 1.5) * 4.2, 0.1, 2.6, 3.6, RENDER, OPENING, { lights: 1, kind: 'round', proud: 0.14, depth: 0.32 });
   // Roof.
   k.roof(body, eave, { shape: 'hipped', pitch: 46, cap: 99, gable: () => false }, TILES, SGRAFFITO);
-  // Gables standing in front of the roof: a wide one over the middle of the river front, one at the south end.
+  // Gables standing in front of the roof: a wide one over the middle of the river front, one at
+  // the south end; figures on their tops, obelisks on their shoulders.
   const gw = 11, gh = 9.5;
-  k.slab([0, eave - 0.6, west * (D / 2 + 0.35)], [west, 0, 0], [0, 1, 0], renaissanceGable(gw, gh), 3.2, SGRAFFITO, RENDER);
-  k.slab([L / 2 + 0.35, eave - 0.6, 0], [0, 0, -1], [0, 1, 0], renaissanceGable(D * 0.62, gh * 0.9), 3.2, SGRAFFITO, RENDER);
-  for (const [o, u] of [[[0, eave + 1.2, west * (D / 2 + 0.4)], [west, 0, 0]], [[L / 2 + 0.4, eave + 1.2, 0], [0, 0, -1]]] as [V3, V3][]) {
-    k.row(o, u, [0, 1, 0], arch(1.1, 2.1, 'round'), WINDOW, 3, 2.4, 0, 0.05);
-    d.ball(o[0] + (u[0] ? 0 : 0), eave - 0.6 + gh + 0.35, o[2], 0.3, RENDER_DARK, 6);
+  k.slab([0, eave - 0.6, west * (D / 2 + 0.35)], [west, 0, 0], UP, renaissanceGable(gw, gh), 3.2, SGRAFFITO, RENDER);
+  k.slab([L / 2 + 0.35, eave - 0.6, 0], [0, 0, -1], UP, renaissanceGable(D * 0.62, gh * 0.9), 3.2, SGRAFFITO, RENDER);
+  for (const [o, u, w2, h2] of [[[0, eave + 1.2, west * (D / 2 + 0.4)], [west, 0, 0], gw, gh], [[L / 2 + 0.4, eave + 1.2, 0], [0, 0, -1], D * 0.62, gh * 0.9]] as [V3, V3, number, number][]) {
+    for (let i = 0; i < 3; i++) traceryWindow(k, f, [o[0], o[1] - 1.2, o[2]], u, UP, (i - 1) * 2.4, 1.2, 1.1, 2.1, RENDER, WINDOW, { lights: 1, kind: 'round', proud: 0.1, depth: 0.2 });
+    statue(d, [o[0], eave - 0.6 + h2, o[2]], [-u[2], u[0]], 1.8, RENDER_DARK, 'single', 90 + Math.round(Math.abs(o[0]) + Math.abs(o[2])));
+    for (const s of [-1, 1]) {
+      const p: V3 = [o[0] + u[0] * s * w2 * 0.36, eave - 0.6 + h2 * 0.36, o[2] + u[2] * s * w2 * 0.36];
+      d.lathe(p[0], p[2], [[0.22, p[1]], [0.14, p[1] + 1.3], [0, p[1] + 1.8]], 4, RENDER_DARK, { flat: true, phase: 45 });
+    }
   }
   k.light([0, 6, west * (D / 2 + 4)], 1);
 }
@@ -127,9 +131,9 @@ export const smetanaMuseum: Model = {
   id: 'smetana-museum',
   replaces: ['way/30619188', 'way/30619195', 'way/492321197', 'way/492321198', 'way/563266896', 'way/563266897', 'way/563266898'],
   floodlit: true,
-  build(site, k, d) {
-    k.seed = 71; d.seed = 72;
+  build(site, k, d, f) {
+    k.seed = 71; d.seed = 72; f.seed = 74;
     waterTower(k, d, site);
-    museum(k, d, site);
+    museum(k, d, f, site);
   },
 };
