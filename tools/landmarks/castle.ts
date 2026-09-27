@@ -3,13 +3,16 @@
 // the choir under steep roofs of patterned grey tiles, aisles and chapels lower down, the flying
 // buttresses and pinnacles round the choir, the slender copper spire over the crossing, and the
 // great south tower with its golden clock and its Renaissance helmet of stacked copper bells. Then
-// the long palace wings along the ridge (OSM's relation/3367557) with their even rows of windows:
-// grey roofs over the west and south wings, red over the Old Royal Palace, as the photographs from
-// Petřín and from across the river show (8753, 8809).
+// the palace along the ridge (OSM's relation/3367557): the Theresian wings with their even rows of
+// windows under grey roofs; the Old Royal Palace under red ones, its front to the river the Ludwig
+// wing's brown ashlar and pale stone under a white gallery, the Vladislav Hall's great roof behind;
+// and the low range before All Saints, as the photographs from Petřín and from across the river
+// show (8753, 8809).
 
 import { Kit, mat, rect, ngon, arch, offsetRing, orientedRect, centreOf, PROFILE, type V2, type V3, type Mat } from './kit.ts';
 import { pinnacle as crocketed, traceryWindow, balustrade } from './ornament.ts';
 import type { Model, Site } from './index.ts';
+import { pointInRing } from '../lib/osm.ts';
 import { Surface, Stone, Metal, Glass, Style } from '../../src/core/buildings.ts';
 
 // In the sun of 8809 the stone is a warm mid grey, darker in the Gothic dressings: blackened in
@@ -29,12 +32,51 @@ const TRACERY = mat('#5a544c', Surface.Glass, Glass.Tracery);
 const ROSE = mat('#5a544c', Surface.Glass, Glass.Rose);
 const DARK = mat('#16150f', Surface.Opening);
 const PALACE = mat('#ece2cf', Surface.Wall, Style.Palace);
+const PALACE_WHITE = mat('#efe9df', Surface.Wall, Style.Palace);
 const PALACE_GREY = mat('#6f7472', Surface.Roof);
 const PALACE_RED = mat('#a8664b', Surface.Roof);
+const TERRACE = mat('#8d887e', Surface.FlatRoof);
+// The Old Royal Palace's fronts to the river (8809): the Ludwig wing's brown ashlar, the pale
+// stone east of it, the white gallery under the eave, stone window frames, dark glass.
+const LUDWIG = mat('#9a8672', Surface.Stone, Stone.Ashlar, 0.3);
+const LUDWIG_DRESS = mat('#cdbfaa', Surface.Stone, Stone.Ashlar, 0.15);
+const ORP_STONE = mat('#c7b9a4', Surface.Stone, Stone.Ashlar, 0.1);
+const GALLERY = mat('#e6e0d6', Surface.Stone, Stone.Render, 0.05);
+const WINDOW = mat('#232629', Surface.Glass, Glass.Plain);
 
 /** A pinnacle: a slim square shaft, a moulded cap and a spirelet, crockets up its edges in the fine kit (M15). */
 function pinnacle(k: Kit, f: Kit, x: number, z: number, y0: number, y1: number, w: number, top: number, m: Mat = STONE) {
   crocketed(k, f, x, z, y0, y1, top, w * 0.58, m, { sides: 4, crockets: true });
+}
+
+/**
+ * Two staggered rows of small dormers up a roof from the long edges of its ring, each a gabled box
+ * with a dark window sunk into the slope: the dark dashes across the palace roofs in 8809. None
+ * within reach of a hip, and none where the roof behind is not deep enough to take one.
+ */
+function dormers(k: Kit, ring: V2[], eave: number, pitch: number, pick: (world: V3) => Mat) {
+  const n = ring.length, flat = ring.flat(), tan = Math.tan((pitch * Math.PI) / 180);
+  let area = 0;
+  for (let i = 0; i < n; i++) { const j = (i + 1) % n; area += ring[i][0] * ring[j][1] - ring[j][0] * ring[i][1]; }
+  const sg = Math.sign(area) || 1;
+  const front: V2[] = [[-0.6, 0], [0.6, 0], [0.6, 0.75], [0, 1.15], [-0.6, 0.75]];
+  for (let i = 0; i < n; i++) {
+    const a = ring[i], b = ring[(i + 1) % n], len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (len < 9) continue;
+    const ux = (b[0] - a[0]) / len, uz = (b[1] - a[1]) / len, nx = sg * uz, nz = -sg * ux;
+    const u: V3 = [nz, 0, -nx];
+    for (const [row, t] of [[0, 1.4], [1, 4.2]] as const) {
+      const step = 5.5, margin = t + 2;
+      for (let s = margin + (row ? step / 2 : 0); s <= len - margin; s += step) {
+        const x = a[0] + ux * s - nx * t, z = a[1] + uz * s - nz * t;
+        // The wing at least 2t + 2.6 m deep here, so the ridge lies beyond the dormer's back.
+        if (!pointInRing(x - nx * (t + 2.6), z - nz * (t + 2.6), flat)) continue;
+        const y = eave + t * tan, m = pick(k.world([x, y, z]));
+        k.slab([x, y - 0.25, z], u, [0, 1, 0], front, 1.5, m);
+        k.plate([x, y - 0.12, z], u, [0, 1, 0], rect(0.85, 0.55, 0, 0.275), DARK, 0.03);
+      }
+    }
+  }
 }
 
 /** A west tower of St Vitus centred on the origin: square body, openwork octagonal spire to 82 m with its cross (8753, 8809). */
@@ -223,23 +265,101 @@ export const castle: Model = {
     d.box(0, 0, 0.16, 1.8, 93.8, 95.2, GOLD, GOLD);
     for (const kit of [k, d, f]) kit.pop();
 
-    // The palace wings along the ridge: even windows, grey roofs west, red over the Old Royal Palace.
-    const pal = site.feature('relation/3367557')!.polygons[0];
-    const toLocal = (ring: number[]) => { const out: V2[] = []; for (let i = 0; i < ring.length; i += 2) { const l = k.local(ring[i], g, ring[i + 1]); out.push([l[0], l[2]]); } return out; };
+    // The palace. OSM draws the wings and the Old Royal Palace as one outline; it is split where the
+    // Old Royal Palace's own ring (relation/6311645) runs along it, into the Theresian ranges west
+    // and south, the Old Royal Palace, and the range before All Saints (8809).
+    const pal = site.feature('relation/3367557')!.polygons[0], orp = site.feature('relation/6311645')!.polygons[0];
+    const pairs = (ring: number[]) => { const out: V2[] = []; for (let i = 0; i < ring.length; i += 2) out.push([ring[i], ring[i + 1]]); return out; };
+    const same = (a: V2, b: V2) => Math.abs(a[0] - b[0]) < 0.01 && Math.abs(a[1] - b[1]) < 0.01;
+    const P = pairs(pal.outer), O = pairs(orp.outer);
+    // From its first vertex the outline follows the Old Royal Palace, leaves it round the range
+    // before All Saints, rejoins it, and leaves it for good at the Theresian ranges.
+    let i0 = 0;
+    while (i0 < O.length && same(P[i0], O[i0])) i0++;
+    let i1 = i0;
+    while (i1 < P.length && !O.some((o) => same(o, P[i1]))) i1++;
+    let i2 = i1;
+    for (let q = O.findIndex((o) => same(o, P[i1])); i2 < P.length && q < O.length && same(P[i2], O[q]); i2++, q++);
+    if (i0 < 2 || i1 >= P.length || i2 >= P.length) throw new Error('castle: the palace outline no longer follows the Old Royal Palace');
+    const eastRange = P.slice(i0 - 1, i1 + 1), theresian = P.slice(i2 - 1);
+
     let gmin = Infinity, gs: number[] = [];
     for (let i = 0; i < pal.outer.length; i += 6) { const h = site.bare(pal.outer[i], pal.outer[i + 1]); gs.push(h); gmin = Math.min(gmin, h); }
     gs.sort((a, b) => a - b);
     const gref = (gmin + gs[gs.length >> 1]) / 2;
-    // The reference lies about 10 m under the courtyards (the south front stands down on the
-    // gardens); the eave about 13.5 m over them, as 8753 and 8809 show it against the cathedral.
-    const eave = gref + 24;
     for (const kit of [k, d, f]) { kit.place(r.cx, 0, r.cz, bearing); kit.ground = gref; }
-    const outer = toLocal(pal.outer), holes = pal.holes.map(toLocal);
-    k.prism(outer, gmin - 1, eave, PALACE, null, { windows: true, eave });
-    for (const h of holes) k.prism(h, gmin - 1, eave, PALACE, null, { windows: true, eave, inward: true });
-    // Grey over the west and south wings, red east of a line across the south wing's end, from
-    // (-752, -406) to (-737, -394): the Old Royal Palace and its south-west block (8809).
+    const toLocal = (ring: V2[]) => ring.map(([x, z]) => { const l = k.local(x, 0, z); return [l[0], l[2]] as V2; });
+    const orpHoles = orp.holes.map((h) => toLocal(pairs(h)));
+    const tHoles = pal.holes.filter((h) => !pointInRing(h[0], h[1], orp.outer)).map((h) => toLocal(pairs(h)));
+
+    // The Theresian ranges: even windows under grey roofs. The reference ground lies about 10 m
+    // under the courtyards (the south front stands down on the gardens); the eave some 15 m over
+    // them, between what 8753 and 8809 show against the cathedral. Red over the south wing's end
+    // block, east of a line from (-752, -406) to (-737, -394), as 8809 shows it.
+    const eave = gref + 25.5;
+    const T = toLocal(theresian);
+    k.prism(T, gmin - 1, eave, PALACE, null, { windows: true, eave });
+    for (const h of tHoles) k.prism(h, gmin - 1, eave, PALACE, null, { windows: true, eave, inward: true });
     const redRoof = (c: V3) => (c[0] + 752) * 0.75 - (c[2] + 406) * 0.66 > 2;
-    k.roof(outer, eave, { shape: 'hipped', pitch: 40, cap: 7, gable: () => false }, PALACE_GREY, PALACE, holes, (c) => (redRoof(c) ? PALACE_RED : PALACE_GREY));
+    k.roof(T, eave, { shape: 'hipped', pitch: 40, cap: 7, gable: () => false }, PALACE_GREY, PALACE, tHoles, (c) => (redRoof(c) ? PALACE_RED : PALACE_GREY));
+    dormers(k, T, eave, 40, (c) => (redRoof(c) ? PALACE_RED : PALACE_GREY));
+
+    // The Old Royal Palace: the palace walls with their windows round the courts and down to the
+    // gardens, red roofs, and over the Vladislav Hall its great roof to 100 m. On the fronts to the
+    // river, a skin standing 0.25 m proud: the Ludwig wing's brown ashlar with its cross windows to
+    // 84.5 m at the south-west corner; east of it pale stone with the hall's tall windows under a
+    // white gallery with a row of small ones, to 85 m (heights read off 8809 through its camera).
+    const ORP_EAVE = 85;
+    const Ol = toLocal(O);
+    k.prism(Ol, gmin - 1, ORP_EAVE, PALACE, null, { windows: true, eave: ORP_EAVE });
+    for (const h of orpHoles) k.prism(h, gmin - 1, ORP_EAVE, PALACE, null, { windows: true, eave: ORP_EAVE, inward: true });
+    k.roof(Ol, ORP_EAVE, { shape: 'hipped', pitch: 48, cap: 7, gable: () => false }, PALACE_RED, PALACE, orpHoles);
+    dormers(k, Ol, ORP_EAVE, 48, () => PALACE_RED);
+    const hc = k.local(-692, 0, -464), hall = rect(60, 16, hc[0], hc[2]);
+    k.prism(hall, 80, 88, PALACE, null);
+    k.roof(hall, 88, { shape: 'hipped', pitch: 57, cap: 99, gable: () => false }, PALACE_RED, PALACE);
+    dormers(k, hall, 88, 57, () => PALACE_RED);
+    const sgn = Math.sign(O.reduce((a, p, i) => { const q = O[(i + 1) % O.length]; return a + p[0] * q[1] - q[0] * p[1]; }, 0)) || 1;
+    for (let i = 0; i < O.length; i++) {
+      const a = O[i], b = O[(i + 1) % O.length], len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      // Short edges too: the rounded corner by the hall's front is drawn in a dozen of them.
+      if (len < 0.3) continue;
+      const n: V2 = [(sgn * (b[1] - a[1])) / len, (-sgn * (b[0] - a[0])) / len];
+      const mx = (a[0] + b[0]) / 2, mz = (a[1] + b[1]) / 2;
+      // Toward the river (south-south-east), on the south-west prong or the south front.
+      if (n[0] * 0.45 + n[1] * 0.89 < 0.05) continue;
+      const ludwig = mx < -684 && mz > -436, front = mx >= -684 && mz > -450;
+      if (!ludwig && !front) continue;
+      const [la, lb] = toLocal([[a[0] + n[0] * 0.25, a[1] + n[1] * 0.25], [b[0] + n[0] * 0.25, b[1] + n[1] * 0.25]]);
+      const ln = toLocal([[mx, mz], [mx + n[0], mz + n[1]]]), nl: V3 = [ln[1][0] - ln[0][0], 0, ln[1][1] - ln[0][1]];
+      const skin = (y0: number, y1: number, m: Mat) => k.poly([[la[0], y0, la[1]], [lb[0], y0, lb[1]], [lb[0], y1, lb[1]], [la[0], y1, la[1]]], m, { normal: nl });
+      const o: V3 = [(la[0] + lb[0]) / 2, 0, (la[1] + lb[1]) / 2], u: V3 = [nl[2], 0, -nl[0]];
+      const row = (step: number, fn: (off: number) => void) => { const count = Math.floor((len - 1) / step); for (let q = 0; q < count; q++) fn((q - (count - 1) / 2) * step); };
+      if (ludwig) {
+        skin(60, 84.5, LUDWIG);
+        if (len >= 3.5) row(3.4, (off) => { for (const sill of [69.5, 74.5, 79.5]) traceryWindow(k, f, o, u, UP, off, sill, 1.5, 3.2, LUDWIG_DRESS, WINDOW, { kind: 'flat', lights: 2, transom: true, proud: 0.12, depth: 0.2 }); });
+      } else {
+        skin(67.8, 79.5, ORP_STONE);
+        skin(79.5, ORP_EAVE, GALLERY);
+        if (len >= 6) row(6.5, (off) => traceryWindow(k, f, o, u, UP, off, 71.3, 3.2, 6.2, LUDWIG_DRESS, WINDOW, { kind: 'flat', lights: 2, transom: true, proud: 0.14, depth: 0.25 }));
+        if (len >= 3) row(2.1, (off) => k.plate([o[0] + u[0] * off, 81.4, o[2] + u[2] * off], u, UP, rect(0.8, 1.5, 0, 0.75), DARK, 0.04));
+      }
+    }
+
+    // The range before All Saints: a white block at its west end to the Old Royal Palace's eave,
+    // then a low range with a terrace on it, so the church's windows stand over it (8809).
+    const clip = (ring: V2[], keep: (p: V2) => number) => {
+      const out: V2[] = [];
+      for (let i = 0; i < ring.length; i++) {
+        const a = ring[i], b = ring[(i + 1) % ring.length], ka = keep(a), kb = keep(b);
+        if (ka >= 0) out.push(a);
+        if ((ka >= 0) !== (kb >= 0)) { const t = ka / (ka - kb); out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]); }
+      }
+      return out;
+    };
+    const block = toLocal(clip(eastRange, (p) => -641.5 - p[0])), low = toLocal(clip(eastRange, (p) => p[0] + 641.5));
+    k.prism(low, gmin - 1, 68, PALACE_WHITE, TERRACE, { windows: true, eave: 68 });
+    k.prism(block, gmin - 1, ORP_EAVE, PALACE_WHITE, null, { windows: true, eave: ORP_EAVE });
+    k.roof(block, ORP_EAVE, { shape: 'hipped', pitch: 40, cap: 4, gable: () => false }, PALACE_RED, PALACE_WHITE);
   },
 };

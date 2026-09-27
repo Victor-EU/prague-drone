@@ -165,14 +165,22 @@ export const castleTowers: Model = {
     {
       const r = place([k, d, f], site, 'relation/3372133', 66);
       const ring = ringOf(k, site, 'relation/3372133', r.g);
-      k.prism(ring, -2, 14, PALE, null);
-      const top = k.roof(ring, 14, { shape: 'gabled', pitch: 55, cap: 99, gable: (_, len) => len < 16 }, TILES, PALE);
+      // Pale grey render; the buttresses the mappers drew as short jogs of the outline in dark
+      // sandstone; a tall pointed window in every face of the choir and along the walls (8809).
+      const WALL = mat('#dcd6d4', Surface.Stone, Stone.Render, 0.25), BUTTRESS = mat('#6f675d', Surface.Stone, Stone.Ashlar, 0.5);
       for (let i = 0; i < ring.length; i++) {
         const a = ring[i], b = ring[(i + 1) % ring.length], len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-        if (len < 10) continue;
+        if (len < 0.05) continue;
+        const n = edgeNormal(ring, i);
+        k.poly([[a[0], -2, a[1]], [b[0], -2, b[1]], [b[0], 14, b[1]], [a[0], 14, a[1]]], len < 2.8 ? BUTTRESS : WALL, { normal: [n[0], 0, n[1]] });
+      }
+      const top = k.roof(ring, 14, { shape: 'gabled', pitch: 55, cap: 99, gable: (_, len) => len < 16 }, TILES, WALL);
+      for (let i = 0; i < ring.length; i++) {
+        const a = ring[i], b = ring[(i + 1) % ring.length], len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        if (len < 2.8) continue;
         const n = edgeNormal(ring, i), u: V3 = [n[1], 0, -n[0]], mid: V3 = [(a[0] + b[0]) / 2, 0, (a[1] + b[1]) / 2];
-        const count = Math.floor((len - 3) / 5);
-        for (let q = 0; q < count; q++) traceryWindow(k, f, mid, u, UP, (q - (count - 1) / 2) * 5, 4.5, 1.8, 6.5, mat('#a89b86', Surface.Stone, Stone.Ashlar, 0.5), mat('#8a8274', Surface.Glass, Glass.Tracery), { lights: 2, rise: 1.3 });
+        const count = len < 10 ? 1 : Math.floor((len - 3) / 5);
+        for (let q = 0; q < count; q++) traceryWindow(k, f, mid, u, UP, (q - (count - 1) / 2) * 5, 4.5, Math.min(1.8, len * 0.42), 6.5, mat('#a89b86', Surface.Stone, Stone.Ashlar, 0.5), mat('#8a8274', Surface.Glass, Glass.Tracery), { lights: 2, rise: 1.3 });
       }
       k.lathe(0, 0, [[0.9, 14 + top - 1.5], [0.9, 14 + top + 2.5], [1.15, 14 + top + 2.8], [0, 14 + top + 6.5]], 6, SLATE, { flat: true });
       d.ball(0, 14 + top + 6.8, 0, 0.22, GOLD, 6);
