@@ -1291,7 +1291,7 @@ In 8809 the render's luminance over the photograph's is now 0.87 for the cathedr
 - **The range before All Saints**: a white block at its west end to the same eave, then a low range to 68 m with a terrace, so the church's windows stand over it. All Saints' walls are a pale grey render, the buttresses OSM draws as short jogs of its outline dark sandstone, a tall pointed window in every face of the choir.
 - **Dormers**: two staggered rows up the palace roofs from their long edges, small gabled boxes with dark windows sunk into the slope, none near a hip or where the wing is too shallow: the dark dashes across the roofs in 8809.
 
-Still open: 8809's viewpoint looks about 0.2° left of the photograph's (the cathedral stands 10 px right on the sheet); the render's red roofs are pinker than the photograph's, as across the city (the grade's). `public/world/` was rebuilt with `--landmarks` only; the next full build carries the palace's new heights into `surface.bin`.
+Still open: 8809's viewpoint looks about 0.2° left of the photograph's (the cathedral stands 10 px right on the sheet); the render's red roofs are pinker than the photograph's, as across the city (the grade's). The world was rebuilt in full afterwards (70 s, 33.2 MB), so `surface.bin` carries the palace's new heights.
 
 **M18, built 2026-09-27.** The facades up close (§8.2, §7.1), on the user's word after M17 that the fronts needed much more detail, with 8607 beside its render:
 
