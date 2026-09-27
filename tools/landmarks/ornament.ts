@@ -114,6 +114,8 @@ export function corbels(k: Kit, path: V3[], m: Mat, o: { step?: number; w?: numb
  */
 export function pinnacle(k: Kit, f: Kit, x: number, z: number, y0: number, y1: number, apex: number, r: number, m: Mat, o: { sides?: number; spire?: Mat; cap?: Mat; crockets?: boolean; phase?: number } = {}) {
   const sides = o.sides ?? 8, ph = o.phase ?? (sides === 4 ? 45 : 22.5), cap = o.cap ?? m, spire = o.spire ?? m;
+  // Arguments out of order make a slab tens of metres wide under an upturned spire (M15's St Vitus gable).
+  if (!(y0 <= y1 && y1 < apex && r > 0 && r < 4)) throw new Error(`pinnacle at (${x.toFixed(1)}, ${z.toFixed(1)}): y0 ${y0} y1 ${y1} apex ${apex} r ${r}`);
   const capY = y1 + Math.min(0.35, r * 0.4);
   k.lathe(x, z, [[r, y0], [r, y1]], sides, m, { flat: true, phase: ph });
   k.lathe(x, z, [[r * 1.22, y1], [r * 1.22, y1 + (capY - y1) * 0.7], [r * 1.05, capY]], sides, cap, { flat: true, phase: ph });

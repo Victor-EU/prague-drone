@@ -17,8 +17,8 @@ export const Surface = {
 
 /** Styles of Surface.Stone: its facade is (along, up, weathering 0–1, unused). */
 export const Stone = { Ashlar: 0, Brick: 1, Rubble: 2, Render: 3, Setts: 4 } as const;
-/** Styles of Surface.Metal: its facade is (along, up the slope, slope length, unused). */
-export const Metal = { Slate: 0, Copper: 1, Lead: 2, Gold: 3 } as const;
+/** Styles of Surface.Metal: its facade is (along, up the slope, slope length, unused). Glazed: tiles laid in lozenges (St Vitus). */
+export const Metal = { Slate: 0, Copper: 1, Lead: 2, Gold: 3, Glazed: 4 } as const;
 /** Styles of Surface.Glass: its facade is (across, up, width, height) in metres. Curtain: a modern glass wall that mirrors the sky. */
 export const Glass = { Plain: 0, Tracery: 1, Rose: 2, Curtain: 3 } as const;
 

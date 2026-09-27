@@ -239,9 +239,12 @@ export class Kit {
     if (Math.abs(n[1]) > 0.97 || hl < 1e-3) return [w[0], w[2], m.w, 0];
     const tx = -n[2] / hl, tz = n[0] / hl;
     const u = w[0] * tx + w[2] * tz;
-    if (Math.abs(n[1]) < 0.3 && m.kind !== Surface.Metal && m.kind !== Surface.Roof) return [u, w[1] - this.ground, m.w, 0];
+    // Stone keeps its weathering in z on a slope too (a set-off, a flyer's back, a soffit): the
+    // slope's length there read as a weathering of 10 or more, and the shader's blackening
+    // overshot to negative colours, black and white in patches.
+    if (m.kind === Surface.Stone || (Math.abs(n[1]) < 0.3 && m.kind !== Surface.Metal && m.kind !== Surface.Roof)) return [u, w[1] - this.ground, m.w, 0];
     const sin = Math.sqrt(Math.max(1e-4, 1 - n[1] * n[1]));
-    return [u, (w[1] - ymin) / sin, (ymax - ymin) / sin, m.kind === Surface.Stone ? m.w : 0];
+    return [u, (w[1] - ymin) / sin, (ymax - ymin) / sin, 0];
   }
 
   /** A planar polygon, local corners in order; the side it faces follows the winding (counter-clockwise seen from the front). */

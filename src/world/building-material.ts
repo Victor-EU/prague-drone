@@ -452,6 +452,16 @@ float praAbove = -1.0;
       c *= (1.0 - 0.16 * seam) * (0.84 + 0.26 * n + 0.1 * (n3 - 0.5));
       c *= mix(0.85, 1.0, smoothstep(0.0, 1.5, s));
       praRough = 0.55;
+    } else if (style == ${Metal.Glazed}) {
+      // Glazed tiles in lozenges, 1.6 m across and 1.9 m up the slope: a pale lattice on the grey
+      // field, each lozenge its own tone (St Vitus, 8809). The lattice box-filters to its average.
+      float a = (u + 0.84 * s) / 1.6, b = (u - 0.84 * s) / 1.6;
+      float wa = max(fwidth(a), 1e-4), wb = max(fwidth(b), 1e-4);
+      float lattice = max(praPulse(a, 0.0, 0.12, wa), praPulse(b, 0.0, 0.12, wb));
+      float fade = 1.0 - smoothstep(0.3, 0.7, max(wa, wb));
+      float tone = 0.92 + 0.16 * praHash(vec2(floor(a), floor(b)) + seed);
+      c *= (1.0 + 0.34 * lattice) * mix(1.0, tone, fade);
+      praRough = 0.5;
     } else {
       // Slate and lead: small courses.
       float course = s / (style == ${Metal.Slate} ? 0.24 : 0.7);
