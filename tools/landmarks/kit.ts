@@ -107,6 +107,21 @@ export function centreOf(r: number[]): [number, number] {
 }
 
 /**
+ * Centroid of a world ring's area. Unlike `centreOf` it does not lean towards the side where the
+ * outline has more vertices: Týn's tower outlines are notched on their outer sides, and their
+ * vertex centres stand 2.5 m further apart than their areas' (M19, 8607 and 8608).
+ */
+export function areaCentre(r: number[]): [number, number] {
+  let a = 0, x = 0, z = 0;
+  const n = r.length / 2;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n, c = r[i * 2] * r[j * 2 + 1] - r[j * 2] * r[i * 2 + 1];
+    a += c; x += (r[i * 2] + r[j * 2]) * c; z += (r[i * 2 + 1] + r[j * 2 + 1]) * c;
+  }
+  return Math.abs(a) < 1e-9 ? centreOf(r) : [x / (3 * a), z / (3 * a)];
+}
+
+/**
  * An opening's outline in its wall plane, centred on u = 0, from v = 0 up to v = h: straight
  * jambs, then a pointed (Gothic), round or segmental head of the given rise.
  */

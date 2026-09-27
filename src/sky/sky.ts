@@ -167,7 +167,9 @@ export class Atmosphere {
     s.camera.near = 1;
     s.camera.far = 2800;
     s.bias = -0.00015;
-    s.normalBias = 0.35;
+    // A near texel's worth (M19): at half of one, a front 30 to 40° off the sun streaked with acne
+    // from 20 to 60 m away (the Kinský palace from the square).
+    s.normalBias = 0.7;
     s.radius = 1.5;
     this.sun.castShadow = true;
     scene.add(this.sun);

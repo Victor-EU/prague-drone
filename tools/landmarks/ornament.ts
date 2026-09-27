@@ -2,8 +2,8 @@
 // a silhouette against the sky and throws relief shadow at the drone's distance, built from the
 // kit's sweeps, lathes, plates and slabs. Balustrades, crenellations and corbel courses on walls'
 // tops; pinnacles with crockets and tracery windows with stone mullions; columns, pilasters,
-// entablatures and pediments; niches with canopies, rows of shields, ribs on domes; and statue
-// silhouettes in dark stone. Parts on a wall take a plane as Kit.plate does: an origin o on the
+// entablatures and pediments; niches with canopies, rows of shields, ribs on domes; rococo stucco
+// (M19: ribs, scrolls, shells, cartouches, crests, drops, swags); and statue silhouettes in dark stone. Parts on a wall take a plane as Kit.plate does: an origin o on the
 // wall, u to the right as seen from outside, v up, and stand proud of it. Build side only.
 
 import { Kit, PROFILE, arch, type Mat, type V2, type V3 } from './kit.ts';
@@ -221,6 +221,120 @@ export function pediment(k: Kit, o: V3, u: V3, v: V3, a: number, y: number, w: n
   const rake: V2[] = kind === 'triangular' ? [[-hw - c * 0.3, -c * 0.1], [0, h], [hw + c * 0.3, -c * 0.1]] : top;
   k.sweep(rake.map(([x, yy]) => onPlane(O, u, v, x, yy, depth * 0.6)), PROFILE.ring(c, depth * 0.5), cornice, { v: n, caps: true });
   k.sweep([onPlane(O, u, v, -hw - c * 0.3, -c * 0.4, 0), onPlane(O, u, v, hw + c * 0.3, -c * 0.4, 0)], PROFILE.cornice(depth, c * 0.5), cornice, { caps: true });
+}
+
+// ---- Stucco --------------------------------------------------------------------------------------
+// Rococo stucco modelled on a wall (M19, the Kinský palace): ribs of rounded section swept along
+// curves in the wall's plane, so that the sun models them as the photographs show, lit along their
+// tops and shaded under; bosses, scrolls, shells, cartouches, crests, drops and swags built of them.
+// Small, so they belong in the fine tier, which casts no shadow (a shadow map smears relief this
+// size into streaks).
+
+/** A half-round section `w` across and `proud` high, for a rib swept along a wall's plane. */
+function roundSection(w: number, proud: number, steps = 4): V2[] {
+  const p: V2[] = [];
+  for (let i = 0; i <= steps; i++) { const t = (i / steps) * Math.PI; p.push([(w / 2) * Math.cos(t), proud * Math.sin(t)]); }
+  return p;
+}
+
+/** A rib of stucco `w` wide standing `proud` off the wall along the points (a, b) of its plane. */
+export function rib(k: Kit, o: V3, u: V3, v: V3, pts: V2[], w: number, proud: number, m: Mat, closed = false) {
+  if (pts.length < 2) return;
+  k.sweep(pts.map(([a, b]) => onPlane(o, u, v, a, b)), roundSection(w, proud), m, { v: planeNormal(u, v), closed, caps: !closed });
+}
+
+/** A boss: a ball of radius r half sunk in the wall at (a, b). */
+export function boss(k: Kit, o: V3, u: V3, v: V3, a: number, b: number, r: number, m: Mat) {
+  const p = onPlane(o, u, v, a, b, -r * 0.35);
+  k.ball(p[0], p[1], p[2], r, m, 6);
+}
+
+/**
+ * A C-scroll: a rib spiralling in from radius r at the angle a0 (radians from u towards v) through
+ * `turns` turns, counter-clockwise as seen from outside when `dir` is 1, a boss in its eye.
+ */
+export function scroll(k: Kit, o: V3, u: V3, v: V3, cx: number, cy: number, r: number, a0: number, turns: number, dir: number, w: number, proud: number, m: Mat) {
+  const N = Math.max(6, Math.round(turns * 18)), pts: V2[] = [];
+  for (let i = 0; i <= N; i++) {
+    const t = i / N, a = a0 + dir * t * turns * 2 * Math.PI, q = r * (1 - 0.62 * t);
+    pts.push([cx + q * Math.cos(a), cy + q * Math.sin(a)]);
+  }
+  rib(k, o, u, v, pts, w, proud, m);
+  boss(k, o, u, v, pts[N][0], pts[N][1], w * 0.8, m);
+}
+
+/** A shell: `n` ribs fanning up from (a, b) to radius r, their tips joined by a scalloped edge. */
+export function shell(k: Kit, o: V3, u: V3, v: V3, a: number, b: number, r: number, m: Mat, n = 7, w = 0.06, proud = 0.07) {
+  const a0 = 0.3, a1 = Math.PI - 0.3, at = (i: number) => a0 + ((a1 - a0) * i) / (n - 1);
+  for (let i = 0; i < n; i++) {
+    const t = at(i);
+    rib(k, o, u, v, [[a + 0.18 * r * Math.cos(t), b + 0.18 * r * Math.sin(t)], [a + r * Math.cos(t), b + r * Math.sin(t)]], w, proud, m);
+  }
+  const edge: V2[] = [];
+  for (let i = 0; i < n - 1; i++)
+    for (let j = 0; j < 4; j++) {
+      const t = at(i) + ((at(i + 1) - at(i)) * j) / 4, q = r * (1 + 0.14 * Math.sin((j / 4) * Math.PI));
+      edge.push([a + q * Math.cos(t), b + q * Math.sin(t)]);
+    }
+  edge.push([a + r * Math.cos(a1), b + r * Math.sin(a1)]);
+  rib(k, o, u, v, edge, w * 0.8, proud * 0.8, m);
+  boss(k, o, u, v, a, b, w * 1.1, m);
+}
+
+/**
+ * A rococo cartouche centred at (a, b), w by h: an oval field standing out in steps inside a
+ * rounded rim, C-scrolls curling out of its sides and from its foot, a shell on its head.
+ */
+export function cartouche(k: Kit, o: V3, u: V3, v: V3, a: number, b: number, w: number, h: number, m: Mat, opt: { proud?: number; shell?: boolean } = {}) {
+  const pr = opt.proud ?? 0.1, rw = Math.max(0.06, w * 0.065);
+  const oval = (rx: number, ry: number, n = 20): V2[] => {
+    const p: V2[] = [];
+    for (let i = 0; i < n; i++) { const t = (i / n) * 2 * Math.PI; p.push([a + rx * Math.cos(t), b + ry * Math.sin(t)]); }
+    return p;
+  };
+  k.slab(onPlane(o, u, v, 0, 0, pr * 0.45), u, v, oval(w * 0.42, h * 0.42), pr * 0.45, m);
+  k.slab(onPlane(o, u, v, 0, 0, pr * 0.7), u, v, oval(w * 0.26, h * 0.28, 16), pr * 0.25, m);
+  rib(k, o, u, v, oval(w * 0.46, h * 0.46), rw, pr, m, true);
+  for (const s of [-1, 1]) {
+    scroll(k, o, u, v, a + s * (w * 0.46 + rw * 1.6), b + h * 0.1, h * 0.19, s < 0 ? -0.3 : Math.PI + 0.3, 0.9, s < 0 ? 1 : -1, rw * 0.85, pr * 0.9, m);
+    scroll(k, o, u, v, a + s * w * 0.24, b - h * 0.5 - h * 0.1, h * 0.13, Math.PI / 2, 0.85, s < 0 ? 1 : -1, rw * 0.75, pr * 0.8, m);
+  }
+  if (opt.shell ?? true) shell(k, o, u, v, a, b + h * 0.42, w * 0.3, m, 7, rw * 0.75, pr * 0.9);
+}
+
+/**
+ * A rocaille crest over a window head, its foot centred at (a, b), w across: a small cartouche
+ * between two C-scrolls, and a spray to each side rising into a curl.
+ */
+export function crest(k: Kit, o: V3, u: V3, v: V3, a: number, b: number, w: number, m: Mat, proud = 0.08) {
+  const rw = 0.065;
+  cartouche(k, o, u, v, a, b + 0.3, w * 0.27, 0.42, m, { proud });
+  for (const s of [-1, 1]) {
+    scroll(k, o, u, v, a + s * w * 0.25, b + 0.17, 0.16, s < 0 ? -0.4 : Math.PI + 0.4, 0.95, s < 0 ? -1 : 1, rw, proud, m);
+    const sp: V2[] = [];
+    for (let i = 0; i <= 8; i++) { const t = i / 8; sp.push([a + s * (w * 0.33 + t * w * 0.17), b + 0.04 + 0.16 * Math.sin(t * Math.PI * 0.9)]); }
+    rib(k, o, u, v, sp, rw * 0.8, proud * 0.8, m);
+    scroll(k, o, u, v, a + s * w * 0.5, b + 0.14, 0.08, s < 0 ? 0 : Math.PI, 0.8, s < 0 ? 1 : -1, rw * 0.7, proud * 0.7, m);
+  }
+}
+
+/** A drop hanging from (a, b): a stem with bells getting smaller down `len`. */
+export function drop(k: Kit, o: V3, u: V3, v: V3, a: number, b: number, len: number, m: Mat, r = 0.08) {
+  rib(k, o, u, v, [[a, b], [a, b - len * 0.92]], r * 0.45, r * 0.4, m);
+  for (let i = 0; i < 4; i++) { const t = (i + 0.4) / 4; boss(k, o, u, v, a, b - t * len, r * (1 - 0.45 * t), m); }
+}
+
+/** A swag from (a − w/2, b) to (a + w/2, b) sagging `sag` at the middle, a rosette at each end and a short drop from it. */
+export function swag(k: Kit, o: V3, u: V3, v: V3, a: number, b: number, w: number, sag: number, m: Mat, proud = 0.09) {
+  for (const [q, dy, t] of [[1, 0, 0.13], [0.8, -0.07, 0.08]] as [number, number, number][]) {
+    const pts: V2[] = [];
+    for (let i = 0; i <= 12; i++) { const s = i / 12, x = (-w / 2 + w * s) * q; pts.push([a + x, b + dy - sag * q * (1 - (2 * s - 1) ** 2)]); }
+    rib(k, o, u, v, pts, t, proud * (t / 0.13), m);
+  }
+  for (const s of [-1, 1]) {
+    boss(k, o, u, v, a + (s * w) / 2, b + 0.02, 0.08, m);
+    drop(k, o, u, v, a + (s * w) / 2, b - 0.08, 0.3, m, 0.06);
+  }
 }
 
 // ---- Sculpture -----------------------------------------------------------------------------------
