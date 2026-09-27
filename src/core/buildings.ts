@@ -30,15 +30,17 @@ export const Glass = { Plain: 0, Tracery: 1, Rose: 2, Curtain: 3 } as const;
  */
 export const Prop = { Chimney: 0, DormerGabled: 1, DormerHipped: 2, RoofBox: 3, Gable: 4, GableStepped: 5, Pediment: 6, Turret: 7, Bay: 8, Figure: 9, Urn: 10 } as const;
 
-/** Per building. */
-export const BFlag = { Landmark: 1, Detail: 2 } as const;
+/** Per building: a landmark still standing as OSM massing; a quay front, lit from the embankment at night (M17). */
+export const BFlag = { Landmark: 1, Detail: 2, Quay: 4 } as const;
 /** Per footprint edge: a party wall, shared with a neighbour (no windows, no cornice); an arcade on a square (M14). */
 export const EFlag = { Party: 1, Arcade: 2 } as const;
 /**
  * Per vertex of the building shader (the aInfo flags byte): a party wall, a floodlit landmark,
- * and the trim's tone (M14: deeper and warmer, paler, or neither: the field's own colour in relief).
+ * the trim's tone (M14: deeper and warmer, paler, or neither: the field's own colour in relief),
+ * and a front lit dimly at night (M17: the quays' houses under the embankment lamps, the body of
+ * Charles Bridge under its lanterns), a quarter of a floodlight.
  */
-export const SFlag = { Party: 1, Floodlit: 2, TrimDeep: 4, TrimPale: 8 } as const;
+export const SFlag = { Party: 1, Floodlit: 2, TrimDeep: 4, TrimPale: 8, FloodDim: 16 } as const; // Floodlit | FloodDim: three floodlights (the Castle)
 
 /**
  * A choice made from a building's seed byte and a key, alike in JavaScript and in GLSL

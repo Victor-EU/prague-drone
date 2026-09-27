@@ -280,7 +280,7 @@ function terrainMaterial(landuse: THREE.Texture): THREE.MeshStandardMaterial {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${PAVING_PARS}\n${BLOOMS}`)
       .replace('#include <map_fragment>', `#include <map_fragment>\n${GREENS}\n${PAVING}`)
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * praLampPool(vPraWorld, 0.0) * 0.15;');
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * praLampPool(vPraWorld, 0.0) * 0.06;');
   }, '-terrain');
 }
 

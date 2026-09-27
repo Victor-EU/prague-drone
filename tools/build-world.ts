@@ -741,6 +741,17 @@ function ringsOf(p: Polygon): Ring[] { return [p.outer, ...p.holes]; }
   log(`arcades: ${flagged} fronts on the squares`);
 }
 
+/** Whether water lies within r metres of a point (sixteen directions at r and r / 2). */
+function waterWithin(x: number, z: number, r: number): boolean {
+  for (const d of [r / 2, r]) for (let k = 0; k < 16; k++) {
+    const a = (k / 16) * Math.PI * 2;
+    if (!Number.isNaN(waterAt(x + d * Math.cos(a), z + d * Math.sin(a)))) return true;
+  }
+  return false;
+}
+/** The districts whose quays are lit at night (M17): the photographed embankments of the core. */
+const QUAY_DISTRICTS = new Set<number>([District.StareMesto, District.Josefov, District.NoveMesto, District.MalaStrana]);
+
 /** Whether the river lies within about 75 m of a point: the embankment fronts (M14). */
 function nearRiver(x: number, z: number): boolean {
   for (const r of [30, 55, 75]) for (let k = 0; k < 12; k++) {
@@ -788,11 +799,15 @@ async function planAll(inputs: PlanInput[]): Promise<PlanOutput[]> {
   });
   const outputs = ONLY_LIFE || ONLY_TREES ? inputs.map(() => ({ base: 0, top: 0, eave: 0, gnd: 0, style: 0, flags: 0, wall: '', roofC: '', roof: null, props: [], failed: false }) as unknown as PlanOutput) : await planAll(inputs);
   let failed = 0, pitched = 0, dormers = 0, chimneys = 0, roofBoxes = 0, gables = 0, turrets = 0, bays = 0, figures = 0;
+  let quays = 0;
   kept.forEach((b, k) => {
     const o = outputs[k];
     b.base = o.base; b.top = o.top; b.eave = o.eave; b.gnd = o.gnd;
     b.style = o.style; b.flags = o.flags; b.wall = o.wall; b.roofC = o.roofC;
     b.roof = o.roof; b.props = o.props;
+    // The quays' fronts (M17, design.md §8.7): the core's houses with the river within about 40 m
+    // are lit dimly at night from the embankment lamps (9542, 9547), a third of a floodlight.
+    if (inputs[k].river && QUAY_DISTRICTS.has(inputs[k].district) && !b.part && waterWithin(b.cx, b.cz, 40)) { b.flags |= BFlag.Quay; quays++; }
     if (o.failed) failed++;
     if (o.roof) pitched++;
     for (const pr of o.props) {
@@ -803,6 +818,7 @@ async function planAll(inputs: PlanInput[]): Promise<PlanOutput[]> {
     }
   });
   log(`roofs: ${pitched} pitched, ${failed} fell back to flat; ${dormers} dormers, ${chimneys} chimneys, ${roofBoxes} roof boxes; ${gables} gables, ${turrets} turrets, ${bays} bays, ${figures} figures (${((Date.now() - t1) / 1000).toFixed(1)} s)`);
+  log(`quays: ${quays} fronts lit from the embankments at night`);
 }
 
 // ---- Bridges ----------------------------------------------------------------------------------

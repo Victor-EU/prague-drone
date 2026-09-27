@@ -79,7 +79,9 @@ export class PlanarReflection {
     renderer.setRenderTarget(this.target);
     renderer.setClearColor(0x000000, 0);
     renderer.clear(true, true, false);
+    U.uMirrorPass.value = 1;
     renderer.render(scene, cam);
+    U.uMirrorPass.value = 0;
     renderer.setClearColor(colour, saved.alpha);
     renderer.setRenderTarget(saved.target);
     for (const m of hidden) m.visible = true;

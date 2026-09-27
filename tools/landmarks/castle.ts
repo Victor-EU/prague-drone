@@ -77,7 +77,7 @@ function westTower(k: Kit, d: Kit, f: Kit, s: number) {
 
 export const castle: Model = {
   id: 'st-vitus',
-  floodlit: true,
+  floodlit: 'bright',
   replaces: ['relation/3367557'],
   build(site: Site, k: Kit, d: Kit, f: Kit) {
     k.seed = d.seed = 97; f.seed = 98;

@@ -127,7 +127,7 @@ vec3 praWaterReflect(vec3 wp, vec3 N) {
     sky = mix(sky, texture2D(uSkyStats, vec2(0.625, 0.5)).rgb * 1.9, a);
   }
   // Under overcast the water lies a shade darker than the sky it carries (8988).
-  sky = mix(sky, uOvercastSky * 0.72, uOvercast * smoothstep(0.0, 0.06, R.y));
+  sky = mix(sky, uOvercastSky * 0.8, uOvercast * smoothstep(0.0, 0.06, R.y));
   if (uReflectOn < 0.5) return sky;
   // The mirror, displaced by the ripples and drawn out into columns: ripples too small to see
   // still tilt the surface, by uRipple radians or so, and spread each reflection up and down the
@@ -144,7 +144,7 @@ vec3 praWaterReflect(vec3 wp, vec3 N) {
   vec2 dist = vec2(tiltH * 0.3, tiltV * 1.1 - 2.5 * uRipple) * uReflectScale;
   // Reflections are drawn out into columns, the more so at night, when the lamps' run down the
   // water in long broken streaks (9542, 9547; M13: longer than before, as the photographs have them).
-  float spread = 2.0 * mix(0.03, 0.09, uCityLights) * uReflectScale;
+  float spread = 2.0 * mix(0.03, 0.11, uCityLights) * uReflectScale;
   float j = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))) + fract(uTime * 7.31));
   vec4 acc = vec4(0.0);
   float wsum = 0.0;
@@ -157,8 +157,14 @@ vec3 praWaterReflect(vec3 wp, vec3 N) {
   }
   vec4 m = acc / wsum;
   // Some of the facets of rippled water tilt up to the sky whatever lies across the river; at
-  // night the sky is dark and the lights are all there is to see.
-  return mix(sky, m.rgb / max(m.a, 1e-3), clamp(m.a, 0.0, 1.0) * mix(0.78, 0.9, uCityLights));
+  // night the sky is dark and the lights are all there is to see. The mirror is premultiplied:
+  // its city covers the sky by its alpha, and the lamps (drawn added, without alpha) come on top
+  // of whatever they lie over, the sky included, so a lamp's streak is never halved by the
+  // alpha the city under it wrote (M17).
+  // Under an overcast sky, bright everywhere, the tilted facets show more of it: the Čertovka's
+  // water in 9204 is silver under dark trees where the mirror alone gave dark trees (M17).
+  float k = mix(mix(0.78, 0.9, uCityLights), 0.4, uOvercast);
+  return sky * (1.0 - k * clamp(m.a, 0.0, 1.0)) + m.rgb * k;
 }
 
 // How much of the reflection the water returns (M13): little seen from above, where the water's

@@ -5,11 +5,13 @@
 import * as THREE from 'three';
 import { U } from '../sky/uniforms.ts';
 import { REFLECT } from '../render/reflection.ts';
+import { ADD_LIGHT } from '../world/lights.ts';
 
 const VERT = /* glsl */ `
 attribute float aKind;
 uniform float uCity;
 uniform float uPx;
+uniform float uMirrorPass;
 varying float vI;
 varying vec3 vCol;
 void main() {
@@ -17,8 +19,9 @@ void main() {
   gl_Position = projectionMatrix * mv;
   float d = max(-mv.z, 1.0);
   float px = uPx * 0.9 / d;
-  gl_PointSize = clamp(px, 3.0, 60.0);
-  vI = uCity * min(1.0, pow(px / 3.0, 1.2) + 0.1) * exp(-d / 5000.0) * mix(0.5, 1.0, aKind);
+  float pm = px * mix(1.0, 4.0, uMirrorPass);
+  gl_PointSize = clamp(pm, 3.0, 60.0);
+  vI = uCity * min(1.0, pow(px / 3.0, 1.2) + 0.1) * exp(-d / 5000.0) * mix(0.5, 1.0, aKind) * mix(1.0, 0.55, uMirrorPass * smoothstep(3.0, 6.0, pm));
   vCol = mix(vec3(1.0, 0.12, 0.08), vec3(1.0, 0.93, 0.8), aKind);
 }`;
 
@@ -47,9 +50,9 @@ export class VehicleLamps {
     g.setAttribute('aKind', new THREE.BufferAttribute(this.kind, 1).setUsage(THREE.DynamicDrawUsage));
     g.setDrawRange(0, 0);
     this.material = new THREE.ShaderMaterial({
-      uniforms: { uCity: U.uCityLights, uPx: { value: 1000 } },
+      uniforms: { uCity: U.uCityLights, uPx: { value: 1000 }, uMirrorPass: U.uMirrorPass },
       vertexShader: VERT, fragmentShader: FRAG,
-      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+      transparent: true, depthWrite: false, ...ADD_LIGHT, fog: false,
     });
     this.points = new THREE.Points(g, this.material);
     this.points.frustumCulled = false;

@@ -66,6 +66,6 @@ export function lifeMaterial(o: LifeMaterialOptions = {}): THREE.MeshStandardMat
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying float vGlow;')
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-totalEmissiveRadiance += vGlow * uCityLights * vec3(1.0, 0.8, 0.56) * ${glow} + diffuseColor.rgb * praLampPool(vPraWorld, 1.5) * 0.14;`);
+totalEmissiveRadiance += vGlow * uCityLights * vec3(1.0, 0.8, 0.56) * ${glow} + diffuseColor.rgb * praLampPool(vPraWorld, 1.5) * 0.05;`);
   }, `-life${o.wings ? '-wings' : ''}${o.transparent ? '-t' : ''}-${glow}`);
 }

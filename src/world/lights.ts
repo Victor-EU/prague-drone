@@ -16,6 +16,7 @@ const SPRITE_VERT = /* glsl */ `
 attribute float aKind;
 uniform float uCity;
 uniform float uPx;
+uniform float uMirrorPass;
 varying float vI;
 void main() {
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
@@ -24,8 +25,15 @@ void main() {
   // A lantern's glow about 2.4 m across, never less than four pixels; fading with distance once it
   // is that small, as a farther lamp gives less light to a pixel.
   float px = uPx * 2.4 / d;
-  gl_PointSize = clamp(px, 4.0, 110.0);
-  vI = uCity * min(1.0, pow(px / 4.0, 1.2) + 0.1) * exp(-d / 9000.0);
+  // In the river's mirror the point is drawn out into a streak many times its size by eight
+  // jittered taps (src/world/water.ts): drawn four times as wide there, so the taps find a smooth
+  // disc rather than a dot (which sparkled), with nine times the light in all, since a lamp is a
+  // hundred times brighter than the exposure's white and the photographs' streaks are bright (9542,
+  // M17). A far lamp, at the four-pixel floor in both, gets no more light in the mirror than in the
+  // view: thousands of them seen from above had washed the river pale.
+  float pm = px * mix(1.0, 4.0, uMirrorPass);
+  gl_PointSize = clamp(pm, 4.0, 110.0);
+  vI = uCity * min(1.0, pow(px / 4.0, 1.2) + 0.1) * exp(-d / 9000.0) * mix(1.0, 0.55, uMirrorPass * smoothstep(4.0, 8.0, pm));
 }`;
 
 const SPRITE_FRAG = /* glsl */ `
@@ -35,9 +43,20 @@ void main() {
   float r2 = dot(c, c);
   if (r2 > 1.0 || vI <= 0.0) discard;
   float core = exp(-r2 * 28.0), halo = exp(-r2 * 5.0);
-  vec3 col = mix(vec3(1.0, 0.55, 0.22), vec3(1.0, 0.85, 0.6), core);
-  gl_FragColor = vec4(col * vI * (core * 10.0 + halo * 0.22), 1.0);
+  // Sodium: a deep orange halo round a warm core, through the blue hour's daylight balance (9547).
+  vec3 col = mix(vec3(1.0, 0.42, 0.1), vec3(1.0, 0.74, 0.4), core);
+  gl_FragColor = vec4(col * vI * (core * 20.0 + halo * 0.45), 1.0);
 }`;
+
+/**
+ * Light added to the frame without touching its alpha (three's additive blend scales the source by
+ * its alpha and adds the alpha too): over the mirror's sky, which has none, a lamp's streak then adds
+ * to the sky, and over the city it is not halved by the alpha the city wrote (src/world/water.ts, M17).
+ */
+export const ADD_LIGHT = {
+  blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
+  blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor,
+} as const;
 
 const POOL_VERT = /* glsl */ `
 uniform float uSize;
@@ -72,9 +91,9 @@ export class CityLights {
     g.setAttribute('aKind', new THREE.Float32BufferAttribute(new Float32Array(sp.length / 3), 1));
     g.computeBoundingSphere();
     this.material = new THREE.ShaderMaterial({
-      uniforms: { uCity: U.uCityLights, uPx: { value: 1000 } },
+      uniforms: { uCity: U.uCityLights, uPx: { value: 1000 }, uMirrorPass: U.uMirrorPass },
       vertexShader: SPRITE_VERT, fragmentShader: SPRITE_FRAG,
-      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+      transparent: true, depthWrite: false, ...ADD_LIGHT, fog: false,
     });
     this.points = new THREE.Points(g, this.material);
     this.points.frustumCulled = false;

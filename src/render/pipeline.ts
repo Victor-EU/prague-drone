@@ -183,7 +183,7 @@ void main() {
   // photographs let the pale sky go near white (8683, 9486), needed more than the 0.6 of M1.
   // Under overcast the deck is the sky, and the photographs let it go nearly white (8942, 8158).
   // After dark the photographs are exposed for the city's lights: the sky goes deep (9542, 9547).
-  float target = mix(mix(0.24, 0.5, uOvercast), 0.07, uCityLights);
+  float target = mix(mix(0.24, 0.5, uOvercast), 0.085, uCityLights);
   float evFrame = log2(target) - meterLog;
   vec3 hor = texture2D(uSkyStats, vec2(0.625, 0.5)).rgb;
   hor = mix(hor, uOvercastSky * 0.85, uOvercast);

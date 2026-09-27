@@ -349,8 +349,8 @@ float praAbove = -1.0;
       // At night a quarter of the windows are lit, and half the shopfronts: warm, some whiter.
       float hl = praHash(vec2(floor(cc) * 1.7 + seed * 5.3, floor(r) * 2.3 + seed));
       float lit = step(hl, r < 1.0 ? 0.4 : 0.18);
-      vec3 warm = mix(vec3(1.0, 0.46, 0.17), vec3(1.0, 0.7, 0.42), praHash(vec2(hl * 7.0, seed)));
-      praEmit += warm * win * (1.0 - 0.7 * frame) * lit * 0.07;
+      vec3 warm = mix(vec3(1.0, 0.38, 0.1), vec3(1.0, 0.62, 0.3), praHash(vec2(hl * 7.0, seed)));
+      praEmit += warm * win * (1.0 - 0.7 * frame) * lit * 0.015;
     }
     diffuseColor.rgb = c;
     praGlass = win * (1.0 - frame);
@@ -496,17 +496,25 @@ float praAbove = -1.0;
   } else if (kind == ${Surface.Trim}) {
     praAbove = vFacade.z;
   }
-  // Floodlit landmarks: warm light from below on the walls, less on the roofs, fading upward.
-  if (mod(floor(vInfo.z / 2.0 + 0.01), 2.0) > 0.5) {
+  // Floodlit landmarks: warm light from below on the walls, less on the roofs, fading upward. The
+  // dim flag (M17) gives a third of it: the quays' fronts under the embankment lamps, Charles
+  // Bridge's body under its lanterns.
+  // Both bits together: three floodlights, for the Castle and St Vitus, the brightest lit of all
+  // (9553, and 9547's far Castle).
+  float praFloodDim = mod(floor(vInfo.z / 16.0 + 0.01), 2.0) > 0.5 ? 1.0 : 0.0;
+  float praFlood = mod(floor(vInfo.z / 2.0 + 0.01), 2.0) > 0.5 ? 1.0 + 2.0 * praFloodDim : 0.25 * praFloodDim;
+  if (praFlood > 0.0) {
     float facing = 1.0 - 0.6 * abs(normalize(vPraN).y);
     float up = praAbove >= 0.0 ? praAbove : 20.0;
-    // Sodium and halogen through a daylight white balance: deep orange (9542).
-    praEmit += diffuseColor.rgb * vec3(1.0, 0.42, 0.12) * 0.13 * facing * (0.45 + 0.55 * exp(-up / 22.0));
+    // Sodium and halogen through the blue hour's daylight white balance: deep orange (9542: the
+    // tower and the museum a quarter of the way to white, orange through and through; M17 took
+    // the yellow out, and the sky's light off the stone, which had made it grey).
+    praEmit += diffuseColor.rgb * vec3(1.0, 0.3, 0.05) * 0.02 * praFlood * facing * (0.5 + 0.5 * exp(-up / 30.0));
   }
-  if (kind == ${Surface.Glass} && style != ${Glass.Curtain}) praEmit += vec3(1.0, 0.7, 0.4) * 0.02 * praGlass;
-  if (kind == ${Surface.Glass} && style == ${Glass.Curtain}) praEmit += vec3(1.0, 0.86, 0.66) * 0.07 * praGlass;
+  if (kind == ${Surface.Glass} && style != ${Glass.Curtain}) praEmit += vec3(1.0, 0.6, 0.25) * 0.008 * praGlass;
+  if (kind == ${Surface.Glass} && style == ${Glass.Curtain}) praEmit += vec3(1.0, 0.86, 0.66) * 0.03 * praGlass;
 }
-vec3 praPoolE = praAbove >= 0.0 ? diffuseColor.rgb * praLampPool(vPraWorld, praAbove) * 0.14 : vec3(0.0);
+vec3 praPoolE = praAbove >= 0.0 ? diffuseColor.rgb * praLampPool(vPraWorld, praAbove) * 0.07 : vec3(0.0);
 `;
 
 /** The close-up details of M9 and M10 (1 on, 0 off; `?detail=0` in development, to measure their cost). */

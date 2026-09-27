@@ -59,8 +59,8 @@ export interface Model {
   covers?: string[];
   /** Other OSM keys the model replaces (buildings, parts, bridge decks). */
   replaces?: string[];
-  /** Floodlit at night (design.md §8.7). */
-  floodlit?: boolean;
+  /** Floodlit at night (design.md §8.7); 'dim' for a quarter of it (Charles Bridge's body under its lanterns), 'bright' for twice (the Castle; M17). */
+  floodlit?: boolean | 'dim' | 'bright';
   /** A piece of the city modelled by hand that is not one of §6.2's landmarks: no entry in
    * data/landmarks.json, nothing replaced by id, no name on the screen. */
   unnamed?: boolean;
@@ -115,7 +115,7 @@ export async function buildLandmarks(site: Site, log: (...a: unknown[]) => void)
     const built: Built[] = [];
     for (const m of list) {
       const main = new Kit(), detail = new Kit(), fine = new Kit();
-      if (m.floodlit) main.flagsOr = detail.flagsOr = fine.flagsOr = SFlag.Floodlit;
+      if (m.floodlit) main.flagsOr = detail.flagsOr = fine.flagsOr = m.floodlit === 'dim' ? SFlag.FloodDim : m.floodlit === 'bright' ? SFlag.Floodlit | SFlag.FloodDim : SFlag.Floodlit;
       m.build(site, main, detail, fine);
       built.push({ id: m.id, main: main.finish(), detail: detail.finish(), fine: fine.finish(), lights: [...main.lights, ...detail.lights, ...fine.lights], claims: [...main.claims, ...detail.claims, ...fine.claims], replaces: m.replaces });
       tris = [tris[0] + main.triangles, tris[1] + detail.triangles, tris[2] + fine.triangles];

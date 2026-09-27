@@ -79,8 +79,15 @@ export class Streets {
       this.add(mesh, geom.boundingSphere!);
     }
 
-    // The overhead wire: one line over each track, drawn as the thinnest dark line.
-    const wireMat = patchLit(new THREE.LineBasicMaterial({ color: '#15171a' }));
+    // The overhead wire: one line over each track, drawn as the thinnest dark line. A line's colour
+    // is unlit, so it is scaled by the sky's light here: an absolute dark grey read as a pale line
+    // through the night's exposure, ten times a day's (M17).
+    const wireMat = patchLit(new THREE.LineBasicMaterial({ color: '#ffffff' }), (shader) => {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        'gl_FragColor.rgb = praAerial(',
+        'gl_FragColor.rgb *= texture2D(uSkyStats, vec2(0.375, 0.5)).rgb * 0.08;\n\tgl_FragColor.rgb = praAerial(',
+      );
+    }, '-wire');
     for (const runs of byTile.values()) {
       const pos: number[] = [];
       for (const run of runs)

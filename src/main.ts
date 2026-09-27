@@ -190,6 +190,8 @@ if (params.has('clock')) {
   fixedClock = clock = params.get('clock')!.includes(':') ? parseClock(params.get('clock')!) : Number(params.get('clock'));
 }
 if (params.has('t')) drone.setAuto(Number(params.get('t')));
+// Development only: the drone held still at route time `t`, for a frame of the flight (tools/compare.ts route@t=).
+const paused = import.meta.env.DEV && params.has('pause');
 drone.fast = params.has('fast');
 if (params.has('manual')) drone.takeOver();
 drone.waiting = cover !== undefined;
@@ -402,7 +404,7 @@ function frame(time: number) {
     else if (k === 'KeyO' && import.meta.env.DEV) pipeline.ao = !pipeline.ao;
   }
 
-  if (!view) drone.update(dt, keys);
+  if (!view && !paused) drone.update(dt, keys);
 
   // The clock follows the flight; in the hold it keeps going to 22:30 at a minute a second.
   if (dayAdvances && drone.mode === 'auto') {

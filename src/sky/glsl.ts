@@ -117,7 +117,7 @@ vec3 aSky(vec3 dir) {
     vec2 dh = normalize(dir.xz + vec2(1e-6, 0.0)), sh = normalize(uSunDir.xz + vec2(1e-6, 0.0));
     // Once the sun is well down the whole horizon, the afterglow's side too, is the photographs'
     // pale blue (9547): three wavelengths leave twilight's low band pink.
-    float away = max(smoothstep(0.3, -0.4, dot(dh, sh)), smoothstep(-0.02, -0.09, uSunDir.y));
+    float away = max(smoothstep(0.3, -0.4, dot(dh, sh)), smoothstep(0.0, -0.07, uSunDir.y));
     float w = aSkyHorizon * away * (1.0 - smoothstep(0.0, 0.26, max(dir.y, 0.0)));
     s = mix(s, l * hue / max(dot(hue, vec3(0.2126, 0.7152, 0.0722)), 1e-6), w);
   }
@@ -150,7 +150,8 @@ vec3 praLampPool(vec3 wp, float above) {
   if (uCityLights <= 0.0) return vec3(0.0);
   vec2 uv = (wp.xz - uLampRect.xy) * uLampRect.zw;
   if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return vec3(0.0);
-  return vec3(1.0, 0.5, 0.17) * texture2D(tLampMap, uv).r * exp(-max(0.0, above - 4.0) / 7.0) * uCityLights;
+  // Sodium through the daylight balance of the blue hour (design.md §5.3): deep orange (9542, 9547).
+  return vec3(1.0, 0.36, 0.08) * texture2D(tLampMap, uv).r * exp(-max(0.0, above - 4.0) / 7.0) * uCityLights;
 }
 
 // How much of the sky this point sees: the screen-space occlusion of the previous frame, found
@@ -173,8 +174,9 @@ float praSunVisibility(vec3 wp) {
   }
   if (uCloud.y > 0.0) {
     vec3 p = wp + uSunDir * ((uCloud.z - wp.y) / max(uSunDir.y, 0.06));
-    float w = texture2D(uWeather, (p.xz - uWind) / 24000.0).r;
-    vis *= 1.0 - uCloud.y * smoothstep(uCloud.x, uCloud.x + uCloud.w, w);
+    vec3 w = texture2D(uWeather, (p.xz - uWind) / 24000.0).rgb;
+    // The small wispy clouds (the map's blue, M17) are thin: half a shadow.
+    vis *= 1.0 - uCloud.y * (1.0 - 0.5 * w.b) * smoothstep(uCloud.x, uCloud.x + uCloud.w, w.r);
   }
   return vis;
 }

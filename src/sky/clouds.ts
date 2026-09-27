@@ -84,23 +84,27 @@ float remap(float v, float lo, float hi, float a, float b) { return a + (v - lo)
 float density(vec3 p, bool detail, out float hRel) {
   // Explicit level: inside the march, neighbouring pixels sample far-apart points and implicit
   // derivatives would pick a blurred level on alternate rows.
-  vec2 w = textureLod(uWeather, (p.xz - uWind) / 24000.0, 0.0).rg;
+  vec3 w = textureLod(uWeather, (p.xz - uWind) / 24000.0, 0.0).rgb;
   // Local coverage stays below 1 so the noise always carves the cell: cumulus, not cylinders.
   float cov = 0.82 * smoothstep(uCloud.x, uCloud.x + uCloud.w, w.r);
   hRel = 0.0;
   if (cov <= 0.0) return 0.0;
+  // The map's blue is how wispy the cloud is (M17): 0 for the large solid ones, 1 for the small
+  // fair-weather cloudlets, which are shallow, thin and ragged (8372, 9369).
+  float wisp = w.b;
   float top = uLayer.x + (uLayer.y - uLayer.x) * mix(0.35, 1.0, w.g);
   float h = (p.y - uLayer.x) / (top - uLayer.x);
   hRel = h;
   if (h <= 0.0 || h >= 1.0) return 0.0;
   // A flat, sharp base (the condensation level), widest a third of the way up, rounding toward
-  // the top.
-  float grad = smoothstep(0.0, 0.05, h) * (1.0 - smoothstep(0.35, 1.0, h));
+  // the top; the wisps have no flat base to speak of.
+  float grad = smoothstep(0.0, mix(0.05, 0.3, wisp), h) * (1.0 - smoothstep(mix(0.35, 0.2, wisp), 1.0, h));
   vec3 q = p;
   q.xz -= uWind;
   q += uNoiseOffset;
-  // Wider than tall: fair-weather cumulus spread more than they tower.
-  vec4 n = texture(tShape, q / vec3(1700.0, 900.0, 1700.0));
+  // Wider than tall: fair-weather cumulus spread more than they tower; the small ones are shaped
+  // by a finer noise, drawn out along the wind, so they are ragged wisps, not one lump each.
+  vec4 n = texture(tShape, q / mix(vec3(1700.0, 900.0, 1700.0), vec3(950.0, 400.0, 550.0), wisp));
   float fbm = n.g * 0.625 + n.b * 0.25 + n.a * 0.125;
   float base = remap(n.r, fbm - 1.0, 1.0, 0.0, 1.0);
   base = remap(base * grad, 1.0 - cov, 1.0, 0.0, 1.0) * cov;
@@ -111,11 +115,12 @@ float density(vec3 p, bool detail, out float hRel) {
     // Stretched to the full range: the fbm of cells sits near its middle, and so carved little.
     float dfbm = smoothstep(0.3, 0.8, d.r * 0.625 + d.g * 0.25 + d.b * 0.125);
     float m = mix(dfbm, 1.0 - dfbm, clamp(h * 4.0, 0.0, 1.0));
-    base = remap(base, m * uLayer.w, 1.0, 0.0, 1.0);
+    base = remap(base, m * uLayer.w * mix(1.0, 1.5, wisp), 1.0, 0.0, 1.0);
   }
-  // A soft knee at the low end: thin fringes vanish, so edges read crisp like cauliflower.
-  base *= smoothstep(0.0, 0.2, base);
-  return clamp(base * 1.8, 0.0, 1.0);
+  // A soft knee at the low end: thin fringes vanish, so edges read crisp like cauliflower; the
+  // wisps keep their fringes and stay thin, so the sky shows through them.
+  base *= smoothstep(0.0, mix(0.2, 0.45, wisp), base);
+  return clamp(base * mix(1.8, 0.7, wisp), 0.0, 1.0);
 }
 
 float lightDepth(vec3 p) {

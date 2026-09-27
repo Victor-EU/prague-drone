@@ -54,7 +54,7 @@ function place(kits: Kit[], site: Site, key: string, bearing = 90) {
 export const stGeorge: Model = {
   id: 'st-george',
   unnamed: true,
-  floodlit: true,
+  floodlit: 'bright',
   replaces: ['relation/3372132', 'relation/13847530', 'way/456778885', 'way/456778886', 'way/456778887', 'way/480145478', 'way/480145479', 'way/480145480', 'way/480145481', 'way/1034784278', 'way/1034784279'],
   build(site, k, d, f) {
     k.seed = 131; d.seed = 132; f.seed = 133;
@@ -130,7 +130,7 @@ export const stGeorge: Model = {
 export const castleTowers: Model = {
   id: 'castle-towers',
   unnamed: true,
-  floodlit: true,
+  floodlit: 'bright',
   replaces: ['relation/3367850', 'way/422194036', 'way/422194037', 'relation/3367848', 'relation/3367566', 'relation/3372133'],
   build(site, k, d, f) {
     k.seed = 134; d.seed = 135; f.seed = 136;
@@ -160,12 +160,13 @@ export const castleTowers: Model = {
       for (let q = 0; q < 4; q++) { const a = (q * Math.PI) / 2 + Math.PI / 4; k.plate([R * Math.cos(a), h * 0.6, R * Math.sin(a)], [Math.sin(a), 0, -Math.cos(a)], UP, arch(0.7, 1.3, 'flat'), DARK, 0.04); }
       d.ball(0, h + rh + 0.7, 0, 0.25, GOLD, 6);
     }
-    // All Saints: the collegiate church behind the Old Royal Palace, under a steep roof with a turret.
+    // All Saints: the collegiate church behind the Old Royal Palace, under a steep roof of red
+    // tiles (8809) with a turret.
     {
       const r = place([k, d, f], site, 'relation/3372133', 66);
       const ring = ringOf(k, site, 'relation/3372133', r.g);
       k.prism(ring, -2, 14, PALE, null);
-      const top = k.roof(ring, 14, { shape: 'gabled', pitch: 55, cap: 99, gable: (_, len) => len < 16 }, SLATE, PALE);
+      const top = k.roof(ring, 14, { shape: 'gabled', pitch: 55, cap: 99, gable: (_, len) => len < 16 }, TILES, PALE);
       for (let i = 0; i < ring.length; i++) {
         const a = ring[i], b = ring[(i + 1) % ring.length], len = Math.hypot(b[0] - a[0], b[1] - a[1]);
         if (len < 10) continue;

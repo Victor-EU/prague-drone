@@ -191,7 +191,9 @@ function bridgeLamp(d: Kit, x: number, z: number, y: number) {
 
 export const charlesBridge: Model = {
   id: 'charles-bridge',
-  floodlit: true,
+  // The body is not floodlit: its lanterns are the light, and the photographs' bridge is a dark
+  // line of warm points with the arches faintly lit (9547, 9531); the towers are floodlit apart.
+  floodlit: 'dim',
   build(site: Site, k: Kit, d: Kit) {
     const A = bridgeAxis(site);
     k.place(0, 0, 0); d.place(0, 0, 0);

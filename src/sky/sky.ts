@@ -39,6 +39,7 @@ uniform vec3 uOvercastSky;
 uniform vec3 uSunDisc;
 uniform vec3 uCloudSun;
 uniform float uNight;
+uniform float uCityLights;
 varying vec3 vDir;
 
 float hash13(vec3 p) {
@@ -68,7 +69,9 @@ void main() {
   // Cirrus far above, lit like thin ice: bright toward the sun.
   if (uCirrus > 0.0 && d.y > 0.01) {
     vec2 c = d.xz / d.y * 8500.0 + uCirrusOffset;
-    float a = texture2D(tCirrus, c / 42000.0).r * uCirrus * smoothstep(0.01, 0.2, d.y);
+    // Gone with the city's lights coming on: lit by the sky's mean, they stood pale against the
+    // zenith of the blue-hour hold, whose sky the photographs show clear (9541, 9547, 9553; M17).
+    float a = texture2D(tCirrus, c / 42000.0).r * uCirrus * smoothstep(0.01, 0.2, d.y) * (1.0 - 0.9 * uCityLights);
     float cosS = dot(d, uSunDir);
     vec3 lit = uCloudSun * (0.02 + 0.25 * pow(max(cosS, 0.0), 6.0)) + hemi * 0.9;
     sky = mix(sky, lit, a * (1.0 - uOvercast));

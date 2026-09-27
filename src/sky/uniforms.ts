@@ -51,4 +51,7 @@ export const U = {
   uCityLights: { value: 0 },
   tLampMap: tex(),
   uLampRect: { value: new THREE.Vector4(0, 0, 0, 0) },
+  // 1 while the river's mirror is being drawn (src/render/reflection.ts): the lamps are drawn
+  // brighter into it, since its column smear spreads each over a long streak (M17).
+  uMirrorPass: { value: 0 },
 };
