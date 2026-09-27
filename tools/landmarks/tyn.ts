@@ -7,30 +7,42 @@
 // towers rise out of a row of roofs, as in 8607. Placed on OSM's nave and towers
 // (way/455314032, 455314030, 455314031). M12: the windows in stone surrounds with their mullions,
 // the galleries on corbels behind pierced balustrades, the turrets' spires crocketed, the string
-// courses moulded.
+// courses moulded. M18 (8607): the corner turrets in slate, gilded stars over the balls, copper
+// needles, and the west gable dressed in dark stone with blind tracery, shields and the Madonna.
 
 import { Kit, mat, rect, ngon, offsetRing, orientedRect, centreOf, PROFILE, type V2, type V3, type Mat } from './kit.ts';
-import { pinnacle, traceryWindow, corbels, balustrade } from './ornament.ts';
+import { pinnacle, traceryWindow, corbels, balustrade, shields, statue } from './ornament.ts';
 import type { Model, Site } from './index.ts';
-import { Surface, Stone, Metal, Glass } from '../../src/core/buildings.ts';
+import { Surface, Stone, Metal, Glass, SFlag } from '../../src/core/buildings.ts';
 
-const STONE = mat('#b9ac97', Surface.Stone, Stone.Ashlar, 1);
-const WALLS = mat('#b3a894', Surface.Stone, Stone.Rubble, 0.6);
-const BAND = mat('#6a635a', Surface.Stone, Stone.Ashlar, 1);
-const DRESSING = mat('#8d847a', Surface.Stone, Stone.Ashlar, 0.6);
+// M18: the pale stone greyer and pinker (8607), and blackened stone by stone by the shader.
+const STONE = mat('#bdaea0', Surface.Stone, Stone.Ashlar, 1, SFlag.Blackened);
+const WALLS = mat('#b2a496', Surface.Stone, Stone.Rubble, 0.7, SFlag.Blackened);
+const BAND = mat('#6a635a', Surface.Stone, Stone.Ashlar, 1, SFlag.Blackened);
+const DRESSING = mat('#8d847a', Surface.Stone, Stone.Ashlar, 0.6, SFlag.Blackened);
 const SLATE = mat('#383b3f', Surface.Metal, Metal.Slate);
 const SPIRE = mat('#2f3236', Surface.Metal, Metal.Lead);
 const GOLD = mat('#c9a34a', Surface.Metal, Metal.Gold);
+const COPPER = mat('#5f8a78', Surface.Metal, Metal.Copper);
+const IRON = mat('#1c1d1f', Surface.Metal, Metal.Lead);
 const TRACERY = mat('#8a8274', Surface.Glass, Glass.Tracery);
 const DARK = mat('#1b1a18', Surface.Opening);
 const UP: V3 = [0, 1, 0];
 
-/** A small octagonal pinnacle or turret: shaft from y0 to y1 with radius r, a crocketed spire to `apex`, a gilded ball. */
+/** A gilded eight-pointed star of radius r at (x, y, z), two crossed plates each way (8607: one over every ball). */
+function star(d: Kit, x: number, y: number, z: number, r: number) {
+  const pts: V2[] = [];
+  for (let i = 0; i < 16; i++) { const a = (i * Math.PI) / 8, q = i % 2 ? r * 0.38 : r; pts.push([q * Math.sin(a), q * Math.cos(a)]); }
+  for (const u of [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]] as V3[]) d.plate([x, y, z], u, UP, pts, GOLD, 0);
+}
+
+/** A small octagonal pinnacle or turret: shaft from y0 to y1 with radius r, a crocketed spire to `apex`, a gilded ball and star. */
 function turret(k: Kit, d: Kit, f: Kit, x: number, z: number, r: number, y0: number, y1: number, apex: number, body: Mat, ball = 0.22) {
   pinnacle(k, f, x, z, y0, y1, apex, r, body, { sides: 8, spire: SPIRE, cap: BAND, crockets: r >= 0.5 });
   if (ball > 0) {
-    d.lathe(x, z, [[0.05, apex - 0.1], [0.04, apex + 1.1]], 4, SPIRE);
+    d.lathe(x, z, [[0.05, apex - 0.1], [0.04, apex + 1.1]], 4, COPPER);
     d.ball(x, apex + 0.75, z, ball, GOLD, 6);
+    if (ball >= 0.15) star(d, x, apex + 1.1 + ball * 1.6, z, ball * 1.8);
   }
 }
 
@@ -61,13 +73,21 @@ function tower(k: Kit, d: Kit, f: Kit, s: number) {
   const gal = offsetRing(body, 0.55);
   corbels(f, offsetRing(body, 0.02).map(([x, z]) => [x, 42.3, z] as V3), BAND, { step: 1.2, w: 0.45, h: 1.1, out: 0.5, closed: true });
   k.loft(body, 42.3, gal, 43.5, BAND);
-  balustrade(f, gal.map(([x, z]) => [x, 43.5, z] as V3), DRESSING, { h: 1.4, closed: true, posts: true, w: 0.3, step: 0.36 });
+  balustrade(f, gal.map(([x, z]) => [x, 43.5, z] as V3), BAND, { h: 1.4, closed: true, posts: true, w: 0.3, step: 0.36 });
   // The main spire: an octagonal needle from the gallery to 80 m.
-  k.lathe(0, 0, [[4.1, 43.5], [4.1, 44.9], [2.6, 58], [1.1, 71], [0, 80]], 8, SPIRE, { flat: true, phase: 22.5 });
-  d.lathe(0, 0, [[0.07, 79.8], [0.05, 82.2]], 4, SPIRE);
-  d.ball(0, 81.2, 0, 0.38, GOLD, 8);
-  // Four corner turrets on the gallery, four spirelets on the spire's faces.
-  for (const [cx, cz] of offsetRing(body, 0.05)) turret(k, d, f, cx, cz, 1.1, 41.5, 49.5, 60.5, STONE);
+  // Slate to 76 m, then a copper needle carrying the ball and the star (8607).
+  k.lathe(0, 0, [[4.1, 43.5], [4.1, 44.9], [2.6, 58], [1.1, 71], [0.32, 76.5]], 8, SPIRE, { flat: true, phase: 22.5 });
+  d.lathe(0, 0, [[0.32, 76.5], [0.14, 79.5], [0.06, 82.2]], 8, COPPER);
+  d.ball(0, 80.9, 0, 0.38, GOLD, 8);
+  star(d, 0, 82.8, 0, 0.6);
+  // Four corner turrets on the gallery, clad in slate with lancets (8607), four spirelets on the spire's faces.
+  for (const [cx, cz] of offsetRing(body, 0.05)) {
+    turret(k, d, f, cx, cz, 1.1, 41.5, 49.5, 60.5, SPIRE);
+    for (let e = 0; e < 8; e += 2) {
+      const a = (e * Math.PI) / 4, ca = Math.cos(a), sa = Math.sin(a);
+      k.plate([cx + 1.03 * ca, 45.2, cz + 1.03 * sa], [sa, 0, -ca], UP, [[-0.1, 0], [0.1, 0], [0.1, 1.0], [0, 1.2], [-0.1, 1.0]], DARK, 0.02);
+    }
+  }
   for (let q = 0; q < 4; q++) {
     const a = (q * Math.PI) / 2, x = 3.0 * Math.cos(a), z = 3.0 * Math.sin(a);
     turret(k, d, f, x, z, 0.66, 51.5, 55.2, 65.5, SPIRE, 0.18);
@@ -135,14 +155,31 @@ export const tyn: Model = {
     // The west front between the towers: a great window under the gable, the Madonna in gold,
     // pinnacles up both rakes.
     traceryWindow(k, f, [west, 0, 0], [0, 0, 1], UP, 0, 16, 5.2, 12, DRESSING, TRACERY, { lights: 3, rise: 4, transom: true, proud: 0.18, depth: 0.32 });
-    k.plate([west, 38.5, 0], [0, 0, 1], UP, ngon(16, 1.3, 0, 0, 0).map(([a, b]) => [a, b] as V2), GOLD, 0.08);
+    // M18, the gable as 8607 shows it: faced in dark stone, a balustrade along its foot, four blind
+    // lancets over it, a row of shields, three small arches, the Madonna gilded in an aureole of
+    // rays, pinnacles up the rakes standing clear of them, and an iron cross on the apex.
+    const GH = hw * Math.tan((67 * Math.PI) / 180), gw: V3 = [0, 0, 1];
+    k.slab([west - 0.16, 30, 0], gw, UP, [[-hw + 0.25, 0], [hw - 0.25, 0], [0, GH - 0.6]], 0.16, BAND);
+    corbels(f, [[west - 0.1, 29.3, -hw], [west - 0.1, 29.3, hw]], BAND, { step: 1.0, w: 0.4, h: 0.8, out: 0.55 });
+    k.box(west - 0.35, 0, 0.7, 2 * hw, 29.95, 30.1, BAND, BAND);
+    balustrade(f, [[west - 0.55, 30.1, -hw + 0.2], [west - 0.55, 30.1, hw - 0.2]], BAND, { h: 1.1, posts: true, w: 0.26, step: 0.34 });
+    const BLIND = mat('#2b2824', Surface.Opening);
+    for (const a of [-3.0, -1.0, 1.0, 3.0]) traceryWindow(k, f, [west - 0.16, 0, 0], gw, UP, a, 31.3, 1.5, 3.6, BAND, BLIND, { lights: 2, rise: 1.1, proud: 0.12, depth: 0.16 });
+    shields(f, [west - 0.16, 0, 0], gw, UP, 0, 35.3, 4, 1.25, 0.7, 0.85, mat('#4a4540', Surface.Stone, Stone.Ashlar, 0.3), BAND);
+    for (const a of [-1.4, 0, 1.4]) traceryWindow(k, f, [west - 0.16, 0, 0], gw, UP, a, 36.5, 1.0, 2.0 + (a === 0 ? 0.6 : 0), BAND, BLIND, { lights: 1, rise: 0.7, proud: 0.1, depth: 0.12 });
+    const rays: V2[] = [];
+    for (let i = 0; i < 48; i++) { const a = (i * Math.PI) / 24, q = i % 2 ? 1.0 : 1.5; rays.push([q * 0.8 * Math.sin(a), 1.3 + q * Math.cos(a)]); }
+    k.plate([west - 0.16, 38.2, 0], gw, UP, rays, GOLD, 0.05);
+    k.plate([west - 0.16, 38.2, 0], gw, UP, ngon(16, 1.0, 0, 0, 0).map(([a, b]) => [a * 0.55, 1.3 + b] as V2), mat('#e6dccb', Surface.Stone, Stone.Render, 0), 0.08);
+    statue(d, [west - 0.35, 38.5, 0], [-1, 0], 1.9, GOLD, 'single', 11);
     for (let q = 1; q <= 4; q++) {
-      const t = q / 5, y = 30 + 13.9 * t;
-      for (const sz of [-1, 1]) turret(k, d, f, west - 0.2, sz * hw * (1 - t), 0.28, y - 1.2, y + 0.6, y + 2.8, STONE, 0.1);
+      const t = q / 5, y = 30 + GH * t;
+      for (const sz of [-1, 1]) turret(k, d, f, west - 0.2, sz * hw * (1 - t), 0.3, y - 1.2, y + 1.2, y + 4.2, BAND, 0.1);
     }
-    k.lathe(west - 0.2, 0, [[0.3, 43.5], [0.3, 45], [0, 47]], 6, STONE, { flat: true });
-    d.beam([west - 0.2, 46.5, 0], [west - 0.2, 48.8, 0], 0.14, GOLD);
-    d.beam([west - 0.2, 48, -0.6], [west - 0.2, 48, 0.6], 0.12, GOLD);
+    k.lathe(west - 0.2, 0, [[0.3, 43.5], [0.3, 45], [0, 47]], 6, BAND, { flat: true });
+    d.beam([west - 0.2, 46.5, 0], [west - 0.2, 49.2, 0], 0.16, IRON);
+    d.beam([west - 0.2, 48.3, -0.75], [west - 0.2, 48.3, 0.75], 0.14, IRON);
+    for (const [y, z] of [[49.35, 0], [48.3, -0.85], [48.3, 0.85]] as [number, number][]) d.ball(west - 0.2, y, z, 0.12, IRON, 6);
     // Ridge turret over the crossing.
     const rx = eastX - 8;
     k.lathe(rx, 0, [[0.9, 41], [0.9, 47], [1.3, 48], [0.6, 49.7], [0.15, 51.5], [0, 53]], 8, SPIRE, { flat: true });

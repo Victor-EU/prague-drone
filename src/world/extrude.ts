@@ -115,7 +115,7 @@ export function extrude(f: TileArrays, seed = 0): { main: MeshBuffers; detail: M
     const eaveRel = eave - gnd;
     // The trim's tone (design.md §8.2), decided here for the shader and the relief alike.
     // The quays' fronts carry the dim night light with the trim bits, so the relief has it too.
-    const trim = (!landmark && !bridge && ORN.has(style) ? trimFlags(bseed, wall) : 0) | ((f.flags[b] & BFlag.Quay) !== 0 && !landmark && !bridge ? SFlag.FloodDim : 0);
+    const trim = (!landmark && !bridge && ORN.has(style) ? trimFlags(bseed, wall, style) : 0) | ((f.flags[b] & BFlag.Quay) !== 0 && !landmark && !bridge ? SFlag.FloodDim : 0);
     const sh = grid(20, eaveRel, style).sh;
     colours.push({ wall, roof: roofC, tone, seed: bseed, style, trim, gnd, eave, sh, pal: new Palette(wall, tone, base - gnd, eaveRel, trim) });
     if (top - base < 0.5) continue;

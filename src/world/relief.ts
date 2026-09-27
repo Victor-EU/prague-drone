@@ -4,7 +4,7 @@
 // grid, the storeys and every choice are the shader's, through core/buildings.ts). Nothing here
 // ships: the app asks for a chunk when the camera comes within reach and drops it when it goes.
 
-import { Style, Surface, Prop, BFlag, EFlag, SFlag, Choice, rand, trimFlags, grid } from '../core/buildings.ts';
+import { Style, Surface, Prop, BFlag, EFlag, SFlag, Choice, Grammar, rand, trimFlags, grid } from '../core/buildings.ts';
 import { Writer, Frame, course, LINEAR, hash, type MeshBuffers, type CourseEdge, type RGB, type P2 } from './mesh-writer.ts';
 import type { TileArrays } from './extrude.ts';
 
@@ -79,17 +79,27 @@ function wall(fr: Frame, pal: Palette, L: number, top: number, style: number, se
   const { n, span, nS, sh, A } = grid(L, top, style);
   const vMin = o.vMin ?? -Infinity;
   if (!o.bare && style !== Style.House && L > 5 && top > 3 && top - 0.5 > Math.max(0.9, vMin) + 1) {
-    // Lesenes: strips of the trim up the ends of the front, from the plinth to the cornice.
+    // Lesenes: strips of the trim up the ends of the front, from the plinth to the cornice; on a
+    // third of the rich fronts rusticated quoins, long and short in turn (M18), as the shader paints.
     const c = pal.trim(top * 0.5), v0 = Math.max(0.9, vMin);
-    fr.box(0, 0.55, v0, top - 0.5, 0, 0.05, c, { top: false, bottom: false });
-    fr.box(L - 0.55, L, v0, top - 0.5, 0, 0.05, c, { top: false, bottom: false });
+    if (rich && rand(seed, Choice.Quoins) < Grammar.Quoins) {
+      const q = Grammar.Quoin;
+      for (let k = Math.ceil(v0 / q - 0.01); (k + 1) * q < top - 0.5; k++) {
+        const w = k % 2 ? 0.55 : 0.9, y0 = Math.max(k * q, v0), y1 = (k + 0.89) * q;
+        fr.box(0, w, y0, y1, 0, 0.07, c);
+        fr.box(L - w, L, y0, y1, 0, 0.07, c);
+      }
+    } else {
+      fr.box(0, 0.55, v0, top - 0.5, 0, 0.05, c, { top: false, bottom: false });
+      fr.box(L - 0.55, L, v0, top - 0.5, 0, 0.05, c, { top: false, bottom: false });
+    }
   }
   if (n < 1 || top <= 2.5) return;
   const hd = rand(seed, Choice.Portal + Math.round(L * 10)), hb = rand(seed, Choice.Balcony);
-  const archK = rand(seed, Choice.Arch), hk = rand(seed, Choice.Hood);
+  const archK = rand(seed, Choice.Arch), hk = rand(seed, Choice.Hood), hk2 = rand(seed, Choice.Hood2);
   const portal = !o.bare && top > 3 && hd < 0.9 && span > 1.9 && vMin < 0.5;
   const dcol = rich && n >= 3 ? Math.floor(n * 0.5) : Math.floor((hd / 0.9) * n);
-  const W = A.winW, sw = rich ? 0.17 : 0.12;
+  const W = A.winW, sw = rich ? 0.2 : 0.13;
   for (let fl = 0; fl < nS; fl++) {
     const gf = fl === 0;
     if (gf && o.arcade) continue;
@@ -128,19 +138,32 @@ function wall(fr: Frame, pal: Palette, L: number, top: number, style: number, se
         const trim = pal.trim(vf + 0.5 * (y0 + y1));
         // The surround: jambs, and a head straight or following the arch.
         if (!o.far) {
-          fr.box(cu - 0.5 * W - sw, cu - 0.5 * W, vf + y0 - sw, vf + ys, 0, 0.07, trim, { bottom: false, top: false });
-          fr.box(cu + 0.5 * W, cu + 0.5 * W + sw, vf + y0 - sw, vf + ys, 0, 0.07, trim, { bottom: false, top: false });
-          if (arch) fr.slab(archBand(cu, vf + ys, 0.5 * W, 0.5 * W + sw), 0, 0.07, trim);
-          else fr.box(cu - 0.5 * W - sw, cu + 0.5 * W + sw, vf + y1, vf + y1 + sw, 0, 0.07, trim, { bottom: false });
+          fr.box(cu - 0.5 * W - sw, cu - 0.5 * W, vf + y0 - sw, vf + ys, 0, 0.09, trim, { bottom: false, top: false });
+          fr.box(cu + 0.5 * W, cu + 0.5 * W + sw, vf + y0 - sw, vf + ys, 0, 0.09, trim, { bottom: false, top: false });
+          if (arch) fr.slab(archBand(cu, vf + ys, 0.5 * W, 0.5 * W + sw), 0, 0.09, trim);
+          else fr.box(cu - 0.5 * W - sw, cu + 0.5 * W + sw, vf + y1, vf + y1 + sw, 0, 0.09, trim, { bottom: false });
+          // M18: the rich fronts' aprons as raised panels under the sills, where the shader paints them.
+          if (rich && !gf && !balc) fr.box(cu - 0.5 * W + 0.05, cu + 0.5 * W - 0.05, vf + y0 - sw - 0.62, vf + y0 - sw - 0.22, 0, 0.04, trim);
         }
         // The sill, a ledge with its shadow under it.
         if (!balc) fr.box(cu - 0.5 * W - sw - 0.06, cu + 0.5 * W + sw + 0.06, vf + y0 - sw - 0.07, vf + y0 - sw + 0.01, 0, 0.14, mul(trim, 1.15), { bottom: o.far ? false : undefined });
-        // The hood: over the first-floor windows of the rich fronts, segmental, triangular or
-        // straight by building; straight over the blocks' upper windows but the top row.
-        if (((rich && fl === 1) || (style === Style.Block && fl >= 1 && fl < nS - 1)) && !balc) {
+        // The hood: over the first two floors' windows of the rich fronts where a floor stands
+        // above (M18), segmental, triangular or straight by building, the second floor's straight on
+        // half of them; straight over the blocks' upper windows but the top row.
+        const hooded = rich ? fl >= 1 && fl < Math.min(2.5, nS - 1.5) : style === Style.Block && fl >= 1 && fl < nS - 1;
+        if (hooded && !balc) {
           const yt = vf + y1 + sw + 0.05, hwH = 0.5 * W + sw + 0.1;
           const hood = mul(trim, 1.12);
-          const kind = style === Style.Block || hk < 0.34 ? 0 : hk < 0.67 ? 1 : 2;
+          const hkF = fl >= 2 && hk2 < Grammar.Hood2Straight ? 0 : hk;
+          const kind = style === Style.Block || hkF < 0.34 ? 0 : hkF < 0.67 ? 1 : 2;
+          // The segmental hood's consoles and the scrolls its ends curl into (8607).
+          if (kind === 1 && !o.far) for (const sx of [-1, 1]) {
+            const xe = cu + sx * hwH;
+            fr.box(Math.min(xe - sx * 0.15, xe - sx * 0.03), Math.max(xe - sx * 0.15, xe - sx * 0.03), yt - 0.32, yt, 0, 0.16, hood, { top: false });
+            const disc: P2[] = [];
+            for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; disc.push([xe + 0.085 * Math.cos(a), yt + 0.05 + 0.085 * Math.sin(a)]); }
+            fr.slab(disc, 0, 0.24, hood);
+          }
           if (kind === 0) fr.box(cu - hwH, cu + hwH, yt, yt + 0.14, 0, 0.22, hood);
           else if (kind === 2) fr.slab([[cu - hwH, yt], [cu + hwH, yt], [cu + hwH, yt + 0.14], [cu, yt + 0.48], [cu - hwH, yt + 0.14]], 0, 0.2, hood);
           else {
@@ -214,7 +237,7 @@ export function relief(f: TileArrays, seed: number, ci: number, cj: number, tile
     const b = f.pb[p], y0 = f.pp[p * 6 + 2] / 10, H = f.pp[p * 6 + 4] / 100, gnd = f.gnd[b] / 10;
     const bseed = Math.floor(hash(b * 7919 + seed * 104729) * 256), tone = 0.94 + hash(b * 7919 + seed) * 0.1;
     const wallC = [f.wall[b * 3], f.wall[b * 3 + 1], f.wall[b * 3 + 2]];
-    const pal = new Palette(wallC, tone, f.base[b] / 10 - gnd, f.eave[b] / 10 - gnd, trimFlags(bseed, wallC));
+    const pal = new Palette(wallC, tone, f.base[b] / 10 - gnd, f.eave[b] / 10 - gnd, trimFlags(bseed, wallC, f.style[b]));
     const stone = mul(pal.trim(y0 - gnd), 1.1);
     if (f.pt[p] === Prop.Figure) lathe(W, x, z, [[0.35, y0], [0.35, y0 + 0.25], [0.26, y0 + 0.25], [0.24, y0 + 0.3 * H], [0.19, y0 + 0.55 * H], [0.16, y0 + 0.72 * H], [0.07, y0 + 0.78 * H], [0.09 * H, y0 + 0.83 * H], [0.085 * H, y0 + 0.92 * H], [0, y0 + 0.98 * H]], far ? 5 : 7, stone, gnd, bseed, (f.pa[p] / 256) * Math.PI * 2);
     else lathe(W, x, z, [[0.24, y0], [0.24, y0 + 0.08], [0.12, y0 + 0.1], [0.24, y0 + 0.28 * H], [0.28, y0 + 0.45 * H], [0.18, y0 + 0.7 * H], [0.24, y0 + 0.8 * H], [0.05, y0 + 0.92 * H], [0, y0 + H]], far ? 5 : 7, stone, gnd, bseed);
@@ -238,7 +261,7 @@ export function relief(f: TileArrays, seed: number, ci: number, cj: number, tile
     const bseed = Math.floor(hash(b * 7919 + seed * 104729) * 256);
     const tone = 0.94 + hash(b * 7919 + seed) * 0.1;
     const wallC = [f.wall[b * 3], f.wall[b * 3 + 1], f.wall[b * 3 + 2]];
-    const trimK = trimFlags(bseed, wallC);
+    const trimK = trimFlags(bseed, wallC, style);
     const pal = new Palette(wallC, tone, base - gnd, eaveRel, trimK);
     const fr = new Frame(W, [0, gnd, 0], [1, 0, 0], [0, 0, 1], gnd, Surface.Trim, style, trimK, bseed);
     const { nS, sh } = grid(20, eaveRel, style);
@@ -271,6 +294,8 @@ export function relief(f: TileArrays, seed: number, ci: number, cj: number, tile
         if (vb > -1.5 && vb < 0.6) course(fr, edges.map((e) => ({ ...e, on: e.on && !e.arcade })), [[0, vb - 0.9], [0.06, vb - 0.9], [0.06, -0.1], [0, 0]], gnd + 0.9, mul(pal.wall_(0.45), 0.8), gnd);
       }
       if (nS >= 2 && sh > base - gnd + 0.3) course(fr, edges.map((e) => ({ ...e, on: e.on && e.n >= 1 })), [[0, -0.14], [0.12, -0.14], [0.12, -0.06], [0, 0]], gnd + sh, pal.string(sh), gnd);
+      // M18: the band under the top floor of most rich fronts, where the shader paints it.
+      if (RICH.has(style) && nS >= 3 && rand(bseed, Choice.Band) < Grammar.Band && (nS - 1) * sh > base - gnd + 0.3) course(fr, edges.map((e) => ({ ...e, on: e.on && e.n >= 1 })), [[0, -0.09], [0.07, -0.09], [0.07, -0.04], [0, 0]], gnd + (nS - 1) * sh, pal.string((nS - 1) * sh), gnd);
       for (const e of edges) {
         if (e.party || e.len < 2.5) continue;
         // Window columns behind a bay on this wall.

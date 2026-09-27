@@ -23,7 +23,7 @@ import { legionBridge, manesBridge, cechBridge, jirasekBridge, palackyBridge, st
 import { schonbornGloriette } from './gardens.ts';
 import { zlomkovskyMill } from './mills.ts';
 import { stSalvator } from './klementinum.ts';
-import { kinskyPalace, stoneBell, tynSchool } from './old-town-square.ts';
+import { kinskyPalace, stoneBell, tynSchool, whiteUnicorn } from './old-town-square.ts';
 import { churches } from './churches.ts';
 import { stGeorge, castleTowers, loreta, cerninPalace } from './hradcany.ts';
 import { jindrisskaTower, newTownHallTower, municipalHouse, nationalMuseum, vitkov } from './new-town.ts';
@@ -87,7 +87,7 @@ export const MODELS: Model[] = [
   legionBridge, manesBridge, cechBridge, jirasekBridge, palackyBridge, stefanikBridge, railwayBridge,
   smetanaMuseum, dancingHouse, nationalTheatre, sitkovTower, stFrancis, klementinumTower, rudolfinum,
   powderTower, oldTownHall, stNicholasOldTown, husMemorial, schonbornGloriette, zlomkovskyMill, stSalvator,
-  kinskyPalace, stoneBell, tynSchool,
+  kinskyPalace, stoneBell, tynSchool, whiteUnicorn,
   stGeorge, castleTowers, loreta, cerninPalace, jindrisskaTower, newTownHallTower, municipalHouse, nationalMuseum, vitkov, churches,
 ];
 

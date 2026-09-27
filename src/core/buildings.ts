@@ -19,8 +19,11 @@ export const Surface = {
 export const Stone = { Ashlar: 0, Brick: 1, Rubble: 2, Render: 3, Setts: 4 } as const;
 /** Styles of Surface.Metal: its facade is (along, up the slope, slope length, unused). Glazed: tiles laid in lozenges (St Vitus). */
 export const Metal = { Slate: 0, Copper: 1, Lead: 2, Gold: 3, Glazed: 4 } as const;
-/** Styles of Surface.Glass: its facade is (across, up, width, height) in metres. Curtain: a modern glass wall that mirrors the sky. */
-export const Glass = { Plain: 0, Tracery: 1, Rose: 2, Curtain: 3 } as const;
+/**
+ * Styles of Surface.Glass: its facade is (across, up, width, height) in metres. Curtain: a modern glass wall that mirrors the
+ * sky. Casement (M18): a white-painted window of two leaves, each divided in panes about 0.55 m high (the square's houses, 8607).
+ */
+export const Glass = { Plain: 0, Tracery: 1, Rose: 2, Curtain: 3, Casement: 4 } as const;
 
 /**
  * Small things on roofs and fronts, placed at build time (tools/lib/props.ts) and made into
@@ -39,8 +42,9 @@ export const EFlag = { Party: 1, Arcade: 2 } as const;
  * the trim's tone (M14: deeper and warmer, paler, or neither: the field's own colour in relief),
  * and a front lit dimly at night (M17: the quays' houses under the embankment lamps, the body of
  * Charles Bridge under its lanterns), a quarter of a floodlight.
+ * M18: stone blackened stone by stone, Prague sandstone as Týn shows it (8607), not the patches of the rest.
  */
-export const SFlag = { Party: 1, Floodlit: 2, TrimDeep: 4, TrimPale: 8, FloodDim: 16 } as const; // Floodlit | FloodDim: three floodlights (the Castle)
+export const SFlag = { Party: 1, Floodlit: 2, TrimDeep: 4, TrimPale: 8, FloodDim: 16, Blackened: 32 } as const; // Floodlit | FloodDim: three floodlights (the Castle)
 
 /**
  * A choice made from a building's seed byte and a key, alike in JavaScript and in GLSL
@@ -58,17 +62,27 @@ export const RAND_GLSL = 'float praRand(uint s, uint k) { uint h = s * 747796405
 const LIN = (c: number) => { const v = c / 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
 /**
  * The trim's tone for a wall of the given sRGB colour bytes (design.md §8.2): deeper and warmer,
- * paler, or the field's own colour, weighted by the field's saturation; as SFlag bits.
+ * paler, or the field's own colour, weighted by the field's saturation; as SFlag bits. M18: the
+ * rich fronts (baroque, Old Town, palace) are two-toned but for one in twenty (8777, 8607).
  */
-export function trimFlags(seed: number, wall: ArrayLike<number>): number {
+export function trimFlags(seed: number, wall: ArrayLike<number>, style = -1): number {
   const r = LIN(wall[0]), g = LIN(wall[1]), b = LIN(wall[2]);
   const mx = Math.max(r, g, b), sat = (mx - Math.min(r, g, b)) / Math.max(mx, 1e-3);
-  const tk = rand(seed, Choice.Trim), pDeep = sat < 0.35 ? 0.5 : 0.2, pPale = sat < 0.35 ? 0.3 : 0.65;
+  const tk = rand(seed, Choice.Trim);
+  let pDeep = sat < 0.35 ? 0.5 : 0.2, pPale = sat < 0.35 ? 0.3 : 0.65;
+  if (style === Style.Baroque || style === Style.OldTown || style === Style.Palace) { const k = 0.95 / (pDeep + pPale); pDeep *= k; pPale *= k; }
   return tk < pDeep ? SFlag.TrimDeep : tk < pDeep + pPale ? SFlag.TrimPale : 0;
 }
 
 /** The keys of `rand` the shader and the worker share. */
-export const Choice = { Portal: 100, Balcony: 2, Arch: 3, Hood: 4, WreathPier: 5, Wreath: 6, Wood: 7, Shutters: 8, Trim: 9 } as const;
+export const Choice = { Portal: 100, Balcony: 2, Arch: 3, Hood: 4, WreathPier: 5, Wreath: 6, Wood: 7, Shutters: 8, Trim: 9, Hood2: 10, Quoins: 11, Band: 12 } as const;
+
+/**
+ * The rich fronts' grammar filled out in M18 (8607), shared by the shader and the worker: the hood over the
+ * second floor straight (below this) or the first floor's kind; quoins for lesenes (below this); a band under
+ * the top floor (below this).
+ */
+export const Grammar = { Hood2Straight: 0.5, Quoins: 0.35, Band: 0.6, Quoin: 0.56 } as const;
 
 /**
  * Facade styles (design.md §8.2). Metres: the window pitch along the wall, window width and

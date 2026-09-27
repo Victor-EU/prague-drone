@@ -9,7 +9,7 @@
 
 import * as THREE from 'three';
 import { patchLit } from '../sky/lit.ts';
-import { STYLES, Style, Surface, Stone, Metal, Glass, SFlag, RAND_GLSL, Choice } from '../core/buildings.ts';
+import { STYLES, Style, Surface, Stone, Metal, Glass, SFlag, RAND_GLSL, Choice, Grammar } from '../core/buildings.ts';
 
 const GLSL_PARS = /* glsl */ `
 varying vec4 vFacade;
@@ -106,10 +106,11 @@ float praAbove = -1.0;
     float wv = max(fwidth(v), 1e-4), wu = max(fwidth(u), 1e-4);
     vec3 c = diffuseColor.rgb;
     // The details of the close-ups (design.md §8.2, M9) on the old fronts; the rich ones (baroque,
-    // Old Town, palace) also get aprons and hoods. They fade out between about 50 and 150 m.
+    // Old Town, palace) also get aprons and hoods. They fade out between about 5 and 14 cm a pixel
+    // (M18; 3 and 9 before): each is box-filtered to its footprint, and holds to twice the distance.
     bool orn = style == ${Style.Baroque} || style == ${Style.OldTown} || style == ${Style.Palace} || style == ${Style.Block} || style == ${Style.House};
     bool rich = style == ${Style.Baroque} || style == ${Style.OldTown} || style == ${Style.Palace};
-    float near = orn ? (1.0 - smoothstep(0.03, 0.09, max(wu, wv))) * uDetail : 0.0;
+    float near = orn ? (1.0 - smoothstep(0.05, 0.14, max(wu, wv))) * uDetail : 0.0;
     // Two tones: the trim paler (white and cream on ochre, 8884), deeper and warmer (salmon on pale
     // pink, 8777; red-orange on ochre, 8082), or the field's own colour in relief; by building,
     // decided in the tile worker (src/world/relief.ts) from the seed and the field's saturation,
@@ -130,6 +131,12 @@ float praAbove = -1.0;
       // Lesenes: strips of the trim up the ends of the front, from the plinth to the cornice.
       if (orn && style != ${Style.House} && L > 5.0) {
         float les = ((1.0 - praStep(0.55, u, wu)) + praStep(L - 0.55, u, wu)) * praStep(0.9, v, wv) * (1.0 - inC);
+        // M18: on a third of the rich fronts, rusticated quoins instead, long and short in turn.
+        if (rich && praRand(us, ${Choice.Quoins}u) < ${Grammar.Quoins}) {
+          float qc = v / ${Grammar.Quoin}, qw = mod(floor(qc), 2.0) > 0.5 ? 0.55 : 0.9;
+          les = ((1.0 - praStep(qw, u, wu)) + praStep(L - qw, u, wu)) * praStep(0.9, v, wv) * (1.0 - inC);
+          les *= 1.0 - praPulse(qc, 0.89, 1.0, wv / ${Grammar.Quoin});
+        }
         c = mix(c, trim, les);
       }
     }
@@ -161,6 +168,8 @@ float praAbove = -1.0;
       }
       // String course between the ground floor and the first, in the trim.
       float sc = praPulse(r, 0.96, 1.0, wr) * step(0.5, r) * step(r, 1.5);
+      // M18: on most rich fronts a thinner band under the top floor.
+      if (rich && nS > 2.5 && praRand(us, ${Choice.Band}u) < ${Grammar.Band}) sc = max(sc, 0.8 * praPulse(r, 0.975, 1.0, wr) * step(nS - 1.5, r) * step(r, nS - 0.5));
       c = mix(c, trim, 0.7 * sc) * (1.0 - 0.18 * sc);
       win = clamp(win, 0.0, 1.0);
       float h = praHash(vec2(floor(cc) + seed * 3.7, floor(r) + seed * 1.3));
@@ -182,7 +191,7 @@ float praAbove = -1.0;
         // The ground floor's plain windows take the same frames; shopfronts do not.
         float m = mCell * (gf && B.y > 0.5 ? 0.0 : 1.0);
         float W = A.y, y0 = gf ? 0.3 * sh : A.w, y1 = gf ? min(0.88 * sh, 0.3 * sh + A.z) : min(A.w + A.z, 0.9 * sh);
-        float sw = rich ? 0.17 : 0.12;
+        float sw = rich ? 0.2 : 0.13;
         // The portal (8777, 8082): one door to a street front, in the middle of a rich one.
         float hd = praRand(us, ${Choice.Portal}u + uint(L * 10.0 + 0.5)), hb = praRand(us, ${Choice.Balcony}u);
         bool portal = party < 0.5 && top > 3.0 && hd < 0.9 && span > 1.9;
@@ -216,11 +225,15 @@ float praAbove = -1.0;
           vec2 q = p - vec2(0.0, y0 - sw - 0.42);
           st0 = praCartouche(q, 0.5 * W - 0.05, w2); st1 = praCartouche(q + up, 0.5 * W - 0.05, w2);
         }
-        if (rich && fl > 1.5 && !balc) {
+        // M18: hoods over the second floor too where a floor stands above it; the second floor's
+        // straight on half the fronts, the first floor's kind on the rest.
+        float hk = praRand(us, ${Choice.Hood}u);
+        bool hooded = rich ? fl > 0.5 && fl < min(2.5, nS - 1.5) : style == ${Style.Block} && fl > 0.5 && fl < nS - 1.5;
+        float hkF = fl > 1.5 && praRand(us, ${Choice.Hood2}u) < ${Grammar.Hood2Straight} ? 0.0 : hk;
+        if (rich && fl > 1.5 && !balc && !hooded) {
           st0 = max(st0, praBox(p, vec2(-0.1, y1), vec2(0.1, y1 + sw + 0.12), w2));
           st1 = max(st1, praBox(p + up, vec2(-0.1, y1), vec2(0.1, y1 + sw + 0.12), w2));
         }
-        float hk = praRand(us, ${Choice.Hood}u);
         if (rich && fl > 0.5 && fl < 1.5) {
           float pc = floor(praRand(us, ${Choice.WreathPier}u) * max(n - 1.0, 1.0));
           if (praRand(us, ${Choice.Wreath}u) < 0.4 && n > 1.5 && span - W > 1.1 && (col == pc || col == pc + 1.0)) {
@@ -230,19 +243,27 @@ float praAbove = -1.0;
         }
         c = mix(c, trim * 1.1, st0 * m);
         c *= 1.0 + (0.3 * st0 * (1.0 - st1) - 0.4 * (1.0 - st0) * st1) * m;
-        // A hood over the window: on the first floor of the rich fronts segmental, triangular or
-        // straight by building; over every upper window but the top row of the blocks, straight.
-        if (((rich && fl > 0.5 && fl < 1.5) || (style == ${Style.Block} && fl > 0.5 && fl < nS - 1.5)) && !balc) {
+        // A hood over the window: on the first two floors of the rich fronts segmental, triangular
+        // or straight by building, the segmental on consoles ending in scrolls (M18, 8607); over
+        // every upper window but the top row of the blocks, straight.
+        if (hooded && !balc) {
           float yt = y1 + sw + 0.05, hwH = 0.5 * W + sw + 0.1;
           float xx = clamp(abs(p.x) / hwH, 0.0, 1.0);
-          float rise = style == ${Style.Block} || hk < 0.34 ? 0.0 : hk < 0.67 ? 0.26 * sqrt(1.0 - xx * xx) : 0.34 * (1.0 - xx);
+          float rise = style == ${Style.Block} || hkF < 0.34 ? 0.0 : hkF < 0.67 ? 0.26 * sqrt(1.0 - xx * xx) : 0.34 * (1.0 - xx);
+          if (rich && hkF >= 0.34 && hkF < 0.67) {
+            vec2 qa = vec2(abs(p.x), p.y);
+            float scr = max(praEll(qa, vec2(hwH, yt + 0.05), vec2(0.085), w2), praBox(qa, vec2(hwH - 0.15, yt - 0.32), vec2(hwH - 0.03, yt), w2));
+            float scrU = max(praEll(qa + up, vec2(hwH, yt + 0.05), vec2(0.085), w2), praBox(qa + up, vec2(hwH - 0.15, yt - 0.32), vec2(hwH - 0.03, yt), w2));
+            c = mix(c, trim * 1.1, scr * m);
+            c *= 1.0 + (0.25 * scr * (1.0 - scrU) - 0.35 * (1.0 - scr) * scrU) * m;
+          }
           float span2 = praStep(-hwH, p.x, wu) - praStep(hwH, p.x, wu);
           float hood = span2 * (praStep(yt, p.y, wv) - praStep(yt + 0.14 + rise, p.y, wv));
           float hoodSh = praBox(p, vec2(-hwH + 0.05, yt - 0.08), vec2(hwH - 0.05, yt), w2);
           c = mix(c, trim * 1.12, hood * m);
           c *= 1.0 - 0.4 * hoodSh * m;
           // In a segmental or triangular pediment, a shell in relief.
-          if (rich && hk >= 0.34) {
+          if (rich && hkF >= 0.34 && fl < 1.5) {
             vec2 q = p - vec2(0.0, yt + 0.03);
             float s0 = praShell(q, w2), s1 = praShell(q + up, w2);
             c *= 1.0 + (0.3 * s0 * (1.0 - s1) - 0.4 * (1.0 - s0) * s1 + 0.08 * s0) * m;
@@ -257,6 +278,8 @@ float praAbove = -1.0;
         else panes = praBox(p, vec2(-0.5 * W + fw, y0 + fw), vec2(0.5 * W - fw, y1 - fw), w2);
         if (balc) open = max(open, praBox(p, vec2(-0.5 * W, yb), vec2(0.5 * W, y0), w2));
         float bars = max(praBox(p, vec2(-0.035, y0), vec2(0.035, y1), w2), praBox(p, vec2(-0.5 * W, yT - 0.035), vec2(0.5 * W, yT + 0.035), w2));
+        // M18: the old fronts' casements in six panes, a second transom a third of the way up (8607).
+        if (rich && !arch && !gf) { float yT2 = y0 + 0.33 * (y1 - y0); bars = max(bars, praBox(p, vec2(-0.5 * W, yT2 - 0.03), vec2(0.5 * W, yT2 + 0.03), w2)); }
         if (arch) {
           vec2 qf = p - vec2(0.0, ys);
           bars = max(bars, max(praBar(qf, vec2(-0.7071, 0.7071), 0.03, w2), praBar(qf, vec2(0.7071, 0.7071), 0.03, w2)) * praStep(ys, p.y, wv));
@@ -343,6 +366,9 @@ float praAbove = -1.0;
       }
       #endif
       glass = mix(glass, frameC, (orn ? 0.22 : 0.12) * (1.0 - near));
+      // Beyond the details' range the trim keeps its share of the window cells (surrounds, aprons,
+      // hoods: a fifth of a rich front's), so a two-tone front stays two-toned from the drone (M18).
+      if (orn) c = mix(c, trim, (rich ? 0.2 : 0.1) * (1.0 - near) * uDetail * inside * upper);
       c = mix(c, glass, win);
       c = mix(c, frameC, frame * win);
       c = mix(c, ovC, ovA);
@@ -417,24 +443,35 @@ float praAbove = -1.0;
     // the foot. Every pattern fades to its average below a pixel.
     float u = vFacade.x, v = vFacade.y, wea = vFacade.z;
     vec3 c = diffuseColor.rgb;
+    float row = 0.0, col = 0.0, fade = 0.0;
+    // M18: stone that carries the Blackened flag blackens stone by stone, in smaller, more varied
+    // blocks (Týn's sandstone, 8607); the rest keeps the patches (granite and the quays read even).
+    bool blocks = (bits & ${SFlag.Blackened}) != 0 && (style == ${Stone.Ashlar} || style == ${Stone.Rubble});
     if (style != ${Stone.Render}) {
-      vec2 cell = style == ${Stone.Brick} ? vec2(0.29, 0.085) : style == ${Stone.Rubble} ? vec2(0.62, 0.34) : style == ${Stone.Setts} ? vec2(0.16, 0.16) : vec2(0.95, 0.47);
-      float row = v / cell.y;
+      vec2 cell = style == ${Stone.Brick} ? vec2(0.29, 0.085) : style == ${Stone.Rubble} ? vec2(0.62, 0.34) : style == ${Stone.Setts} ? vec2(0.16, 0.16) : blocks ? vec2(0.75, 0.38) : vec2(0.95, 0.47);
+      row = v / cell.y;
       float rw = max(fwidth(row), 1e-4);
-      float col = u / cell.x + (style == ${Stone.Setts} ? 0.37 * floor(row) : 0.5 * floor(row));
+      col = u / cell.x + (style == ${Stone.Setts} ? 0.37 * floor(row) : 0.5 * floor(row));
       if (style == ${Stone.Rubble}) col += 0.4 * praHash(vec2(floor(row), seed));
       float cw = max(fwidth(col), 1e-4);
       float jr = style == ${Stone.Brick} ? 0.16 : style == ${Stone.Setts} ? 0.14 : 0.06;
       float jc = style == ${Stone.Brick} ? 0.05 : style == ${Stone.Setts} ? 0.14 : 0.035;
       float joint = max(praPulse(row, 0.0, jr, rw), praPulse(col, 0.0, jc, cw));
-      float fade = 1.0 - smoothstep(0.25, 0.6, max(rw, cw));
-      float tone = 0.88 + 0.24 * praHash(vec2(floor(col) + seed * 1.7, floor(row)));
+      fade = 1.0 - smoothstep(0.25, 0.6, max(rw, cw));
+      float tone = blocks ? 0.8 + 0.38 * praHash(vec2(floor(col) + seed * 1.7, floor(row))) : 0.88 + 0.24 * praHash(vec2(floor(col) + seed * 1.7, floor(row)));
       c *= mix(1.0, tone, fade);
       c *= 1.0 - (style == ${Stone.Brick} ? 0.1 : 0.3) * joint;
     }
     float n1 = praNoise(vec2(u * 0.3, v * 0.07) + seed * 0.13), n2 = praNoise(vec2(u, v) * 0.9 + seed);
     float black = wea * smoothstep(0.3, 0.8, 0.65 * n1 + 0.45 * n2);
-    c = mix(c, c * vec3(0.4, 0.39, 0.38), black);
+    if (blocks) {
+      // M18: Prague sandstone blackens stone by stone (8607's Týn: pale blocks beside black ones).
+      // The patches give the odds a stone is black; far off, the wall takes their average.
+      float odds = wea * (0.05 + 0.55 * smoothstep(0.4, 0.85, 0.65 * n1 + 0.45 * n2));
+      float bh = praHash(vec2(floor(col) * 1.37 + seed * 0.71, floor(row) * 0.93 + 3.1));
+      black = mix(odds, step(bh, odds) * (0.8 + 0.2 * fract(bh * 13.7)), fade);
+      c = mix(c, c * vec3(0.3, 0.29, 0.28), black);
+    } else c = mix(c, c * vec3(0.4, 0.39, 0.38), black);
     c *= mix(0.82, 1.0, smoothstep(0.0, 2.5, v));
     diffuseColor.rgb = c;
     praAbove = v;
@@ -493,6 +530,19 @@ float praAbove = -1.0;
       stone = praPulse(k + 0.06, 0.0, 0.12, max(fwidth(k), 1e-4)) * step(0.02, x / W) * step(x / W, 0.98);
       float bars = y / 1.1;
       stone = max(stone, 0.5 * praPulse(bars, 0.0, 0.05, max(fwidth(bars), 1e-4)));
+    } else if (style == ${Glass.Casement}) {
+      // White frames round two leaves, a mullion between them, panes about 0.55 m high (8607).
+      float rows = max(2.0, floor(H / 0.55 + 0.5));
+      float fx = x / W, fy = y / H;
+      float bw = 0.05, wx = max(fwidth(x), 1e-4), wy = max(fwidth(y), 1e-4);
+      float frame = 1.0 - (praStep(bw, x, wx) - praStep(W - bw, x, wx)) * (praStep(bw, y, wy) - praStep(H - bw, y, wy));
+      float mull = praPulse(fx, 0.5 - 0.5 * bw / W, 0.5 + 0.5 * bw / W, max(fwidth(fx), 1e-4));
+      float tr = fy * rows;
+      float hb = 0.016 * rows / H;
+      float bars = praPulse(tr + hb, 0.0, 2.0 * hb, max(fwidth(tr), 1e-4)) * step(0.5, tr) * step(tr, rows - 0.5);
+      float fade = 1.0 - smoothstep(0.02, 0.05, max(wx, wy));
+      stone = max(frame, max(mull, bars * fade));
+      stone = mix(0.24, stone, fade);
     } else if (style == ${Glass.Rose}) {
       vec2 d = vec2(x - W * 0.5, y - H * 0.5) / (0.5 * W);
       float r = length(d), a = atan(d.y, d.x) * 12.0 / 6.2832;
