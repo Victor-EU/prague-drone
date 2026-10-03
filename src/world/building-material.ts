@@ -451,7 +451,9 @@ float praAbove = -1.0;
       vec2 cell = style == ${Stone.Brick} ? vec2(0.29, 0.085) : style == ${Stone.Rubble} ? vec2(0.62, 0.34) : style == ${Stone.Setts} ? vec2(0.16, 0.16) : blocks ? vec2(0.75, 0.38) : vec2(0.95, 0.47);
       row = v / cell.y;
       float rw = max(fwidth(row), 1e-4);
-      col = u / cell.x + (style == ${Stone.Setts} ? 0.37 * floor(row) : 0.5 * floor(row));
+      // M20: blackened sandstone's courses each take their own length of stone (8607's Týn).
+      float rowLen = blocks ? 0.7 + 0.6 * praHash(vec2(floor(row) * 0.73, seed * 3.1)) : 1.0;
+      col = u / (cell.x * rowLen) + (style == ${Stone.Setts} ? 0.37 * floor(row) : 0.5 * floor(row));
       if (style == ${Stone.Rubble}) col += 0.4 * praHash(vec2(floor(row), seed));
       float cw = max(fwidth(col), 1e-4);
       float jr = style == ${Stone.Brick} ? 0.16 : style == ${Stone.Setts} ? 0.14 : 0.06;
@@ -467,10 +469,17 @@ float praAbove = -1.0;
     if (blocks) {
       // M18: Prague sandstone blackens stone by stone (8607's Týn: pale blocks beside black ones).
       // The patches give the odds a stone is black; far off, the wall takes their average.
-      float odds = wea * (0.05 + 0.55 * smoothstep(0.4, 0.85, 0.65 * n1 + 0.45 * n2));
+      // M20, measured on 8607's south tower: a third of the face's stones black and three in four
+      // under the gallery, the corners black, and a black stone near black (a tenth of a pale one).
+      // A prism's wall carries its length and its top's height (length + 256 × top), so the odds
+      // rise toward its corners and over its top fifth, where the rain runs and lingers.
+      float Lw = mod(vFacade.w, 256.0), topH = floor(vFacade.w / 256.0);
+      float corner = Lw > 0.5 ? 1.0 - smoothstep(0.3, 1.6, min(u, Lw - u)) : 0.0;
+      float high = topH > 4.0 ? smoothstep(0.74, 0.92, v / topH) : 0.0;
+      float odds = wea * clamp(0.08 + 0.72 * smoothstep(0.42, 0.78, 0.65 * n1 + 0.45 * n2) + 0.3 * corner + 0.65 * high, 0.0, 0.92);
       float bh = praHash(vec2(floor(col) * 1.37 + seed * 0.71, floor(row) * 0.93 + 3.1));
-      black = mix(odds, step(bh, odds) * (0.8 + 0.2 * fract(bh * 13.7)), fade);
-      c = mix(c, c * vec3(0.3, 0.29, 0.28), black);
+      black = mix(odds, step(bh, odds) * (0.85 + 0.15 * fract(bh * 13.7)), fade);
+      c = mix(c, c * vec3(0.15, 0.145, 0.14), black);
     } else c = mix(c, c * vec3(0.4, 0.39, 0.38), black);
     c *= mix(0.82, 1.0, smoothstep(0.0, 2.5, v));
     diffuseColor.rgb = c;
@@ -532,17 +541,28 @@ float praAbove = -1.0;
       stone = max(stone, 0.5 * praPulse(bars, 0.0, 0.05, max(fwidth(bars), 1e-4)));
     } else if (style == ${Glass.Casement}) {
       // White frames round two leaves, a mullion between them, panes about 0.55 m high (8607).
+      // M20: the frame, the mullion and, on a tall window, the transom at two thirds are held at
+      // every distance, box-filtered, so that from the square a window still reads as a white
+      // cross on dark glass (8607: they had faded to an even grey from 60 m); only the panes' thin
+      // bars fade to their average. Behind the glass, curtains in about a third of the windows,
+      // pale; the rest dark.
       float rows = max(2.0, floor(H / 0.55 + 0.5));
       float fx = x / W, fy = y / H;
-      float bw = 0.05, wx = max(fwidth(x), 1e-4), wy = max(fwidth(y), 1e-4);
+      float bw = 0.07, wx = max(fwidth(x), 1e-4), wy = max(fwidth(y), 1e-4);
       float frame = 1.0 - (praStep(bw, x, wx) - praStep(W - bw, x, wx)) * (praStep(bw, y, wy) - praStep(H - bw, y, wy));
-      float mull = praPulse(fx, 0.5 - 0.5 * bw / W, 0.5 + 0.5 * bw / W, max(fwidth(fx), 1e-4));
+      float mull = praPulse(fx, 0.5 - 0.045 / W, 0.5 + 0.045 / W, max(fwidth(fx), 1e-4));
+      float tran = H > 1.6 ? praPulse(fy, 0.66 - 0.035 / H, 0.66 + 0.035 / H, max(fwidth(fy), 1e-4)) : 0.0;
       float tr = fy * rows;
       float hb = 0.016 * rows / H;
       float bars = praPulse(tr + hb, 0.0, 2.0 * hb, max(fwidth(tr), 1e-4)) * step(0.5, tr) * step(tr, rows - 0.5);
       float fade = 1.0 - smoothstep(0.02, 0.05, max(wx, wy));
-      stone = max(frame, max(mull, bars * fade));
-      stone = mix(0.24, stone, fade);
+      stone = max(max(frame, mull), max(tran, mix(0.04, bars, fade)));
+      // The window's centre in the world, from the fragment, its place in the window and the
+      // wall's normal (the window's across is the normal turned a right angle about the vertical).
+      vec3 nw = normalize(vPraN);
+      vec3 centre = wp + (0.5 * W - x) * vec3(nw.z, 0.0, -nw.x) + vec3(0.0, 0.5 * H - y, 0.0);
+      float curtain = step(praHash(floor(centre.xz * 4.0) + floor(centre.y * 4.0) * 1.7 + seed), 0.35);
+      g = mix(g, vec3(0.22, 0.21, 0.2) * (0.8 + 0.4 * praHash(floor(centre.xz * 4.0) + 5.3)), curtain);
     } else if (style == ${Glass.Rose}) {
       vec2 d = vec2(x - W * 0.5, y - H * 0.5) / (0.5 * W);
       float r = length(d), a = atan(d.y, d.x) * 12.0 / 6.2832;

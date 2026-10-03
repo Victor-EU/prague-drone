@@ -322,6 +322,13 @@ export class Kit {
         const w0 = this.world([ax, y0, az]), eave = (o.eave ?? this.f.y + y1) - this.ground;
         const fac = (w: V3): F4 => [Math.hypot(w[0] - w0[0], w[2] - w0[2]), len, w[1] - this.ground, eave];
         this.poly([[ax, y0, az], [bx, y0, bz], [bx, y1, bz], [ax, y1, az]], wall, { normal: nrm, fac });
+      } else if (wall.kind === Surface.Stone) {
+        // M20: stone walls carry where they are on the wall, for the blackening that gathers at a
+        // wall's corners and its top (design.md §8.2): along the wall from its start, height,
+        // weathering, and the wall's length and its top's height packed as length + 256 × top.
+        const w0 = this.world([ax, y0, az]), top = Math.max(0, Math.round(this.f.y + y1 - this.ground));
+        const fac = (w: V3): F4 => [Math.hypot(w[0] - w0[0], w[2] - w0[2]), w[1] - this.ground, wall.w, Math.min(len, 255) + 256 * top];
+        this.poly([[ax, y0, az], [bx, y0, bz], [bx, y1, bz], [ax, y1, az]], wall, { normal: nrm, fac });
       } else this.poly([[ax, y0, az], [bx, y0, bz], [bx, y1, bz], [ax, y1, az]], wall, { normal: nrm });
     }
     if (cap) this.poly(ring.map(([x, z]) => [x, y1, z] as V3), cap, { normal: [0, 1, 0] });

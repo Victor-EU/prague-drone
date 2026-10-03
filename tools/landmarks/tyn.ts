@@ -20,7 +20,9 @@ import { Surface, Stone, Metal, Glass, SFlag } from '../../src/core/buildings.ts
 // M18: the pale stone greyer and pinker (8607), and blackened stone by stone by the shader.
 const STONE = mat('#bdaea0', Surface.Stone, Stone.Ashlar, 1, SFlag.Blackened);
 const WALLS = mat('#b2a496', Surface.Stone, Stone.Rubble, 0.7, SFlag.Blackened);
-const BAND = mat('#6a635a', Surface.Stone, Stone.Ashlar, 1, SFlag.Blackened);
+// M20: a shade lighter and less weathered, so that blackened by stone the buttresses read dark
+// stone, not a black band (8607).
+const BAND = mat('#776f66', Surface.Stone, Stone.Ashlar, 0.7, SFlag.Blackened);
 const DRESSING = mat('#8d847a', Surface.Stone, Stone.Ashlar, 0.6, SFlag.Blackened);
 const SLATE = mat('#383b3f', Surface.Metal, Metal.Slate);
 const SPIRE = mat('#2f3236', Surface.Metal, Metal.Lead);
