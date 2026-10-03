@@ -3,7 +3,9 @@
 // kit's sweeps, lathes, plates and slabs. Balustrades, crenellations and corbel courses on walls'
 // tops; pinnacles with crockets and tracery windows with stone mullions; columns, pilasters,
 // entablatures and pediments; niches with canopies, rows of shields, ribs on domes; rococo stucco
-// (M19: ribs, scrolls, shells, cartouches, crests, drops, swags); and statue silhouettes in dark stone. Parts on a wall take a plane as Kit.plate does: an origin o on the
+// (M19: ribs, scrolls, shells, cartouches, crests, drops, swags; M21: a rococo hood, the masses'
+// outlines for plates, reclining figures, a filled tympanum, a parapet of tracery); and statue
+// silhouettes in dark stone. Parts on a wall take a plane as Kit.plate does: an origin o on the
 // wall, u to the right as seen from outside, v up, and stand proud of it. Build side only.
 
 import { Kit, PROFILE, arch, type Mat, type V2, type V3 } from './kit.ts';
@@ -52,6 +54,36 @@ export function balustrade(k: Kit, path: V3[], m: Mat, o: { h?: number; step?: n
     }
   }
   if (o.posts) for (const p of path) k.box(p[0], p[2], w * 1.5, w * 1.5, p[1], p[1] + h + 0.05, m, m);
+}
+
+/**
+ * A parapet of pierced tracery along a closed path on a wall's top (M21, Týn's galleries in 8607):
+ * a plinth and a coping astride the path, a post at each vertex, and between them a dark screen,
+ * the tracery's rings standing on its outer face `loop` apart in the fine kit, mullions between.
+ */
+export function traceryParapet(k: Kit, f: Kit, path: V3[], m: Mat, screen: Mat, o: { h?: number; w?: number; loop?: number } = {}) {
+  const h = o.h ?? 1.3, w = o.w ?? 0.3, loop = o.loop ?? 0.62, plinthH = 0.18, railH = 0.2;
+  k.sweep(path, PROFILE.coping(w * 1.2, plinthH), m, { closed: true });
+  k.sweep(path.map((p) => [p[0], p[1] + h - railH, p[2]] as V3), PROFILE.coping(w * 1.15, railH), m, { closed: true });
+  const n = path.length, c: V3 = [0, 0, 0];
+  for (const p of path) { c[0] += p[0] / n; c[1] += p[1] / n; c[2] += p[2] / n; }
+  for (let i = 0; i < n; i++) {
+    const a = path[i], b = path[(i + 1) % n], L = len(sub(b, a)), t = norm(sub(b, a));
+    // u × v points out of the ring: along the edge, or against it with the origin at its far end.
+    const out = (-t[2]) * (a[0] - c[0]) + t[0] * (a[2] - c[2]) > 0;
+    const u: V3 = out ? t : [-t[0], -t[1], -t[2]], O = out ? a : b, up: V3 = [0, 1, 0], nn = planeNormal(u, up);
+    const base: V3 = [O[0] + nn[0] * w * 0.2, O[1], O[2] + nn[2] * w * 0.2];
+    k.slab(base, u, up, [[0, plinthH], [L, plinthH], [L, h - railH], [0, h - railH]], w * 0.4, screen);
+    const count = Math.max(1, Math.round((L - w) / loop)), step = (L - w) / count, r = Math.min(step, h - plinthH - railH) * 0.36;
+    for (let q = 0; q < count; q++) {
+      const x = w / 2 + step * (q + 0.5), y = (plinthH + h - railH) / 2;
+      const ring: V2[] = [];
+      for (let j = 0; j < 16; j++) { const g = (j / 16) * 2 * Math.PI, lobe = 1 + 0.18 * Math.cos(4 * g); ring.push([x + r * lobe * Math.cos(g), y + r * lobe * Math.sin(g)]); }
+      rib(f, base, u, up, ring, 0.06, 0.07, m, true);
+      if (q > 0) f.beam(onPlane(base, u, up, x - step / 2, plinthH, 0.03), onPlane(base, u, up, x - step / 2, h - railH, 0.03), 0.07, m);
+    }
+  }
+  for (const p of path) k.box(p[0], p[2], w * 1.5, w * 1.5, p[1], p[1] + h + 0.08, m, m);
 }
 
 /** Merlons along a path on a wall's top: `w` wide, `gap` apart, `h` tall, `depth` across the wall. */
@@ -205,7 +237,7 @@ export function entablature(k: Kit, path: V3[], m: Mat, o: { out?: number; h?: n
  * A pediment on a wall's plane over `a`, its base at `y`: a tympanum standing `depth` proud with
  * a cornice along its base and its raking (or curved) edges.
  */
-export function pediment(k: Kit, o: V3, u: V3, v: V3, a: number, y: number, w: number, h: number, depth: number, m: Mat, kind: 'triangular' | 'segmental' = 'triangular', cornice: Mat = m) {
+export function pediment(k: Kit, o: V3, u: V3, v: V3, a: number, y: number, w: number, h: number, depth: number, m: Mat, kind: 'triangular' | 'segmental' = 'triangular', cornice: Mat = m, flashing?: Mat) {
   const n = planeNormal(u, v), hw = w / 2;
   let top: V2[];
   if (kind === 'triangular') top = [[-hw, 0], [0, h]];
@@ -220,6 +252,8 @@ export function pediment(k: Kit, o: V3, u: V3, v: V3, a: number, y: number, w: n
   const c = Math.min(0.5, h * 0.35);
   const rake: V2[] = kind === 'triangular' ? [[-hw - c * 0.3, -c * 0.1], [0, h], [hw + c * 0.3, -c * 0.1]] : top;
   k.sweep(rake.map(([x, yy]) => onPlane(O, u, v, x, yy, depth * 0.6)), PROFILE.ring(c, depth * 0.5), cornice, { v: n, caps: true });
+  // M21: sheet metal along the rakes' tops, a dark line in 8608.
+  if (flashing) k.sweep(rake.map(([x, yy]) => onPlane(O, u, v, x, yy, depth * 0.6)), [[c + 0.07, -depth * 0.6], [c + 0.07, depth * 0.55], [c - 0.03, depth * 0.55], [c - 0.03, -depth * 0.6]], flashing, { v: n, caps: true });
   k.sweep([onPlane(O, u, v, -hw - c * 0.3, -c * 0.4, 0), onPlane(O, u, v, hw + c * 0.3, -c * 0.4, 0)], PROFILE.cornice(depth, c * 0.5), cornice, { caps: true });
 }
 
@@ -285,7 +319,7 @@ export function shell(k: Kit, o: V3, u: V3, v: V3, a: number, b: number, r: numb
  * A rococo cartouche centred at (a, b), w by h: an oval field standing out in steps inside a
  * rounded rim, C-scrolls curling out of its sides and from its foot, a shell on its head.
  */
-export function cartouche(k: Kit, o: V3, u: V3, v: V3, a: number, b: number, w: number, h: number, m: Mat, opt: { proud?: number; shell?: boolean } = {}) {
+export function cartouche(k: Kit, o: V3, u: V3, v: V3, a: number, b: number, w: number, h: number, m: Mat, opt: { proud?: number; shell?: boolean; field?: Mat } = {}) {
   const pr = opt.proud ?? 0.1, rw = Math.max(0.06, w * 0.065);
   const oval = (rx: number, ry: number, n = 20): V2[] => {
     const p: V2[] = [];
@@ -293,7 +327,8 @@ export function cartouche(k: Kit, o: V3, u: V3, v: V3, a: number, b: number, w: 
     return p;
   };
   k.slab(onPlane(o, u, v, 0, 0, pr * 0.45), u, v, oval(w * 0.42, h * 0.42), pr * 0.45, m);
-  k.slab(onPlane(o, u, v, 0, 0, pr * 0.7), u, v, oval(w * 0.26, h * 0.28, 16), pr * 0.25, m);
+  // M21: the inner field may be white, a mask or a shield in the pink (8608).
+  k.slab(onPlane(o, u, v, 0, 0, pr * 0.7), u, v, oval(w * 0.26, h * 0.28, 16), pr * 0.25, opt.field ?? m);
   rib(k, o, u, v, oval(w * 0.46, h * 0.46), rw, pr, m, true);
   for (const s of [-1, 1]) {
     scroll(k, o, u, v, a + s * (w * 0.46 + rw * 1.6), b + h * 0.1, h * 0.19, s < 0 ? -0.3 : Math.PI + 0.3, 0.9, s < 0 ? 1 : -1, rw * 0.85, pr * 0.9, m);
@@ -306,9 +341,9 @@ export function cartouche(k: Kit, o: V3, u: V3, v: V3, a: number, b: number, w: 
  * A rocaille crest over a window head, its foot centred at (a, b), w across: a small cartouche
  * between two C-scrolls, and a spray to each side rising into a curl.
  */
-export function crest(k: Kit, o: V3, u: V3, v: V3, a: number, b: number, w: number, m: Mat, proud = 0.08) {
+export function crest(k: Kit, o: V3, u: V3, v: V3, a: number, b: number, w: number, m: Mat, proud = 0.08, field?: Mat) {
   const rw = 0.065;
-  cartouche(k, o, u, v, a, b + 0.3, w * 0.27, 0.42, m, { proud });
+  cartouche(k, o, u, v, a, b + 0.3, w * 0.27, 0.42, m, { proud, field });
   for (const s of [-1, 1]) {
     scroll(k, o, u, v, a + s * w * 0.25, b + 0.17, 0.16, s < 0 ? -0.4 : Math.PI + 0.4, 0.95, s < 0 ? -1 : 1, rw, proud, m);
     const sp: V2[] = [];
@@ -334,6 +369,105 @@ export function swag(k: Kit, o: V3, u: V3, v: V3, a: number, b: number, w: numbe
   for (const s of [-1, 1]) {
     boss(k, o, u, v, a + (s * w) / 2, b + 0.02, 0.08, m);
     drop(k, o, u, v, a + (s * w) / 2, b - 0.08, 0.3, m, 0.06);
+  }
+}
+
+// M21, the Kinský palace's front as 8608 shows it at the square's range: the stucco's masses as
+// outlines for flat plates in the detail tier, which carry beyond the fine tier's relief; a rococo
+// hood; and the tympana's figure groups.
+
+/** A rocaille mass's outline centred at (a, b), w by h: lobes and flames, symmetric about the vertical. */
+export function rocaille(a: number, b: number, w: number, h: number, n = 32): V2[] {
+  const p: V2[] = [];
+  for (let i = 0; i < n; i++) {
+    const t = (i / n) * 2 * Math.PI, q = 0.86 + 0.09 * Math.sin(5 * t) + 0.06 * Math.cos(8 * t) + 0.05 * Math.sin(t);
+    p.push([a + (w / 2) * q * Math.cos(t), b + (h / 2) * q * Math.sin(t)]);
+  }
+  return p;
+}
+
+/** A garland's outline: a band sagging `sag` across w from (a − w/2, b), `t` thick at the middle, thinning to its ends. */
+export function garland(a: number, b: number, w: number, sag: number, t: number): V2[] {
+  const top: V2[] = [], bot: V2[] = [];
+  for (let i = 0; i <= 12; i++) {
+    const s = i / 12, x = a - w / 2 + w * s, e = 1 - (2 * s - 1) ** 2;
+    top.push([x, b - sag * e]); bot.push([x, b - sag * e - t * (0.45 + 0.55 * e)]);
+  }
+  return [...bot, ...top.reverse()];
+}
+
+/** A shield's outline, w by h, its point at (a, b). */
+export function shieldShape(a: number, b: number, w: number, h: number): V2[] {
+  const p: V2[] = [[a - w / 2, b + h], [a - w / 2, b + 0.45 * h]];
+  for (let i = 1; i < 6; i++) { const t = i / 6; p.push([a - (w / 2) * (1 - t) ** 0.7, b + 0.45 * h * (1 - t) ** 1.6]); }
+  p.push([a, b]);
+  for (let i = 5; i >= 1; i--) { const t = i / 6; p.push([a + (w / 2) * (1 - t) ** 0.7, b + 0.45 * h * (1 - t) ** 1.6]); }
+  p.push([a + w / 2, b + 0.45 * h], [a + w / 2, b + h]);
+  return p;
+}
+
+/**
+ * A rococo window hood centred at `a`, springing at `b`: a segmental cornice `w` across rising
+ * `rise`, `t` deep on the wall and standing `out`, so that its soffit reads as a dark arc, its ends
+ * turned down in volutes, and sheet metal on its top if `flashing` is given.
+ */
+export function bonnet(k: Kit, o: V3, u: V3, v: V3, a: number, b: number, w: number, rise: number, t: number, out: number, m: Mat, flashing?: Mat) {
+  const hw = w / 2, R = (hw * hw + rise * rise) / (2 * rise), cy = b + rise - R, a0 = Math.asin(Math.min(1, hw / R));
+  const arc: V3[] = [];
+  for (let i = 0; i <= 12; i++) { const q = -a0 + (2 * a0 * i) / 12; arc.push(onPlane(o, u, v, a + R * Math.sin(q), cy + R * Math.cos(q))); }
+  // Across the arc upward from its foot, out from the wall: a cavetto soffit, the corona, a cyma on top.
+  const prof: V2[] = [[t, 0], [t, out * 0.75], [t * 0.75, out], [t * 0.3, out], [t * 0.15, out * 0.8], [0, out * 0.35], [0, 0]];
+  k.sweep(arc, prof, m, { v: planeNormal(u, v), caps: true });
+  if (flashing) k.sweep(arc, [[t + 0.06, 0], [t + 0.06, out * 0.8], [t * 0.7, out + 0.03], [t * 0.7, 0]], flashing, { v: planeNormal(u, v), caps: true });
+  for (const s of [-1, 1]) scroll(k, o, u, v, a + s * (hw - 0.02), b - 0.1, 0.12, Math.PI / 2, 0.85, s < 0 ? 1 : -1, 0.08, out * 0.55, m);
+}
+
+/**
+ * A reclining figure in relief on a wall's plane, its hips at (a, b): the legs along u towards
+ * `dir` (±1), the torso rising the other way on an elbow, one arm raised; `len` long, standing out
+ * of the plane by about its girth.
+ */
+export function reclining(k: Kit, o: V3, u: V3, v: V3, a: number, b: number, len: number, dir: number, m: Mat) {
+  const t = len * 0.15, P = (x: number, y: number, off: number) => onPlane(o, u, v, a + dir * x, b + y, off);
+  k.beam(P(0, t * 0.55, t * 0.4), P(len * 0.32, t * 0.65, t * 0.4), t * 1.15, m, true, t);
+  k.beam(P(len * 0.32, t * 0.65, t * 0.4), P(len * 0.58, t * 0.4, t * 0.35), t * 0.85, m, true, t * 0.8);
+  k.beam(P(0, t * 0.55, t * 0.45), P(-len * 0.26, len * 0.24 + t * 0.5, t * 0.45), t * 1.3, m, true, t * 1.1);
+  const hd = P(-len * 0.31, len * 0.33 + t * 0.55, t * 0.45);
+  k.ball(hd[0], hd[1], hd[2], t * 0.55, m, 6);
+  k.beam(P(-len * 0.25, len * 0.22 + t * 0.4, t * 0.65), P(-len * 0.4, t * 0.35, t * 0.5), t * 0.48, m, true);
+  k.beam(P(-len * 0.2, len * 0.24 + t * 0.5, t * 0.75), P(-len * 0.02, len * 0.38 + t * 0.5, t * 0.75), t * 0.42, m, true);
+}
+
+/**
+ * A tympanum filled with a stucco group, as the Kinský palace's in 8608: in the triangle from
+ * a − w/2 to a + w/2 at its foot `b`, rising h, a pink field framing a white group, a figure seated
+ * among clouds with a reclining figure to each side and a cartouche over them, C-scrolls and sprays
+ * of rocaille up the rakes and into the corners. The masses are plates in `d`; the relief is `f`'s.
+ */
+export function tympanum(d: Kit, f: Kit, o: V3, u: V3, v: V3, a: number, b: number, w: number, h: number, white: Mat, pink: Mat, seed: number) {
+  const hw = w / 2, n = planeNormal(u, v), m = 0.12;
+  d.plate(o, u, v, [[a - hw + m * 2.5, b + m], [a + hw - m * 2.5, b + m], [a, b + h - m * 2]], pink, 0.02);
+  const cloud = rocaille(a, b + 0.4 * h, 0.52 * w, 0.62 * h);
+  d.slab(onPlane(o, u, v, 0, 0, 0.1), u, v, cloud, 0.08, white);
+  // The group: clouds round a seated figure, a reclining figure to each side.
+  for (let i = 0; i < 11; i++) {
+    const t = (i / 10) * Math.PI, rx = 0.22 * w * (0.8 + 0.3 * hash(seed, i)), ry = 0.2 * h * (0.7 + 0.4 * hash(seed, i + 20));
+    boss(f, o, u, v, a + rx * Math.cos(t), b + 0.36 * h + ry * Math.sin(t) * (i % 2 ? 1 : -0.6), 0.16 + 0.14 * hash(seed, i + 40), white);
+  }
+  const base = onPlane(o, u, v, a, b + 0.1 * h, 0.08);
+  statue(f, base, [n[0], n[2]], Math.min(1.7, 0.5 * h), white, 'seated', seed);
+  for (const s of [-1, 1]) reclining(f, o, u, v, a + s * 0.16 * w, b + 0.06 * h, Math.min(2.4, 0.26 * w), s, white);
+  cartouche(f, o, u, v, a, b + 0.74 * h, Math.min(0.9, 0.2 * w), 0.32 * h, pink, { proud: 0.14, field: white });
+  // Rocaille up the rakes and into the corners.
+  for (const s of [-1, 1]) {
+    scroll(f, o, u, v, a + s * 0.36 * w, b + 0.16 * h, 0.09 * h, s < 0 ? 0 : Math.PI, 1.0, s < 0 ? 1 : -1, 0.1, 0.12, pink);
+    scroll(f, o, u, v, a + s * 0.22 * w, b + 0.5 * h, 0.08 * h, s < 0 ? -0.6 : Math.PI + 0.6, 0.9, s < 0 ? -1 : 1, 0.09, 0.12, pink);
+    const sp: V2[] = [];
+    for (let i = 0; i <= 10; i++) { const t = i / 10; sp.push([a + s * hw * (0.82 - 0.62 * t), b + 0.1 * h + 0.62 * h * t + 0.05 * h * Math.sin(t * 9)]); }
+    rib(f, o, u, v, sp, 0.1, 0.1, pink);
+    const ft: V2[] = [];
+    for (let i = 0; i <= 10; i++) { const t = i / 10; ft.push([a + s * hw * (0.3 + 0.55 * t), b + 0.08 + 0.05 * h * Math.sin(t * Math.PI * 2)]); }
+    rib(f, o, u, v, ft, 0.12, 0.1, pink);
   }
 }
 

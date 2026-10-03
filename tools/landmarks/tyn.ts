@@ -11,9 +11,12 @@
 // needles, and the west gable dressed in dark stone with blind tracery, shields and the Madonna.
 // M19: the heights measured from 8607's camera solved again (design.md §12.1): the galleries 7 m
 // higher, the spires shorter over them, the spirelets higher, the nave and its gable 4 m higher.
+// M21 (8607): the galleries' cornice, tracery parapet and corner turrets in near-black stone, the
+// turrets on corbels with pendants, gargoyles, a row of dark shields under each gallery, and the
+// belfry openings shut with boards over louvres.
 
 import { Kit, mat, rect, ngon, offsetRing, orientedRect, areaCentre, PROFILE, type V2, type V3, type Mat } from './kit.ts';
-import { pinnacle, traceryWindow, corbels, balustrade, shields, statue } from './ornament.ts';
+import { pinnacle, traceryWindow, corbels, balustrade, traceryParapet, shields, statue, onPlane } from './ornament.ts';
 import type { Model, Site } from './index.ts';
 import { Surface, Stone, Metal, Glass, SFlag } from '../../src/core/buildings.ts';
 
@@ -24,13 +27,19 @@ const WALLS = mat('#b2a496', Surface.Stone, Stone.Rubble, 0.7, SFlag.Blackened);
 // stone, not a black band (8607).
 const BAND = mat('#776f66', Surface.Stone, Stone.Ashlar, 0.7, SFlag.Blackened);
 const DRESSING = mat('#8d847a', Surface.Stone, Stone.Ashlar, 0.6, SFlag.Blackened);
+// M21, the galleries as 8607 shows them: their cornice, parapet and the corner turrets' shafts near
+// black, the shields under them dark, the belfry openings shut with brown boards and louvres.
+const GALLERY = mat('#4f4a44', Surface.Stone, Stone.Ashlar, 0.5);
+const SCREEN = mat('#26231f', Surface.Stone, Stone.Ashlar, 0.2);
+const ARMS = mat('#3b3732', Surface.Stone, Stone.Ashlar, 0.3);
+const BOARDS = mat('#665445', Surface.Stone, Stone.Render, 0);
+const LOUVRES = mat('#45382e', Surface.Stone, Stone.Render, 0);
 const SLATE = mat('#383b3f', Surface.Metal, Metal.Slate);
 const SPIRE = mat('#2f3236', Surface.Metal, Metal.Lead);
 const GOLD = mat('#c9a34a', Surface.Metal, Metal.Gold);
 const COPPER = mat('#5f8a78', Surface.Metal, Metal.Copper);
 const IRON = mat('#1c1d1f', Surface.Metal, Metal.Lead);
 const TRACERY = mat('#8a8274', Surface.Glass, Glass.Tracery);
-const DARK = mat('#1b1a18', Surface.Opening);
 const UP: V3 = [0, 1, 0];
 /** The towers' gallery floor and the nave's eaves, above the ground (M19, from 8607 solved again). */
 const GAL = 50.5, NAVE = 34;
@@ -71,27 +80,47 @@ function tower(k: Kit, d: Kit, f: Kit, s: number) {
     { o: [0, 0, h], u: [1, 0, 0] }, { o: [0, 0, -h], u: [-1, 0, 0] }, { o: [h, 0, 0], u: [0, 0, -1] }, { o: [-h, 0, 0], u: [0, 0, 1] },
   ];
   for (const fc of faces) {
-    traceryWindow(k, f, fc.o, fc.u, UP, 0, 39.5, 2.4, 7.4, DRESSING, DARK, { lights: 2, rise: 1.8, proud: 0.16, depth: 0.28 });
+    // M21: the belfry openings shut with boards over louvres in a dark surround (8607).
+    traceryWindow(k, f, fc.o, fc.u, UP, 0, 39.5, 2.4, 7.4, GALLERY, BOARDS, { lights: 1, rise: 1.8, proud: 0.18, depth: 0.32 });
+    const lo = onPlane(fc.o, fc.u, UP, 0, 39.5, 0.05);
+    k.plate(lo, fc.u, UP, [[-1.2, 0], [1.2, 0], [1.2, 3.3], [-1.2, 3.3]], LOUVRES, 0.01);
+    for (let y = 0.25; y < 3.3; y += 0.28) f.beam(onPlane(lo, fc.u, UP, -1.15, y, 0.04), onPlane(lo, fc.u, UP, 1.15, y, 0.04), 0.06, BOARDS, false, 0.02);
     traceryWindow(k, f, fc.o, fc.u, UP, 0, 29.5, 1.8, 6.5, DRESSING, TRACERY, { lights: 2, rise: 1.3, proud: 0.14, depth: 0.24 });
     traceryWindow(k, f, fc.o, fc.u, UP, 0, 20, 1.2, 4, DRESSING, TRACERY, { lights: 1, rise: 0.9, proud: 0.12, depth: 0.2 });
+    // M21: a row of six shields under the gallery's cornice (8607), in the detail tier so the dark
+    // band they make carries across the Old Town.
+    shields(d, fc.o, fc.u, UP, 0, GAL - 3.1, 6, 1.5, 1.05, 1.45, SCREEN, ARMS);
   }
-  // Gallery on corbels, behind a pierced balustrade.
+  // M21, the gallery as 8607 shows it: a heavy cornice of dark stone, its frieze carved with small
+  // corbels under a deep cavetto, carrying a parapet of pierced tracery; gargoyles at the corners.
   const gal = offsetRing(body, 0.55);
-  corbels(f, offsetRing(body, 0.02).map(([x, z]) => [x, GAL - 1.2, z] as V3), BAND, { step: 1.2, w: 0.45, h: 1.1, out: 0.5, closed: true });
-  k.loft(body, GAL - 1.2, gal, GAL, BAND);
-  balustrade(f, gal.map(([x, z]) => [x, GAL, z] as V3), BAND, { h: 1.4, closed: true, posts: true, w: 0.3, step: 0.36 });
+  const CORNICE: V2[] = [[0, 0], [0.14, 0], [0.14, 0.1], [0.1, 0.14], [0.1, 0.5], [0.2, 0.58], [0.3, 0.72], [0.42, 0.92], [0.53, 1.12], [0.62, 1.28], [0.66, 1.3], [0.66, 1.5], [0, 1.5]];
+  k.sweep(body.map(([x, z]) => [x, GAL - 1.5, z] as V3), CORNICE, GALLERY, { closed: true });
+  corbels(f, offsetRing(body, 0.1).map(([x, z]) => [x, GAL - 1.36, z] as V3), GALLERY, { step: 0.8, w: 0.26, h: 0.42, out: 0.2, closed: true });
+  traceryParapet(k, f, gal.map(([x, z]) => [x, GAL, z] as V3), GALLERY, SCREEN, { h: 1.4, w: 0.3, loop: 0.6 });
+  for (const [cx, cz] of offsetRing(body, 0.4)) {
+    const sx = Math.sign(cx), sz = Math.sign(cz);
+    d.beam([cx - sx * 0.3, GAL - 0.9, cz - sz * 0.3], [cx + sx * 1.0, GAL - 0.7, cz + sz * 1.0], 0.3, GALLERY, true, 0.34);
+    d.ball(cx + sx * 1.05, GAL - 0.62, cz + sz * 1.05, 0.2, GALLERY, 6);
+  }
   // The main spire: an octagonal needle from the gallery to 82 m.
   // Slate to 77.5 m, then a copper needle carrying the ball and the star (8607).
   k.lathe(0, 0, [[4.1, GAL], [4.1, GAL + 1.4], [2.6, 63], [1.1, 73], [0.32, 77.5]], 8, SPIRE, { flat: true, phase: 22.5 });
   d.lathe(0, 0, [[0.32, 77.5], [0.14, 80.5], [0.06, 83.2]], 8, COPPER);
   d.ball(0, 81.9, 0, 0.38, GOLD, 8);
   star(d, 0, 83.8, 0, 0.6);
-  // Four corner turrets on the gallery, clad in slate with lancets (8607), four spirelets on the spire's faces.
+  // Four corner turrets on the gallery, four spirelets on the spire's faces. M21 (8607): the corner
+  // turrets' shafts dark stone with two tiers of blind tracery, on corbels ending in a pendant, under
+  // their slate spires.
   for (const [cx, cz] of offsetRing(body, 0.05)) {
-    turret(k, d, f, cx, cz, 0.85, GAL - 2, GAL + 3, 61.5, SPIRE);
-    for (let e = 0; e < 8; e += 2) {
-      const a = (e * Math.PI) / 4, ca = Math.cos(a), sa = Math.sin(a);
-      k.plate([cx + 0.8 * ca, GAL + 1.5, cz + 0.8 * sa], [sa, 0, -ca], UP, [[-0.1, 0], [0.1, 0], [0.1, 1.0], [0, 1.2], [-0.1, 1.0]], DARK, 0.02);
+    turret(k, d, f, cx, cz, 0.85, GAL - 1.6, GAL + 3, 61.5, GALLERY);
+    k.lathe(cx, cz, [[0, GAL - 3.9], [0.16, GAL - 3.75], [0.2, GAL - 3.35], [0.36, GAL - 3.15], [0.5, GAL - 2.6], [0.72, GAL - 2.1], [0.9, GAL - 1.75], [0.9, GAL - 1.6]], 8, GALLERY, { flat: true, phase: 22.5 });
+    for (let e = 0; e < 8; e++) {
+      const a = (e * Math.PI) / 4, ca = Math.cos(a), sa = Math.sin(a), r = 0.85 * Math.cos(Math.PI / 8) + 0.01;
+      k.plate([cx + r * ca, GAL + 1.4, cz + r * sa], [sa, 0, -ca], UP, [[-0.22, 0], [0.22, 0], [0.22, 1.0], [0, 1.25], [-0.22, 1.0]], SCREEN, 0.02);
+      k.plate([cx + r * ca, GAL - 1.2, cz + r * sa], [sa, 0, -ca], UP, [[-0.22, 0], [0.22, 0], [0.22, 1.9], [-0.22, 1.9]], SCREEN, 0.02);
+      f.beam([cx + (r + 0.04) * ca - 0.2 * sa, GAL - 1.15, cz + (r + 0.04) * sa + 0.2 * ca], [cx + (r + 0.04) * ca + 0.2 * sa, GAL + 0.65, cz + (r + 0.04) * sa - 0.2 * ca], 0.06, GALLERY);
+      f.beam([cx + (r + 0.04) * ca + 0.2 * sa, GAL - 1.15, cz + (r + 0.04) * sa - 0.2 * ca], [cx + (r + 0.04) * ca - 0.2 * sa, GAL + 0.65, cz + (r + 0.04) * sa + 0.2 * ca], 0.06, GALLERY);
     }
   }
   for (let q = 0; q < 4; q++) {

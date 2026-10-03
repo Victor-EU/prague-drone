@@ -6,13 +6,15 @@
 // steep roof); the Týn school (an arcade of pointed arches, a storey and the attic storey, the two
 // Venetian gables of semicircular crests); U Bílého jednorožce (M18: hooded windows in three storeys,
 // quoins, the attic's pedimented gables). M19: the school and U Bílého jednorožce at the heights
-// 8607 shows through its camera solved again. None is one of §6.2's landmarks; none carries a name
-// on the screen.
+// 8607 shows through its camera solved again. M21: the Kinský's cornice 2.7 m lower, as 8608's
+// windows put it, its pediments taller with their tympana filled, the attic a parapet pierced with
+// ovals, its stucco in larger masses. None is one of §6.2's landmarks; none carries a name on the
+// screen.
 
-import { Kit, mat, arch, ngon, offsetRing, PROFILE, type Mat, type V2, type V3 } from './kit.ts';
+import { Kit, mat, shade, arch, ngon, offsetRing, PROFILE, type Mat, type V2, type V3 } from './kit.ts';
 import type { Model, Site } from './index.ts';
 import { Surface, Stone, Metal, Glass, Style, SFlag } from '../../src/core/buildings.ts';
-import { pilaster, entablature, pediment, balustrade, statue, traceryWindow, surround, column, rib, scroll, cartouche, crest, drop, swag } from './ornament.ts';
+import { pilaster, entablature, pediment, balustrade, statue, traceryWindow, surround, column, rib, scroll, cartouche, crest, drop, swag, rocaille, garland, shieldShape, bonnet, tympanum } from './ornament.ts';
 
 const DARK = mat('#1e2226', Surface.Glass, Glass.Plain);
 const SLATE = mat('#3f4247', Surface.Metal, Metal.Slate);
@@ -97,9 +99,16 @@ export const kinskyPalace: Model = {
     const WALL = mat('#e9d6cf', Surface.Wall, Style.Palace, 0, SFlag.TrimDeep);
     const TRIM = mat('#f3ece0', Surface.Stone, Stone.Render, 0.05);
     const PINK = mat('#c4836d', Surface.Stone, Stone.Render, 0.05);
+    // M21: the stucco's masses in the detail tier a shade darker, for the shadow in its relief.
+    const PINKD = shade(PINK, 0.86);
+    // M21: the sheet metal on the hoods and the pediments' rakes (8608).
+    const LEAD = mat('#77726b', Surface.Stone, Stone.Render, 0.2);
     const ROOF = mat('#94593f', Surface.Roof);
     const STONE = mat('#7d766d', Surface.Stone, Stone.Ashlar, 0.5);
-    const EAVE = 17.2, GF = 5.0, ATTIC = 15.6;
+    // M21, measured in 8608 against the windows: the crests over the top floor break into a thin
+    // entablature, its cornice 1.5 m over the windows' heads, and the pediments and the roof stand
+    // on it (the front had stood 2.7 m taller, an entablature of 1.6 m and an attic band of 1.3).
+    const EAVE = 15.8, GF = 5.0, ATTIC = 15.0;
     // The wings round the courtyard, plainer and lower, from the palace's outline, kept 0.4 m behind
     // the front (M19: the outline takes in the pavilions and the portals' columns, and the wings had
     // raised the columns as pillars 14 m tall).
@@ -113,9 +122,9 @@ export const kinskyPalace: Model = {
     // the pavilions' pilasters and the stucco).
     walls(k, ring, -2, EAVE, WALL, EAVE, -2, 2.5);
     // M20, from 8608 and 8597: a mansard, its lower slope steep and 4 m tall with the oval dormers
-    // in it, the upper at 38°.
-    k.roof(ring, EAVE + 1.3, { shape: 'mansard', pitch: 38, lower: 72, inset: 1.3, cap: 8, gable: () => false }, ROOF, ROOF);
-    k.prism(ring, EAVE, EAVE + 1.3, TRIM, TRIM);
+    // in it, the upper at 38°. M21: on the cornice, the upper slope at 41° to 9.5 m over it, so that
+    // the ridge stands where 8608 has it.
+    k.roof(ring, EAVE, { shape: 'mansard', pitch: 41, lower: 72, inset: 1.3, cap: 9.5, gable: () => false }, ROOF, ROOF);
     const path = (y: number, out = 0): V3[] => [[X0 - 0.2, y, out], [X1 + 0.2, y, out]];
     k.sweep(path(GF), PROFILE.string(0.22, 0.4), TRIM, { caps: true });
     entablature(k, path(ATTIC), TRIM, { out: 0.55, h: EAVE - ATTIC, closed: false });
@@ -139,25 +148,31 @@ export const kinskyPalace: Model = {
     const balcony = [pav[0].x0 - 0.2, pav[1].x1 + 0.2];
 
     // The two pavilions stand proud under triangular pediments, pilastered through the upper storeys.
-    for (const p of pav) {
-      k.prism([[p.x0, 0.45], [p.x1, 0.45], [p.x1, 0.1], [p.x0, 0.1]], -2, EAVE + 1.3, WALL, TRIM);
+    for (const [j, p] of pav.entries()) {
+      k.prism([[p.x0, 0.45], [p.x1, 0.45], [p.x1, 0.1], [p.x0, 0.1]], -2, EAVE, WALL, TRIM);
       // Pilasters with pink capitals, in the fine tier (a shadow map streaks the wall with them).
-      for (let i = 0; i < 4; i++) {
-        const x = pil(p, i);
-        pilaster(f, [0, 0, 0.45], U, V, x, GF + 0.2, ATTIC, 0.75, 0.22, TRIM, { cap: PINK, capH: 0.55 });
-        for (const s of [-1, 1]) scroll(f, [0, 0, 0.45 + 0.3], U, V, x + s * 0.3, ATTIC - 0.2, 0.13, s < 0 ? 0 : Math.PI, 0.9, s < 0 ? 1 : -1, 0.05, 0.06, PINK);
+      // M21: at the pavilion's edges only, as 8608 shows, their capitals large masses of rocaille
+      // round a white mask, 1.2 m under the entablature beside the top floor's windows, a pink plate
+      // of them in the detail tier.
+      for (const i of [0, 3]) {
+        const x = pil(p, i), cy = ATTIC - 1.2;
+        pilaster(f, [0, 0, 0.45], U, V, x, GF + 0.2, ATTIC, 0.75, 0.22, TRIM, { capH: 0.4 });
+        for (const s of [-1, 1]) scroll(f, [0, 0, 0.45 + 0.3], U, V, x + s * 0.32, cy + 0.3, 0.14, s < 0 ? 0 : Math.PI, 0.9, s < 0 ? 1 : -1, 0.05, 0.06, PINK);
+        d.plate([0, 0, 0.45 + 0.24], U, V, rocaille(x, cy, 1.0, 1.05), PINKD, 0.01);
+        cartouche(f, [0, 0, 0.45 + 0.24], U, V, x, cy - 0.05, 0.6, 0.62, PINK, { proud: 0.1 });
+        f.plate([0, 0, 0.45 + 0.24], U, V, mask(x, cy - 0.05, 0.2, 0.26), TRIM, 0.1);
       }
-      pediment(d, [0, 0, 0.45], U, V, p.cx, EAVE + 1.3, p.w * 0.86, 1.9, 0.45, TRIM, 'triangular', TRIM);
-      // The tympanum's stucco: a cartouche between two sprays of scrolls.
-      const ty: V3 = [0, 0, 0.45 + 0.27];
-      d.plate(ty, U, V, ngon(12, 0.5, 0, p.cx, EAVE + 2.05).map(([a, b]) => [a, EAVE + 2.05 + (b - EAVE - 2.05) * 0.8] as V2), PINK, 0.02);
-      cartouche(f, ty, U, V, p.cx, EAVE + 2.1, 1.2, 0.95, PINK, { proud: 0.1 });
+      // M21: the pediment as tall as 8608 shows it, 3 m over the full width of the pavilion, its
+      // own tiled roof running back into the mansard, and the tympanum filled with its stucco group.
+      const PW = p.w + 0.3, PH = 3.0, base = EAVE;
+      pediment(d, [0, 0, 0.45], U, V, p.cx, base, PW, PH, 0.45, TRIM, 'triangular', TRIM, LEAD);
       for (const s of [-1, 1]) {
-        const sp: V2[] = [];
-        for (let i = 0; i <= 10; i++) { const t = i / 10; sp.push([p.cx + s * (0.75 + t * p.w * 0.26), EAVE + 1.75 + 0.35 * Math.sin(t * Math.PI) - t * 0.2]); }
-        rib(f, ty, U, V, sp, 0.07, 0.07, PINK);
-        for (const t of [0.3, 0.6, 0.9]) scroll(f, ty, U, V, p.cx + s * (0.75 + t * p.w * 0.26), EAVE + 1.95 + 0.3 * Math.sin(t * Math.PI) - t * 0.2, 0.1, s < 0 ? -Math.PI / 2 : -Math.PI / 2, 0.8, s < 0 ? -1 : 1, 0.045, 0.05, PINK);
+        const e = p.cx + s * (PW / 2 + 0.25);
+        k.poly(s < 0
+          ? [[e, base - 0.1, 0.5], [p.cx, base + PH + 0.25, 0.5], [p.cx, base + PH + 0.25, -4.5], [e, base - 0.1, -4.5]]
+          : [[p.cx, base + PH + 0.25, 0.5], [e, base - 0.1, 0.5], [e, base - 0.1, -4.5], [p.cx, base + PH + 0.25, -4.5]], ROOF);
       }
+      tympanum(d, f, [0, 0, 0.45 + 0.27], U, V, p.cx, base, PW, PH, TRIM, PINK, 60 + j);
     }
 
     // The windows, their stucco and the ground floor, bay by bay.
@@ -171,21 +186,29 @@ export const kinskyPalace: Model = {
         f.sweep(P.map(([px, py]) => [x + px, py, 0] as V3), PROFILE.ring(0.42, 0.18), STONE, { v: [0, 0, 1] });
       } else casement(k, d, f, x, 1.3, 1.2, 2.3, TRIM, { sw: 0.16, hood: 'straight' });
       // The first floor: a tall window under a white hood, a cartouche between them, drops beside.
+      // M21 (8608): the hood a rococo bonnet whose soffit reads as a dark arc, its ends in volutes;
+      // the cartouche's rocaille spilling past it in the detail tier, round a white mask.
       casement(k, d, f, x, GF + 0.9, 1.25, 2.8, TRIM, { sw: 0.16, ears: true });
-      pediment(f, [0, 0, 0], U, V, x, GF + 5.4, 2.2, 0.35, 0.22, TRIM, 'segmental');
-      // M20: the cartouche as large as 8608 shows it, a pink field behind it in the detail tier so
-      // the mass carries across the square.
-      d.plate([0, 0, 0], U, V, ngon(14, 0.78, 0, x, GF + 4.4).map(([a, c]) => [a, GF + 4.4 + (c - GF - 4.4) * 0.62] as V2), PINK, 0.03);
+      bonnet(f, [0, 0, 0], U, V, x, GF + 5.05, 2.5, 0.5, 0.2, 0.34, TRIM, LEAD);
+      d.plate([0, 0, 0], U, V, rocaille(x, GF + 4.45, 2.15, 1.3), PINKD, 0.03);
+      d.plate([0, 0, 0], U, V, mask(x, GF + 4.42, 0.34, 0.44), TRIM, 0.05);
       cartouche(f, [0, 0, 0], U, V, x, GF + 4.4, 1.7, 1.05, PINK);
-      for (const s of [-1, 1]) drop(f, [0, 0, 0], U, V, x + s * 1.02, GF + 3.9, 1.3, PINK, 0.1);
+      f.plate([0, 0, 0], U, V, mask(x, GF + 4.42, 0.3, 0.38), TRIM, 0.11);
+      for (const s of [-1, 1]) {
+        drop(f, [0, 0, 0], U, V, x + s * 1.02, GF + 3.9, 1.3, PINK, 0.1);
+        d.plate([0, 0, 0], U, V, R(x + s * 1.02 - 0.09, GF + 2.7, x + s * 1.02 + 0.09, GF + 3.9), PINKD, 0.03);
+      }
       // Off the balcony, a garland under the sill.
-      if (!onBalcony) { swag(f, [0, 0, 0], U, V, x, GF + 0.45, 1.1, 0.16, PINK); d.plate([0, 0, 0], U, V, R(x - 0.45, GF + 0.3, x + 0.45, GF + 0.42), PINK, 0.03); }
+      if (!onBalcony) { swag(f, [0, 0, 0], U, V, x, GF + 0.45, 1.1, 0.16, PINK); d.plate([0, 0, 0], U, V, garland(x, GF + 0.5, 1.3, 0.16, 0.2), PINKD, 0.03); }
       // The top floor: a swag under the sill, the window, a crest over it with drops beside.
+      // M21: the swag's garland and the crest as masses in the detail tier, the crest round a white
+      // shield (8608).
       swag(f, [0, 0, 0], U, V, x, GF + 6.35, 1.2, 0.2, PINK);
-      d.plate([0, 0, 0], U, V, R(x - 0.5, GF + 6.18, x + 0.5, GF + 6.32), PINK, 0.03);
+      d.plate([0, 0, 0], U, V, garland(x, GF + 6.4, 1.45, 0.2, 0.24), PINKD, 0.03);
       casement(k, d, f, x, GF + 6.7, 1.25, 2.4, TRIM, { sw: 0.16, ears: true });
-      crest(f, [0, 0, 0], U, V, x, GF + 9.3, 2.2, PINK);
-      d.plate([0, 0, 0], U, V, ngon(12, 0.42, 0, x, GF + 9.62).map(([a, c]) => [a, GF + 9.62 + (c - GF - 9.62) * 0.7] as V2), PINK, 0.03);
+      crest(f, [0, 0, 0], U, V, x, GF + 9.3, 2.2, PINK, 0.08, TRIM);
+      d.plate([0, 0, 0], U, V, rocaille(x, GF + 9.66, 2.0, 0.8), PINKD, 0.03);
+      d.plate([0, 0, 0], U, V, shieldShape(x, GF + 9.36, 0.5, 0.62), TRIM, 0.05);
       for (const s of [-1, 1]) drop(f, [0, 0, 0], U, V, x + s * 0.97, GF + 9.1, 0.95, PINK, 0.07);
       for (const kit of [k, d, f]) kit.pop();
     }
@@ -201,21 +224,31 @@ export const kinskyPalace: Model = {
       for (const s of [-1, 1]) column(k, cx / n + s * 0.42, 1.0, 0, GF - 0.3, 0.26, STONE, { order: 'tuscan' });
     }
 
-    // The attic's balustrade over the bays between the pavilions, statues and urns on it in turn,
-    // and statues on the pediments' feet (8608; M20: it had run the whole front).
-    balustrade(f, [[pav[0].x1 + 0.1, EAVE + 1.3, 0.1], [pav[1].x0 - 0.1, EAVE + 1.3, 0.1]], TRIM, { h: 1.1, step: 0.36, w: 0.18, posts: true });
-    const STATUE = mat('#8e877b', Surface.Stone, Stone.Ashlar, 0.6);
-    for (let i = 0; i < 7; i++) {
-      const x = pav[0].x1 + 0.6 + (i / 6) * (pav[1].x0 - pav[0].x1 - 1.2);
-      if (i % 2 === 0) statue(d, [x, EAVE + 1.4, -0.3], [0, 1], 2.3, STATUE, 'single', 40 + i);
-      else d.lathe(x, -0.3, [[0.3, EAVE + 1.4], [0.42, EAVE + 1.9], [0.32, EAVE + 2.5], [0.4, EAVE + 2.7], [0.08, EAVE + 3.0]], 8, STATUE);
+    // The attic over the bays between the pavilions, statues and urns on it in turn, and statues on
+    // the pediments' feet (8608; M20: it had run the whole front). M21, as 8608 shows it: a parapet
+    // pierced with ovals, weathered grey stone like its statues, on posts, set back up the roof's
+    // lower slope behind a strip of tiles.
+    const STATUE = mat('#8e877b', Surface.Stone, Stone.Ashlar, 0.6), HOLE = mat('#2a2622', Surface.Opening);
+    const ATTICM = mat('#a39a8d', Surface.Stone, Stone.Ashlar, 0.55);
+    const a0 = pav[0].x1 + 0.1, a1 = pav[1].x0 - 0.1, ay = EAVE + 0.7, aH = 1.6, az = -0.3;
+    k.box((a0 + a1) / 2, az - 0.15, a1 - a0, 0.3, ay - 0.6, ay + aH, ATTICM, ATTICM);
+    k.sweep([[a0, ay + aH, az - 0.15], [a1, ay + aH, az - 0.15]], PROFILE.coping(0.42, 0.16), ATTICM, { caps: true });
+    const posts = Array.from({ length: 7 }, (_, i) => a0 + 0.5 + (i / 6) * (a1 - a0 - 1.0));
+    for (const [i, x] of posts.entries()) {
+      k.box(x, az - 0.1, 0.6, 0.45, ay - 0.6, ay + aH + 0.12, ATTICM, ATTICM);
+      if (i < 6) for (let q = 0; q < 3; q++) {
+        const ox = x + ((q + 0.5) / 3) * (posts[i + 1] - x);
+        d.plate([ox, ay + aH * 0.48, az], U, V, ngon(12, 0.17, 0, 0, 0).map(([u, w]) => [u, w * 1.55] as V2), HOLE, 0.02);
+      }
+      if (i % 2 === 0) statue(d, [x, ay + aH + 0.12, az - 0.1], [0, 1], 2.3, STATUE, 'single', 40 + i);
+      else d.lathe(x, az - 0.1, [[0.3, ay + aH + 0.12], [0.42, ay + aH + 0.6], [0.32, ay + aH + 1.2], [0.4, ay + aH + 1.4], [0.08, ay + aH + 1.7]], 8, STATUE);
     }
-    for (const [j, p] of pav.entries()) for (const s of [-1, 1]) statue(d, [p.cx + s * p.w * 0.4, EAVE + 1.5, 0.3], [0, 1], 2.2, STATUE, 'single', 50 + 2 * j + (s + 1) / 2);
+    for (const [j, p] of pav.entries()) for (const s of [-1, 1]) statue(d, [p.cx + s * p.w * 0.4, EAVE + 0.2, 0.3], [0, 1], 2.2, STATUE, 'single', 50 + 2 * j + (s + 1) / 2);
 
     // M20, the roof as 8608 shows it. An oval dormer over each end of the front and one on the
     // south return, rising from the cornice in the lower slope (8597 close by); three small
     // dormers up the upper slope; white chimneys with red caps.
-    const dorm = (k2: Kit, d2: Kit, f2: Kit) => ovalDormer(k2, d2, f2, EAVE + 1.3, TRIM, PINK, ROOF);
+    const dorm = (k2: Kit, d2: Kit, f2: Kit) => ovalDormer(k2, d2, f2, EAVE, TRIM, PINK, ROOF);
     for (const x of [(X0 + pav[0].x0) / 2, (pav[1].x1 + X1) / 2]) {
       for (const kit of [k, d, f]) kit.push().at(x, 0, 0);
       dorm(k, d, f);
@@ -231,7 +264,7 @@ export const kinskyPalace: Model = {
       for (const kit of [k, d, f]) kit.pop();
       break;
     }
-    const brk = EAVE + 1.3 + 1.3 * Math.tan((72 * Math.PI) / 180), up = 1.2, zt = -1.3 - up / Math.tan((38 * Math.PI) / 180);
+    const brk = EAVE + 1.3 * Math.tan((72 * Math.PI) / 180), up = 1.2, zt = -1.3 - up / Math.tan((41 * Math.PI) / 180);
     for (const x of [-0.7, 6.8, 15.0]) {
       k.slab([x, brk + up - 0.3, zt], U, V, [[-0.6, 0], [0.6, 0], [0.6, 0.85], [0, 1.25], [-0.6, 0.85]], 1.6, ROOF);
       k.plate([x, brk + up - 0.1, zt], U, V, R(-0.38, 0, 0.38, 0.62), FRAMED, 0.03);
@@ -335,6 +368,12 @@ function walls(k: Kit, ring: V2[], y0: number, y1: number, m: Mat, eave: number,
     }
   }
 }
+
+/** A rococo mask's outline centred at (x, y), w by h: an oval drawn to a chin (M21, the Kinský's cartouches in 8608). */
+const mask = (x: number, y: number, w: number, h: number): V2[] => Array.from({ length: 14 }, (_, i) => {
+  const t = (i / 14) * 2 * Math.PI, s = Math.sin(t);
+  return [x + (w / 2) * Math.cos(t) * (s < 0 ? 1 + 0.45 * s : 1), y + (h / 2) * s] as V2;
+});
 
 /** A rectangle from (x0, y0) to (x1, y1) in the front's plane. */
 const R = (x0: number, y0: number, x1: number, y1: number): V2[] => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];

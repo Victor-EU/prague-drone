@@ -473,10 +473,12 @@ float praAbove = -1.0;
       // under the gallery, the corners black, and a black stone near black (a tenth of a pale one).
       // A prism's wall carries its length and its top's height (length + 256 × top), so the odds
       // rise toward its corners and over its top fifth, where the rain runs and lingers.
-      float Lw = mod(vFacade.w, 256.0), topH = floor(vFacade.w / 256.0);
+      // M21: the black under 8607's galleries is their cornice, parapet and shields, modelled now
+      // (design.md §7.1); the last metres of wall under a top, sheltered, are paler than the face.
+      float Lw = mod(vFacade.w, 256.0), r = vFacade.w >= 256.0 * 5.0 ? v / floor(vFacade.w / 256.0) : 0.0;
       float corner = Lw > 0.5 ? 1.0 - smoothstep(0.3, 1.6, min(u, Lw - u)) : 0.0;
-      float high = topH > 4.0 ? smoothstep(0.74, 0.92, v / topH) : 0.0;
-      float odds = wea * clamp(0.08 + 0.72 * smoothstep(0.42, 0.78, 0.65 * n1 + 0.45 * n2) + 0.3 * corner + 0.65 * high, 0.0, 0.92);
+      float high = smoothstep(0.66, 0.82, r), shelter = smoothstep(0.85, 0.9, r);
+      float odds = wea * clamp(0.08 + 0.72 * smoothstep(0.42, 0.78, 0.65 * n1 + 0.45 * n2) + 0.3 * corner + 0.45 * high - 0.8 * shelter, 0.0, 0.92);
       float bh = praHash(vec2(floor(col) * 1.37 + seed * 0.71, floor(row) * 0.93 + 3.1));
       black = mix(odds, step(bh, odds) * (0.85 + 0.15 * fract(bh * 13.7)), fade);
       c = mix(c, c * vec3(0.15, 0.145, 0.14), black);
