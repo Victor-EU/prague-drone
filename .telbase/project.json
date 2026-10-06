@@ -1,0 +1,9 @@
+{
+  "project_id": "f9eeefec-9dfb-44e6-b53b-2af366b6fa24",
+  "project_name": "prague",
+  "project_slug": "prague",
+  "framework": "vite",
+  "provider": "vercel",
+  "detected_at": "2026-10-06T18:56:45Z",
+  "created_at": "2026-10-06T18:56:37.621Z"
+}
